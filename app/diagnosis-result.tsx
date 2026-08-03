@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { api } from '../src/api/client';
 import { MetricBar } from '../src/components/MetricBar';
 import { mockSkinScore } from '../src/data/mock';
 import { colors, radius, shadow, spacing, typography } from '../src/theme';
-import type { FacePart, SkinPartMetric } from '../src/types';
+import type { FacePart, SkinPartMetric, SkinScoreSnapshot } from '../src/types';
 
 const PIN_POSITION: Record<FacePart, { top: `${number}%`; left: `${number}%` }> = {
   forehead: { top: '10%', left: '50%' },
@@ -20,6 +21,17 @@ const PIN_POSITION: Record<FacePart, { top: `${number}%`; left: `${number}%` }> 
 // 화면 4: 진단 결과 — 얼굴 부위별 요약
 export default function DiagnosisResultScreen() {
   const [selected, setSelected] = useState<SkinPartMetric | null>(null);
+  const [skinScore, setSkinScore] = useState<SkinScoreSnapshot>(mockSkinScore);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getSkinScore().then((result) => {
+      if (!cancelled && result) setSkinScore(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <View style={styles.flex}>
@@ -35,7 +47,7 @@ export default function DiagnosisResultScreen() {
         <View style={styles.photoPlaceholder}>
           <Ionicons name="person-outline" size={64} color={colors.gray300} />
         </View>
-        {mockSkinScore.parts.map((p) => (
+        {skinScore.parts.map((p) => (
           <Pressable
             key={p.part}
             style={[styles.pin, PIN_POSITION[p.part], selected?.part === p.part && styles.pinActive]}
@@ -48,7 +60,7 @@ export default function DiagnosisResultScreen() {
 
       <View style={styles.summaryRow}>
         <Text style={styles.overallLabel}>종합 점수</Text>
-        <Text style={styles.overallScore}>{mockSkinScore.overallScore}</Text>
+        <Text style={styles.overallScore}>{skinScore.overallScore}</Text>
       </View>
 
       {selected ? (

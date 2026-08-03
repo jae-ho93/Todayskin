@@ -1,13 +1,16 @@
 import Constants from 'expo-constants';
 import type {
   EvidenceGrade,
+  HistoryEntry,
+  Product,
   Recommendation,
   SignupRequest,
   SkinScoreSnapshot,
   User,
   WeatherSnapshot,
 } from '../types';
-import { mockRecommendations, mockSkinScore, mockWeather } from '../data/mock';
+import { mockProducts, mockRecommendations, mockWeather } from '../data/mock';
+import { getToken } from '../lib/session';
 
 // 로컬 개발 시 FastAPI 스텁(backend/) 을 http://localhost:8000 에서 구동
 // backend가 떠 있지 않으면 목업 데이터로 자동 폴백
@@ -26,6 +29,11 @@ function timeoutSignal(ms: number): AbortSignal {
   return controller.signal;
 }
 
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = await getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function safeFetch<T>(path: string, fallback: T): Promise<T> {
   try {
     const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -36,6 +44,21 @@ async function safeFetch<T>(path: string, fallback: T): Promise<T> {
     return (await res.json()) as T;
   } catch {
     return fallback;
+  }
+}
+
+// 로그인한 유저 기준 데이터 조회. 실패(네트워크 오류·미인증·404)와 "정상적으로 없음"을
+// 구분해야 하는 화면(예: 아직 촬영 기록 없음)을 위해 null을 반환한다.
+async function authFetch<T>(path: string): Promise<T | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}${path}`, {
+      headers: await authHeaders(),
+      signal: timeoutSignal(4000),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
   }
 }
 
@@ -70,7 +93,7 @@ async function safePostJson<T>(path: string, body: unknown, fallback: T): Promis
   try {
     const res = await fetch(`${API_BASE_URL}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
       body: JSON.stringify(body),
       // Gemini 호출이 걸릴 수 있어 일반 GET보다 여유 있게 타임아웃 설정
       signal: timeoutSignal(20000),
@@ -88,11 +111,37 @@ export const api = {
       coords ? `/weather?lat=${coords.latitude}&lon=${coords.longitude}` : '/weather',
       mockWeather,
     ),
-  getSkinScore: () => safeFetch<SkinScoreSnapshot>('/diagnosis/latest', mockSkinScore),
+  // 아직 한 번도 촬영하지 않았거나 로그인하지 않은 경우 null
+  getSkinScore: () => authFetch<SkinScoreSnapshot>('/diagnosis/latest'),
+  getHistory: async () => (await authFetch<HistoryEntry[]>('/diagnosis/history')) ?? [],
+  // 촬영 3장을 서버로 전송해 진단을 생성·저장한다. 쓰기 요청이므로 실패 시 에러를 던진다.
+  submitDiagnosis: async (photos: { front: string; left: string; right: string }) => {
+    const formData = new FormData();
+    (['front', 'left', 'right'] as const).forEach((key) => {
+      formData.append(
+        key,
+        { uri: photos[key], name: `${key}.jpg`, type: 'image/jpeg' } as unknown as Blob,
+      );
+    });
+    const res = await fetch(`${API_BASE_URL}/diagnosis`, {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: formData,
+      signal: timeoutSignal(15000),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(extractErrorMessage(data, res.status));
+    return data as SkinScoreSnapshot;
+  },
   getRecommendations: (grade?: EvidenceGrade) =>
     safeFetch<Recommendation[]>(
       grade ? `/recommendations?grade=${grade}` : '/recommendations',
       grade ? mockRecommendations.filter((r) => r.grade === grade) : mockRecommendations,
+    ),
+  getRecommendationById: (id: string) =>
+    safeFetch<Recommendation>(
+      `/recommendations/${id}`,
+      mockRecommendations.find((r) => r.id === id) ?? mockRecommendations[0],
     ),
   // B등급(사진+날씨 매칭): Gemini에게 오늘 피부 측정값 + 날씨를 함께 전달해 추천 생성
   generateRecommendations: (skinScore: SkinScoreSnapshot, weather: WeatherSnapshot) =>
@@ -101,6 +150,23 @@ export const api = {
       { skinScore, weather },
       mockRecommendations.filter((r) => r.grade === 'B'),
     ),
+  getProducts: (category?: Product['category']) =>
+    safeFetch<Product[]>(
+      category ? `/products?category=${category}` : '/products',
+      category ? mockProducts.filter((p) => p.category === category) : mockProducts,
+    ),
   signup: (payload: SignupRequest) => postJson<User>('/auth/signup', payload),
   login: (phoneNumber: string) => postJson<User>('/auth/login', { phoneNumber }),
+  // 서버 토큰 무효화는 최선 노력만 하고, 실패해도 로컬 세션 정리는 항상 진행되도록 에러를 삼킨다
+  logout: async () => {
+    try {
+      await fetch(`${API_BASE_URL}/auth/logout`, {
+        method: 'POST',
+        headers: await authHeaders(),
+        signal: timeoutSignal(4000),
+      });
+    } catch {
+      // best-effort
+    }
+  },
 };

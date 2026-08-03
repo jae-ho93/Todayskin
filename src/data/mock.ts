@@ -1,16 +1,8 @@
-import type {
-  HistoryEntry,
-  PersonalPattern,
-  Product,
-  Recommendation,
-  SkinScoreSnapshot,
-  WeatherSnapshot,
-} from '../types';
+import type { PersonalPattern, Product, Recommendation, SkinScoreSnapshot, WeatherSnapshot } from '../types';
 
 export const mockWeather: WeatherSnapshot = {
   observedAt: new Date().toISOString(),
-  temperatureC: 31,
-  feelsLikeC: 34,
+  regionName: '서울 종로구',
   uvIndex: 8,
   uvStatus: 'bad',
   ozonePpm: 0.072,
@@ -24,7 +16,6 @@ export const mockWeather: WeatherSnapshot = {
   no2Value: 0.021,
   so2Value: 0.004,
   coValue: 0.5,
-  humidityPct: 62,
 };
 
 export const mockSkinScore: SkinScoreSnapshot = {
@@ -150,9 +141,3 @@ export const mockPatternProgress = {
   collectedDays: 12,
   requiredDays: 21,
 };
-
-export const mockHistory: HistoryEntry[] = Array.from({ length: 8 }).map((_, i) => ({
-  id: `hist-${i}`,
-  capturedAt: new Date(Date.now() - i * 86400000).toISOString(),
-  overallScore: 70 + Math.round(Math.sin(i) * 10),
-}));

@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { clearSession } from '../../src/lib/session';
@@ -87,6 +88,7 @@ export default function SettingsScreen() {
         <Card>
           <Pressable
             onPress={async () => {
+              await api.logout();
               await clearSession();
               router.replace('/onboarding/login');
             }}

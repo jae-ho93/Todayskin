@@ -5,8 +5,7 @@ export type AirStatus = 'good' | 'moderate' | 'bad';
 
 export interface WeatherSnapshot {
   observedAt: string; // ISO timestamp
-  temperatureC: number;
-  feelsLikeC: number;
+  regionName: string; // 예: "서울 종로구"
   uvIndex: number; // 자외선지수
   uvStatus: AirStatus;
   ozonePpm: number; // 오존 농도
@@ -20,7 +19,6 @@ export interface WeatherSnapshot {
   no2Value?: number;
   so2Value?: number;
   coValue?: number;
-  humidityPct: number;
 }
 
 // 11개 부위별 ResNet 앙상블 출력과 대응하는 부위 키
@@ -107,4 +105,5 @@ export interface User {
   name: string;
   birthDate: string; // "YYYY-MM-DD"
   createdAt: string;
+  accessToken: string;
 }

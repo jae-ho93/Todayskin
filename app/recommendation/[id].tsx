@@ -1,22 +1,40 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { EvidenceBadge } from '../../src/components/EvidenceBadge';
 import { IngredientChip } from '../../src/components/IngredientChip';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
-import { mockProducts, mockRecommendations } from '../../src/data/mock';
+import { mockRecommendations } from '../../src/data/mock';
 import { colors, radius, spacing, typography } from '../../src/theme';
+import type { Product, Recommendation } from '../../src/types';
 
 // 화면 5: 추천 상세 (근거등급 A/B/C 표시 핵심 화면)
 export default function RecommendationDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [showExplanation, setShowExplanation] = useState(false);
-  const recommendation = mockRecommendations.find((r) => r.id === id) ?? mockRecommendations[0];
-  const relatedProducts = mockProducts.filter((p) =>
-    recommendation.relatedProductIds.includes(p.id),
+  const [recommendation, setRecommendation] = useState<Recommendation>(
+    mockRecommendations.find((r) => r.id === id) ?? mockRecommendations[0],
   );
+  const [products, setProducts] = useState<Product[]>([]);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    api.getRecommendationById(id).then((result) => {
+      if (!cancelled) setRecommendation(result);
+    });
+    api.getProducts().then((result) => {
+      if (!cancelled) setProducts(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  const relatedProducts = products.filter((p) => recommendation.relatedProductIds.includes(p.id));
 
   return (
     <ScreenContainer>

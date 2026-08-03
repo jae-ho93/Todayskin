@@ -8,7 +8,7 @@ export default function OnboardingSlide1() {
   return (
     <OnboardingScaffold
       step={0}
-      totalSteps={3}
+      totalSteps={4}
       ctaLabel="다음"
       onPressCta={() => router.push('/onboarding/structure')}
       onSkip={() => router.push('/onboarding/consent')}
