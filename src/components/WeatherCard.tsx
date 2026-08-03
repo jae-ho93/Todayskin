@@ -13,10 +13,7 @@ const CAI_LABEL: Record<'good' | 'moderate' | 'bad', string> = {
 export function WeatherCard({ weather }: { weather: WeatherSnapshot }) {
   return (
     <Card>
-      <View style={styles.header}>
-        <Text style={styles.temp}>{weather.temperatureC}°</Text>
-        <Text style={styles.feelsLike}>체감 {weather.feelsLikeC}°</Text>
-      </View>
+      <Text style={styles.regionName}>{weather.regionName}</Text>
       {weather.caiStatus && (
         <Text style={styles.caiLine}>오늘 종합 대기질: {CAI_LABEL[weather.caiStatus]}</Text>
       )}
@@ -31,18 +28,9 @@ export function WeatherCard({ weather }: { weather: WeatherSnapshot }) {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: spacing.sm,
-  },
-  temp: {
-    ...typography.displayLg,
+  regionName: {
+    ...typography.headline,
     color: colors.textPrimary,
-  },
-  feelsLike: {
-    ...typography.bodySm,
-    color: colors.textSecondary,
   },
   caiLine: {
     ...typography.bodySm,

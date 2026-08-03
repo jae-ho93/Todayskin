@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getSession, setHasCapturedSkin } from '../src/lib/session';
+import { api } from '../src/api/client';
 import { colors, radius, shadow, spacing, typography } from '../src/theme';
 
 const STEPS = [
@@ -24,16 +24,34 @@ export default function CameraGuideScreen() {
   const [phase, setPhase] = useState<'intro' | 'capture'>('intro');
   const [permission, requestPermission] = useCameraPermissions();
   const [stepIndex, setStepIndex] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const cameraRef = useRef<CameraView>(null);
+  const photosRef = useRef<{ front?: string; left?: string; right?: string }>({});
   const step = STEPS[stepIndex];
 
-  const handleCapture = () => {
+  const handleCapture = async () => {
+    if (submitting) return;
+    const photo = await cameraRef.current?.takePictureAsync({ quality: 0.5 });
+    if (!photo) return;
+    photosRef.current[step.key] = photo.uri;
+
     if (stepIndex < STEPS.length - 1) {
       setStepIndex((i) => i + 1);
-    } else {
-      getSession().then((user) => {
-        if (user) setHasCapturedSkin(user.id);
-      });
+      return;
+    }
+
+    const { front, left, right } = photosRef.current;
+    if (!front || !left || !right) return;
+
+    setSubmitting(true);
+    setError(null);
+    try {
+      await api.submitDiagnosis({ front, left, right });
       router.replace('/diagnosis-result');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '진단 저장에 실패했습니다. 다시 시도해주세요.');
+      setSubmitting(false);
     }
   };
 
@@ -91,7 +109,7 @@ export default function CameraGuideScreen() {
 
   return (
     <View style={styles.flex}>
-      <CameraView style={StyleSheet.absoluteFill} facing="front" />
+      <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="front" />
 
       {/* 얼굴 윤곽 오버레이 */}
       <View style={styles.overlay} pointerEvents="none">
@@ -114,13 +132,18 @@ export default function CameraGuideScreen() {
         {stepIndex === 0 && (
           <Text style={styles.timingHint}>외출 후·자기 전, 세안을 마친 뒤 촬영하면 더 정확해요</Text>
         )}
+        {error && <Text style={styles.errorText}>{error}</Text>}
         <View style={styles.stepRow}>
           {STEPS.map((s, i) => (
             <View key={s.key} style={[styles.stepDot, i <= stepIndex && styles.stepDotActive]} />
           ))}
         </View>
-        <Pressable style={styles.shutter} onPress={handleCapture}>
-          <View style={styles.shutterInner} />
+        <Pressable style={styles.shutter} onPress={handleCapture} disabled={submitting}>
+          {submitting ? (
+            <ActivityIndicator color={colors.textPrimary} />
+          ) : (
+            <View style={styles.shutterInner} />
+          )}
         </Pressable>
       </SafeAreaView>
     </View>
@@ -248,6 +271,12 @@ const styles = StyleSheet.create({
   timingHint: {
     ...typography.caption,
     color: 'rgba(255,255,255,0.85)',
+    paddingHorizontal: spacing.xl,
+    textAlign: 'center',
+  },
+  errorText: {
+    ...typography.caption,
+    color: colors.coral,
     paddingHorizontal: spacing.xl,
     textAlign: 'center',
   },

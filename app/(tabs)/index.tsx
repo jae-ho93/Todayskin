@@ -9,7 +9,6 @@ import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { WeatherCard } from '../../src/components/WeatherCard';
 import { mockSkinScore, mockWeather } from '../../src/data/mock';
 import { useUserLocation } from '../../src/hooks/useUserLocation';
-import { getHasCapturedSkin, getSession } from '../../src/lib/session';
 import { colors, radius, shadow, spacing, typography } from '../../src/theme';
 import type { Recommendation, SkinScoreSnapshot, WeatherSnapshot } from '../../src/types';
 
@@ -34,9 +33,9 @@ export default function HomeDashboard() {
       if (cancelled) return;
       setWeather(weatherSnapshot);
 
-      const user = await getSession();
-      const captured = user ? await getHasCapturedSkin(user.id) : false;
+      const skinSnapshot = await api.getSkinScore();
       if (cancelled) return;
+      const captured = skinSnapshot !== null;
       setHasCaptured(captured);
 
       // 아직 한 번도 촬영하지 않은 유저에게는 피부 점수/추천을 보여줄 근거 자체가 없으므로
@@ -46,8 +45,6 @@ export default function HomeDashboard() {
         return;
       }
 
-      const skinSnapshot = await api.getSkinScore();
-      if (cancelled) return;
       setSkinScore(skinSnapshot);
 
       // A등급(공인 가이드라인)은 날씨만으로 즉시 판단, B등급은 어젯밤 촬영한 피부 상태 +

@@ -1,11 +1,11 @@
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { EvidenceBadge } from '../../src/components/EvidenceBadge';
 import { IngredientChip } from '../../src/components/IngredientChip';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
-import { mockProducts } from '../../src/data/mock';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type { Product } from '../../src/types';
 
@@ -20,10 +20,21 @@ const CATEGORY_FILTERS: { key: Product['category'] | 'all'; label: string }[] = 
 // 화면 7: 제품/성분 추천 리스트
 export default function ProductsScreen() {
   const [category, setCategory] = useState<Product['category'] | 'all'>('all');
+  const [products, setProducts] = useState<Product[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getProducts().then((result) => {
+      if (!cancelled) setProducts(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filtered = useMemo(
-    () => (category === 'all' ? mockProducts : mockProducts.filter((p) => p.category === category)),
-    [category],
+    () => (category === 'all' ? products : products.filter((p) => p.category === category)),
+    [category, products],
   );
 
   return (

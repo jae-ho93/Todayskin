@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
+import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
-import { mockHistory } from '../../src/data/mock';
 import { colors, radius, spacing, typography } from '../../src/theme';
+import type { HistoryEntry } from '../../src/types';
 
 function formatDate(iso: string) {
   const d = new Date(iso);
@@ -13,7 +15,19 @@ function formatDate(iso: string) {
 
 // 화면 8: 마이 히스토리 / 기록
 export default function HistoryScreen() {
-  const scores = [...mockHistory].reverse();
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getHistory().then((result) => {
+      if (!cancelled) setHistory(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const scores = [...history].reverse();
   const width = 300;
   const height = 60;
   const max = Math.max(...scores.map((s) => s.overallScore));
@@ -28,15 +42,17 @@ export default function HistoryScreen() {
     <ScreenContainer>
       <Text style={styles.title}>마이 히스토리</Text>
 
-      <Card style={styles.trendCard}>
-        <Text style={styles.trendLabel}>스코어 변화 추이</Text>
-        <Svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
-          <Polyline points={points} fill="none" stroke={colors.sage} strokeWidth={2.5} />
-        </Svg>
-      </Card>
+      {scores.length > 0 && (
+        <Card style={styles.trendCard}>
+          <Text style={styles.trendLabel}>스코어 변화 추이</Text>
+          <Svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+            <Polyline points={points} fill="none" stroke={colors.sage} strokeWidth={2.5} />
+          </Svg>
+        </Card>
+      )}
 
       <View style={styles.list}>
-        {mockHistory.map((h) => (
+        {history.map((h) => (
           <Card key={h.id} style={styles.row}>
             <View style={styles.thumb}>
               <Ionicons name="person-outline" size={20} color={colors.gray300} />

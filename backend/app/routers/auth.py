@@ -1,3 +1,4 @@
+import secrets
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -5,18 +6,21 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..database import get_db
+from ..deps import get_current_user
 from ..schemas import LoginRequest, SignupRequest, UserResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def _to_user_response(user: models.User) -> UserResponse:
+    assert user.access_token is not None
     return UserResponse(
         id=user.id,
         phoneNumber=user.phone_number,
         name=user.name,
         birthDate=user.birth_date.isoformat(),
         createdAt=user.created_at.isoformat(),
+        accessToken=user.access_token,
     )
 
 
@@ -31,6 +35,7 @@ async def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> UserR
         phone_number=payload.phoneNumber,
         name=payload.name,
         birth_date=date.fromisoformat(payload.birthDate),
+        access_token=secrets.token_urlsafe(32),
     )
     db.add(user)
     db.commit()
@@ -49,4 +54,16 @@ async def login(payload: LoginRequest, db: Session = Depends(get_db)) -> UserRes
     if not user:
         raise HTTPException(status_code=404, detail="가입되지 않은 휴대폰 번호입니다")
 
+    user.access_token = secrets.token_urlsafe(32)
+    db.commit()
+    db.refresh(user)
+
     return _to_user_response(user)
+
+
+@router.post("/logout", status_code=204)
+async def logout(
+    current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)
+) -> None:
+    current_user.access_token = None
+    db.commit()

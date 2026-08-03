@@ -6,8 +6,7 @@ _now = datetime.now(timezone.utc).isoformat()
 
 MOCK_WEATHER = WeatherSnapshot(
     observedAt=_now,
-    temperatureC=31,
-    feelsLikeC=34,
+    regionName="서울 종로구",
     uvIndex=8,
     uvStatus="bad",
     ozonePpm=0.072,
@@ -21,7 +20,6 @@ MOCK_WEATHER = WeatherSnapshot(
     no2Value=0.021,
     so2Value=0.004,
     coValue=0.5,
-    humidityPct=62,
 )
 
 MOCK_SKIN_SCORE = SkinScoreSnapshot(

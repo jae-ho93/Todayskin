@@ -5,10 +5,14 @@ from fastapi.middleware.cors import CORSMiddleware
 load_dotenv()  # backend/.env 로부터 KMA_API_KEY 등 환경변수 로드
 
 from . import models  # noqa: E402
-from .database import Base, engine  # noqa: E402
+from .database import Base, SessionLocal, engine  # noqa: E402
 from .routers import auth, diagnosis, recommendations, weather  # noqa: E402
+from .seed import seed_if_empty  # noqa: E402
 
 Base.metadata.create_all(bind=engine)
+
+with SessionLocal() as _seed_db:
+    seed_if_empty(_seed_db)
 
 app = FastAPI(
     title="Weatherskin API",

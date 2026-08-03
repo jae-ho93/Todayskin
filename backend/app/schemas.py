@@ -13,8 +13,7 @@ FacePart = Literal["forehead", "glabella", "eyeArea", "cheek", "lips", "jaw"]
 
 class WeatherSnapshot(BaseModel):
     observedAt: str
-    temperatureC: float
-    feelsLikeC: float
+    regionName: str
     uvIndex: float
     uvStatus: AirStatus
     ozonePpm: float
@@ -28,7 +27,6 @@ class WeatherSnapshot(BaseModel):
     no2Value: Optional[float] = None
     so2Value: Optional[float] = None
     coValue: Optional[float] = None
-    humidityPct: float
 
 
 class SkinPartMetric(BaseModel):
@@ -113,6 +111,14 @@ class UserResponse(BaseModel):
     name: str
     birthDate: str
     createdAt: str
+    accessToken: str
+
+
+class HistoryEntry(BaseModel):
+    id: str
+    capturedAt: str
+    overallScore: float
+    thumbnailUri: Optional[str] = None
 
 
 class LoginRequest(BaseModel):

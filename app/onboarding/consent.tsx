@@ -11,10 +11,10 @@ export default function OnboardingConsent() {
   return (
     <OnboardingScaffold
       step={2}
-      totalSteps={3}
+      totalSteps={4}
       ctaLabel="동의하고 계속하기"
       ctaDisabled={!agreed}
-      onPressCta={() => router.push('/onboarding/signup')}
+      onPressCta={() => router.push('/onboarding/location')}
     >
       <Text style={styles.headline}>안면 이미지 처리 동의</Text>
       <Text style={styles.body}>
