@@ -224,15 +224,15 @@ Recommendation(userId, diagnosisId, createdAt)
 
 브랜치: `feature/jwt-refresh-auth`
 
-- [ ] 회원가입·로그인·로그아웃 API 이식
-- [ ] Access JWT 발급
-- [ ] Refresh Token 회전·폐기·해시 저장
-- [ ] `JwtStrategy`, `JwtAuthGuard` 구현
-- [ ] `USER`, `ADMIN` enum과 `RolesGuard` 구현
-- [ ] 현재 사용자 decorator 구현
+- [x] 회원가입·로그인·로그아웃 API 이식
+- [x] Access JWT 발급
+- [x] Refresh Token 회전·폐기·해시 저장
+- [x] `JwtStrategy`, `JwtAuthGuard` 구현
+- [x] `USER`, `ADMIN` enum과 `RolesGuard` 구현
+- [x] 현재 사용자 decorator 구현
 - [ ] ADMIN 전용 운영 API 보호
 - [ ] 진단·추천 조회 시 사용자 소유권 검사
-- [ ] 인증 실패와 권한 부족 상태 코드 구분
+- [x] 인증 실패와 권한 부족 상태 코드 구분
 
 전화번호만으로 로그인하는 현재 방식은 개발용 MVP로 취급합니다. 실제 서비스에는 OTP 또는 별도 본인확인이 필요합니다. Access Token은 `User` 테이블에 저장하지 않습니다.
 
