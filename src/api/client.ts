@@ -34,11 +34,12 @@ async function authHeaders(): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function safeFetch<T>(path: string, fallback: T): Promise<T> {
+async function safeFetch<T>(path: string, fallback: T, timeoutMs = 2500): Promise<T> {
   try {
     const res = await fetch(`${API_BASE_URL}${path}`, {
-      // 로컬 스텁 서버가 없을 때 UI 개발이 막히지 않도록 짧은 타임아웃 사용
-      signal: timeoutSignal(2500),
+      // 로컬 스텁 서버가 없을 때 UI 개발이 막히지 않도록 기본은 짧은 타임아웃 사용.
+      // 외부 API를 호출하는 엔드포인트(예: 날씨)는 호출부에서 더 긴 타임아웃을 넘긴다.
+      signal: timeoutSignal(timeoutMs),
     });
     if (!res.ok) throw new Error(`API ${path} failed: ${res.status}`);
     return (await res.json()) as T;
@@ -106,10 +107,14 @@ async function safePostJson<T>(path: string, body: unknown, fallback: T): Promis
 }
 
 export const api = {
+  // 기상청/에어코리아 등 외부 정부 API를 순차 호출하다 보니 응답이 0.5~16초까지 들쭉날쭉하다
+  // (백엔드 자체 타임아웃 예산이 최대 약 16초). 기본 2.5초 타임아웃으로는 정상 응답도 자주 잘려서
+  // 목업으로 폴백해버리므로(특히 앱 최초 구동 시 홈 화면) 여유 있게 20초로 늘린다.
   getWeather: (coords?: { latitude: number; longitude: number }) =>
     safeFetch<WeatherSnapshot>(
       coords ? `/weather?lat=${coords.latitude}&lon=${coords.longitude}` : '/weather',
       mockWeather,
+      20000,
     ),
   // 아직 한 번도 촬영하지 않았거나 로그인하지 않은 경우 null
   getSkinScore: () => authFetch<SkinScoreSnapshot>('/diagnosis/latest'),
