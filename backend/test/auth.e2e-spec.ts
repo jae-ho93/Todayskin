@@ -206,7 +206,7 @@ describe('AuthController (e2e)', () => {
     it('미가입 전화번호 → 404', async () => {
       await request(app.getHttpServer())
         .post('/auth/login')
-        .send({ phoneNumber: '01066666666' })
+        .send({ phoneNumber: '01000000000' })
         .expect(404);
     });
 
@@ -214,7 +214,7 @@ describe('AuthController (e2e)', () => {
       // 프론트 extractErrorMessage는 data.detail에서 메시지를 추출한다.
       const res = await request(app.getHttpServer())
         .post('/auth/login')
-        .send({ phoneNumber: '01066666666' })
+        .send({ phoneNumber: '01000000000' })
         .expect(404);
 
       expect(res.body.detail).toBeDefined();
