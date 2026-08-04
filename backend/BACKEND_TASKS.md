@@ -339,10 +339,10 @@ Recommendation(userId, diagnosisId, createdAt)
 
 브랜치: `feature/notification-preferences`
 
-- [ ] `NotificationPreference` 모델과 사용자별 1 row 보장
-- [ ] 설정 조회·수정 API
-- [ ] USER는 자기 설정만 수정
-- [ ] 기본값 및 프론트 동기화 정책 결정
+- [x] `NotificationPreference` 모델과 사용자별 1 row 보장
+- [x] 설정 조회·수정 API
+- [x] USER는 자기 설정만 수정
+- [x] 기본값 및 프론트 동기화 정책 결정
 
 이번 단계에서는 DB 저장만 구현합니다. 푸시 발송과 WebSocket은 포함하지 않습니다.
 
@@ -556,7 +556,7 @@ Refresh Token
 - [ ] 개인 패턴 분석 API
 - [ ] 추천 중복 생성 방지
 - [ ] 진단 파일 검증 및 MockInferenceProvider
-- [ ] NotificationPreference DB 저장
+- [x] NotificationPreference DB 저장
 - [ ] Redis 날씨 캐시
 
 ### P2
