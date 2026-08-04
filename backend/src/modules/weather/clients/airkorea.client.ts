@@ -1,6 +1,8 @@
-
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+
+/** 한국 표준시(UTC+9) */
+const KST_OFFSET_MIN = 9 * 60;
 
 /** 에어코리아 측정소별 실시간 측정정보 endpoint */
 const AIRKOREA_ENDPOINT =
@@ -16,7 +18,15 @@ export interface AirQualityData {
   co: number | null;
 }
 
-const EMPTY: AirQualityData = {
+/**
+ * 관측(측정) 시각. 에어코리아 응답 item의 dataTime(예: "2026-08-04 15:00",
+ * KST)을 파싱한다. 실패 시 null.
+ */
+export interface AirQualityDataWithTime extends AirQualityData {
+  observedAt: Date | null;
+}
+
+const EMPTY: AirQualityDataWithTime = {
   ozone: null,
   pm25: null,
   pm10: null,
@@ -24,6 +34,7 @@ const EMPTY: AirQualityData = {
   no2: null,
   so2: null,
   co: null,
+  observedAt: null,
 };
 
 function safeFloat(value: unknown): number | null {
@@ -50,7 +61,7 @@ export class AirKoreaClient {
     this.apiKey = configService.get<string>('AIRKOREA_API_KEY', '');
   }
 
-  async fetchAirQuality(stationName: string): Promise<AirQualityData> {
+  async fetchAirQuality(stationName: string): Promise<AirQualityDataWithTime> {
     if (!this.apiKey) {
       return EMPTY;
     }
@@ -85,6 +96,7 @@ export class AirKoreaClient {
         no2: safeFloat(latest.no2Value),
         so2: safeFloat(latest.so2Value),
         co: safeFloat(latest.coValue),
+        observedAt: parseAirKoreaTime(latest.dataTime),
       };
     } catch (e) {
       this.logger.warn(`AirKorea air quality fetch failed: ${errorName(e)}`);
@@ -101,6 +113,7 @@ interface AirKoreaItem {
   no2Value?: string;
   so2Value?: string;
   coValue?: string;
+  dataTime?: string;
 }
 
 interface AirKoreaResponse {
@@ -123,6 +136,26 @@ function extractFirstItem(data: AirKoreaResponse): AirKoreaItem | null {
     return item ?? null;
   }
   return items as AirKoreaItem;
+}
+
+/**
+ * 에어코리아 dataTime(예: "2026-08-04 15:00", KST) → UTC Date.
+ * "YYYY-MM-DD HH:mm" 형식을 가정하고, 24시 표기("24:00")는 다음 날 00:00으로 변환.
+ */
+function parseAirKoreaTime(dataTime?: string): Date | null {
+  if (!dataTime) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/.exec(dataTime);
+  if (!m) return null;
+  let [, y, mo, d, h, mi] = m;
+  let day = +d;
+  if (h === '24') {
+    h = '00';
+    day = day + 1;
+  }
+  // KST(UTC+9) → UTC
+  const utcMs =
+    Date.UTC(+y, +mo - 1, day, +h, +mi) - KST_OFFSET_MIN * 60 * 1000;
+  return new Date(utcMs);
 }
 
 function errorName(e: unknown): string {

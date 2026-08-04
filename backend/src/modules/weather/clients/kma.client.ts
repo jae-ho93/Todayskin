@@ -1,4 +1,3 @@
-
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
@@ -17,10 +16,19 @@ export interface UvForecast {
   peakHour: number | null;
 }
 
-const EMPTY_FORECAST: UvForecast = {
+/**
+ * 관측(발표) 시각. KMA 응답 item에는 발표시각 필드가 없으므로, 조회에 사용한
+ * queryTime(yyyyMMddHH, KST)을 관측 시각으로 사용한다. 실패 시 null.
+ */
+export interface UvForecastWithTime extends UvForecast {
+  observedAt: Date | null;
+}
+
+const EMPTY_FORECAST_WITH_TIME: UvForecastWithTime = {
   current: null,
   peak: null,
   peakHour: null,
+  observedAt: null,
 };
 
 /** "-" / "" / null → null, 그 외 float 파싱. 실패 시 null. */
@@ -53,9 +61,9 @@ export class KmaClient {
     this.apiKey = configService.get<string>('KMA_API_KEY', '');
   }
 
-  async fetchUvIndex(areaNo: string): Promise<UvForecast> {
+  async fetchUvIndex(areaNo: string): Promise<UvForecastWithTime> {
     if (!this.apiKey) {
-      return EMPTY_FORECAST;
+      return EMPTY_FORECAST_WITH_TIME;
     }
 
     // 이 시각의 발표자료가 아직 없을 수 있어 3시간 전 정시로 조회
@@ -78,12 +86,12 @@ export class KmaClient {
         // httpx 예외 문자열엔 serviceKey가 담긴 URL이 그대로 포함되므로
         // 절대 통째로 로깅하지 않는다. 상태 코드만 로깅.
         this.logger.warn(`KMA UV fetch failed: HTTP ${res.status}`);
-        return EMPTY_FORECAST;
+        return EMPTY_FORECAST_WITH_TIME;
       }
       const data = (await res.json()) as KmaResponse;
       const item = extractFirstItem(data);
       if (!item) {
-        return EMPTY_FORECAST;
+        return EMPTY_FORECAST_WITH_TIME;
       }
 
       // query_time을 3시간 전으로 조회했으므로 h0가 아니라
@@ -100,11 +108,12 @@ export class KmaClient {
         }
       }
 
-      return { current, peak, peakHour };
+      // queryTime(yyyyMMddHH, KST)을 관측 시각으로 사용한다.
+      return { current, peak, peakHour, observedAt: parseKmaTime(queryTime) };
     } catch (e) {
       // 타입/네트워크 문제는 전부 unavailable 폴백
       this.logger.warn(`KMA UV fetch failed: ${errorName(e)}`);
-      return EMPTY_FORECAST;
+      return EMPTY_FORECAST_WITH_TIME;
     }
   }
 }
@@ -165,6 +174,16 @@ function formatKmaQueryTime(date: Date): string {
   const d = String(kst.getUTCDate()).padStart(2, '0');
   const h = String(kst.getUTCHours()).padStart(2, '0');
   return `${y}${m}${d}${h}`;
+}
+
+/** KMA time 파라미터(yyyyMMddHH, KST) → UTC Date */
+function parseKmaTime(yyyyMMddHH: string): Date | null {
+  const m = /^(\d{4})(\d{2})(\d{2})(\d{2})$/.exec(yyyyMMddHH);
+  if (!m) return null;
+  const [, y, mo, d, h] = m;
+  // KST(UTC+9) → UTC
+  const utcMs = Date.UTC(+y, +mo - 1, +d, +h) - KST_OFFSET_MIN * 60 * 1000;
+  return new Date(utcMs);
 }
 
 function errorName(e: unknown): string {

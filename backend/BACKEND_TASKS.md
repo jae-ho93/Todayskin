@@ -265,12 +265,12 @@ Recommendation(userId, diagnosisId, createdAt)
 
 브랜치: `feature/persist-weather-snapshots`
 
-- [ ] `WeatherSnapshot` 모델 구현
-- [ ] 관측 시각과 서버 수집 시각 구분
-- [ ] 지역·측정소·좌표 저장 정책 결정
-- [ ] 진단 시 사용한 snapshot 연결
-- [ ] 중복·fallback 데이터 저장 정책 결정
-- [ ] 개인 패턴 분석 필드 확정
+- [x] `WeatherSnapshot` 모델 구현 (T2 schema + T6 영구 저장)
+- [x] 관측 시각과 서버 수집 시각 구분 (observedAt=외부 API 발표시각, collectedAt=DB now())
+- [x] 지역·측정소·좌표 저장 정책 결정 (regionName/cityName/lat/lon/kmaAreaNo/airkoreaStation 저장)
+- [ ] 진단 시 사용한 snapshot 연결 (T9 Diagnosis 도메인에서 weatherSnapshotId 연결 시 구현)
+- [x] 중복·fallback 데이터 저장 정책 결정 (동일 관측시각 get-or-create dedup, UNAVAILABLE 미저장)
+- [ ] 개인 패턴 분석 필드 확정 (T10 개인 패턴 API에서 통계 정책과 함께 결정)
 
 완료 기준: 특정 진단이 어떤 환경 데이터에 기반했는지 DB에서 재현할 수 있습니다.
 
