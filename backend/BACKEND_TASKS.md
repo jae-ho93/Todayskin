@@ -271,7 +271,7 @@ Recommendation(userId, diagnosisId, createdAt)
 - [x] 진단 연결용 서비스 메서드 제공 (getOrCreateSnapshot/getSnapshotById)
 - [x] 진단 시 weatherSnapshotId 실제 연결 (T9 Diagnosis 도메인에서)
 - [x] 중복·fallback 데이터 저장 정책 결정 (동일 관측시각 get-or-create dedup, UNAVAILABLE 미저장)
-- [ ] 개인 패턴 분석 필드 확정 (T10 개인 패턴 API에서 통계 정책과 함께 결정)
+- [x] 개인 패턴 분석 필드 확정 (T10 개인 패턴 API에서 통계 정책과 함께 결정)
 
 완료 기준: 특정 진단이 어떤 환경 데이터에 기반했는지 DB에서 재현할 수 있습니다.
 
@@ -322,14 +322,14 @@ Recommendation(userId, diagnosisId, createdAt)
 
 브랜치: `feature/personal-pattern-api`
 
-- [ ] `GET /diagnosis/pattern` 설계
-- [ ] `LOCKED`, `READY` 상태와 수집일·필요일 계산
-- [ ] Diagnosis와 WeatherSnapshot 조인
-- [ ] 분석 대상, 결측값, 최소 샘플 수 정책 결정
-- [ ] 상관계수 계산 방식 결정
-- [ ] 상관관계와 인과관계 구분 문구 고정
-- [ ] 결과를 C등급 추천과 연결
-- [ ] `trend.tsx`의 직접 mock 사용을 API 계약으로 교체
+- [x] `GET /diagnosis/pattern` 설계
+- [x] `LOCKED`, `READY` 상태와 수집일·필요일 계산
+- [x] Diagnosis와 WeatherSnapshot 조인
+- [x] 분석 대상, 결측값, 최소 샘플 수 정책 결정
+- [x] 상관계수 계산 방식 결정
+- [x] 상관관계와 인과관계 구분 문구 고정
+- [x] 결과를 C등급 추천과 연결
+- [x] `trend.tsx`의 직접 mock 사용을 API 계약으로 교체
 
 데이터 부족은 `404`가 아니라 `200 + LOCKED`로 반환합니다.
 

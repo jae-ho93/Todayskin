@@ -8,6 +8,7 @@ import type {
   SkinScoreSnapshot,
   User,
   WeatherSnapshot,
+  PatternSummary,
 } from '../types';
 import { getToken } from '../lib/session';
 
@@ -164,5 +165,12 @@ export const api = {
     } catch {
       // best-effort
     }
+  },
+  // 개인 패턴 분석 (T10). 데이터 부족 시 null이 아니라 LOCKED 상태의 응답을 반환한다.
+  // authFetch를 써서 200(LOCKED/READY)과 실패(error)를 구분한다.
+  getPattern: async (): Promise<PatternSummary | null> => {
+    const result = await authFetch<PatternSummary>('/diagnosis/pattern');
+    if (result.status === 'ok') return result.data;
+    return null;
   },
 };

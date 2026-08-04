@@ -106,3 +106,32 @@ export interface User {
   createdAt: string;
   accessToken: string;
 }
+
+// ── 개인 패턴 분석 (T10) ──────────────────────────
+
+export type PatternStatus = 'LOCKED' | 'READY';
+
+export type CorrelationDirection = 'positive' | 'negative' | 'neutral';
+
+export type CorrelationStrength = 'strong' | 'moderate' | 'weak' | 'negligible';
+
+export interface PatternCorrelation {
+  skinMetric: string;
+  part?: FacePart | null;
+  envMetric: string;
+  r: number; // -1 ~ 1
+  direction: CorrelationDirection;
+  strength: CorrelationStrength;
+  sampleSize: number;
+  observationalNote?: string;
+}
+
+export interface PatternSummary {
+  status: PatternStatus;
+  collectedDays: number;
+  requiredDays: number;
+  lockedMessage?: string;
+  observationalDisclaimer?: string;
+  correlations: PatternCorrelation[];
+  recommendationIds: string[];
+}
