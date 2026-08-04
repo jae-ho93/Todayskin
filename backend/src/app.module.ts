@@ -7,6 +7,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { WeatherModule } from './modules/weather/weather.module';
 import { RecommendationModule } from './modules/recommendations/recommendation.module';
 import { ProductModule } from './modules/products/product.module';
+import { DiagnosisModule } from './modules/diagnosis/diagnosis.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { ProductModule } from './modules/products/product.module';
     WeatherModule,
     RecommendationModule,
     ProductModule,
+    DiagnosisModule,
   ],
 })
 export class AppModule {}

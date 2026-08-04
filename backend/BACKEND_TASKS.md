@@ -269,7 +269,7 @@ Recommendation(userId, diagnosisId, createdAt)
 - [x] 관측 시각과 서버 수집 시각 구분 (observedAt=외부 API 발표시각, collectedAt=DB now())
 - [x] 지역·측정소·좌표 저장 정책 결정 (regionName/cityName/lat/lon/kmaAreaNo/airkoreaStation 저장)
 - [x] 진단 연결용 서비스 메서드 제공 (getOrCreateSnapshot/getSnapshotById)
-- [ ] 진단 시 weatherSnapshotId 실제 연결 (T9 Diagnosis 도메인에서)
+- [x] 진단 시 weatherSnapshotId 실제 연결 (T9 Diagnosis 도메인에서)
 - [x] 중복·fallback 데이터 저장 정책 결정 (동일 관측시각 get-or-create dedup, UNAVAILABLE 미저장)
 - [ ] 개인 패턴 분석 필드 확정 (T10 개인 패턴 API에서 통계 정책과 함께 결정)
 
@@ -307,14 +307,14 @@ Recommendation(userId, diagnosisId, createdAt)
 
 브랜치: `feature/diagnosis-domain-foundation`
 
-- [ ] multipart 3개 필드, MIME 타입, 파일 크기, 빈 파일 검증
-- [ ] `Diagnosis.status` 정의
-- [ ] `InferenceProvider` interface와 `MockInferenceProvider` 구현
-- [ ] 결과 범위 검증
-- [ ] Diagnosis와 SkinMetric을 하나의 transaction으로 저장
-- [ ] `modelVersion` 저장
-- [ ] 원본 이미지 비저장과 동의 확인
-- [ ] 중복 요청 방지 정책 결정
+- [x] multipart 3개 필드, MIME 타입, 파일 크기, 빈 파일 검증
+- [x] `Diagnosis.status` 정의 (schema.prisma `DiagnosisStatus` enum — PENDING/COMPLETED/FAILED)
+- [x] `InferenceProvider` interface와 `MockInferenceProvider` 구현
+- [x] 결과 범위 검증 (overallScore 0~100, 부위 6개 일치, 중복/누락/과잉 거부)
+- [x] Diagnosis와 SkinMetric을 하나의 transaction으로 저장
+- [x] `modelVersion` 저장
+- [x] 원본 이미지 비저장 (memoryStorage + 처리 후 GC, 동의는 ConsentRecord 모델로 별도)
+- [x] 중복 요청 방지 정책 결정 (동일 사용자 60초 이내 제출 거부)
 
 보류: 실제 Python AI 서버 호출, 실제 모델 추론, 모델 운영·배포 정책.
 
