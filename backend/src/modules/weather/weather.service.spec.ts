@@ -191,12 +191,104 @@ describe('WeatherService', () => {
     expect(result.source).toBe(WeatherSource.LIVE);
   });
 
-  it('getSnapshotById는 DB에서 조회한다', async () => {
-    prisma.weatherSnapshot.findUnique.mockResolvedValue({ id: 'snap-1' });
-    const result = await service.getSnapshotById('snap-1');
-    expect(prisma.weatherSnapshot.findUnique).toHaveBeenCalledWith({
-      where: { id: 'snap-1' },
-    });
-    expect(result?.id).toBe('snap-1');
+ it('getSnapshotById는 DB에서 조회한다', async () => {
+   prisma.weatherSnapshot.findUnique.mockResolvedValue({ id: 'snap-1' });
+   const result = await service.getSnapshotById('snap-1');
+   expect(prisma.weatherSnapshot.findUnique).toHaveBeenCalledWith({
+     where: { id: 'snap-1' },
+   });
+   expect(result?.id).toBe('snap-1');
+ });
+
+  it('저장 row의 모든 필드가 수집 데이터와 정확히 매핑된다', async () => {
+    const uvAt = new Date('2026-08-04T06:00:00Z');
+    const airAt = new Date('2026-08-04T06:30:00Z');
+    kmaClient.fetchUvIndex.mockResolvedValue(
+      uv({ current: 7, peak: 9, peakHour: 13, observedAt: uvAt }),
+    );
+    airKoreaClient.fetchAirQuality.mockResolvedValue(
+      air({
+        ozone: 0.05,
+        pm25: 20,
+        pm10: 45,
+        cai: 60,
+        no2: 0.02,
+        so2: 0.005,
+        co: 0.4,
+        observedAt: airAt,
+      }),
+    );
+    prisma.weatherSnapshot.findFirst.mockResolvedValue(null);
+    prisma.weatherSnapshot.create.mockResolvedValue({ id: 'snap-1' });
+
+    await service.getCurrentWeather(37.5665, 126.978);
+
+    expect(prisma.weatherSnapshot.create).toHaveBeenCalledTimes(1);
+    const arg = prisma.weatherSnapshot.create.mock.calls[0][0];
+    // 관측 시각은 더 최근(air) 사용
+   expect(arg.data.observedAt).toEqual(airAt);
+   // 좌표(37.5665, 126.978) → 근사표 서울 중구 → regionName "서울특별시"
+   expect(arg.data.regionName).toBe('서울특별시');
+    expect(arg.data.latitude).toBe(37.5665);
+    expect(arg.data.longitude).toBe(126.978);
+    expect(arg.data.uvIndex).toBe(7);
+    expect(arg.data.uvStatus).toBe(AirStatus.BAD);
+    expect(arg.data.uvIndexPeak).toBe(9);
+    expect(arg.data.uvIndexPeakHour).toBe(13);
+    expect(arg.data.ozonePpm).toBe(0.05);
+    expect(arg.data.ozoneStatus).toBe(AirStatus.MODERATE);
+    expect(arg.data.pm25).toBe(20);
+    expect(arg.data.pm25Status).toBe(AirStatus.MODERATE);
+    expect(arg.data.pm10).toBe(45);
+    expect(arg.data.caiValue).toBe(60);
+    expect(arg.data.caiStatus).toBe(AirStatus.MODERATE);
+    expect(arg.data.no2Value).toBe(0.02);
+    expect(arg.data.so2Value).toBe(0.005);
+    expect(arg.data.coValue).toBe(0.4);
+   expect(arg.data.source).toBe(WeatherSource.LIVE);
+    expect(arg.data.uvStatusPeak).toBe(AirStatus.BAD); // peak=9 → bad
+  });
+
+  it('좌표 없을 때 저장 row에 lat/lon은 null이다', async () => {
+    kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 3 }));
+    airKoreaClient.fetchAirQuality.mockResolvedValue(air({ pm25: 10 }));
+    prisma.weatherSnapshot.findFirst.mockResolvedValue(null);
+
+    await service.getCurrentWeather();
+    const arg = prisma.weatherSnapshot.create.mock.calls[0][0];
+    expect(arg.data.latitude).toBeNull();
+    expect(arg.data.longitude).toBeNull();
+    // 기본 지역 areaNo/station 저장
+    expect(arg.data.kmaAreaNo).toBe('1111000000');
+  });
+
+  it('getOrCreateSnapshot은 수집+저장 후 row를 반환한다', async () => {
+    kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 5 }));
+    airKoreaClient.fetchAirQuality.mockResolvedValue(air({ pm25: 12 }));
+    prisma.weatherSnapshot.findFirst.mockResolvedValue(null);
+    prisma.weatherSnapshot.create.mockResolvedValue({ id: 'snap-42' });
+
+    const result = await service.getOrCreateSnapshot(37.5, 127.0);
+    expect(result?.id).toBe('snap-42');
+    expect(prisma.weatherSnapshot.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('getOrCreateSnapshot은 UNAVAILABLE이면 null을 반환한다', async () => {
+    kmaClient.fetchUvIndex.mockResolvedValue(uv());
+    airKoreaClient.fetchAirQuality.mockResolvedValue(air());
+
+    const result = await service.getOrCreateSnapshot();
+    expect(result).toBeNull();
+    expect(prisma.weatherSnapshot.create).not.toHaveBeenCalled();
+  });
+
+  it('getOrCreateSnapshot은 dedup hit 시 기존 row를 반환한다', async () => {
+    kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 5 }));
+    airKoreaClient.fetchAirQuality.mockResolvedValue(air({ pm25: 12 }));
+    prisma.weatherSnapshot.findFirst.mockResolvedValue({ id: 'existing' });
+
+    const result = await service.getOrCreateSnapshot();
+    expect(result?.id).toBe('existing');
+    expect(prisma.weatherSnapshot.create).not.toHaveBeenCalled();
   });
 });

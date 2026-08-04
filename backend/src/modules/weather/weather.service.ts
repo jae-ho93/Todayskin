@@ -57,11 +57,11 @@ export class WeatherService {
   private readonly defaultStationName: string;
 
   constructor(
-    private readonly kmaClient: KmaClient,
-    private readonly airKoreaClient: AirKoreaClient,
-    private readonly stationClient: StationClient,
-    private readonly configService: ConfigService,
-  private readonly prisma: PrismaService,
+   private readonly kmaClient: KmaClient,
+   private readonly airKoreaClient: AirKoreaClient,
+   private readonly stationClient: StationClient,
+   private readonly configService: ConfigService,
+   private readonly prisma: PrismaService,
   ) {
     // 위치 권한 거부 또는 근접측정소 조회 실패 시 폴백용 기본 지역.
     // 환경변수가 없으면 REGIONS 기본값(서울 종로구)을 사용한다.
@@ -92,8 +92,32 @@ export class WeatherService {
    * 진단/추천 모듈이 기존 스냅샷을 참조할 때 사용.
    * Diagnosis.weatherSnapshotId 연결은 T9에서, 소유권 검사와 함께 처리한다.
    */
-  async getSnapshotById(id: string): Promise<WeatherSnapshot | null> {
-    return this.prisma.weatherSnapshot.findUnique({ where: { id } });
+ async getSnapshotById(id: string): Promise<WeatherSnapshot | null> {
+   return this.prisma.weatherSnapshot.findUnique({ where: { id } });
+ }
+
+  /**
+   * 진단/추천 생성(T9/T7)이 "이 진단이 어떤 환경 데이터에 기반했는가"를
+   * 추적하기 위해 스냅샷을 확보하고 그 식별자를 반환한다.
+   *
+   * 동작:
+   *   1. 외부 API에서 수집(collect)한다.
+   *   2. persist(get-or-create)로 DB에 저장(또는 동일 관측시각 row 재사용).
+   *   3. 저장된 row의 id를 반환한다.
+   *
+   * UNAVAILABLE(모든 지표 null)이면 null을 반환한다.
+   * 진단은 환경 데이터 없이도 진행될 수 있어야 하므로, snapshot 부재가
+   * 진단 자체를 실패시키지 않는다(연결은 선택). 소유권 검사는 진단 쪽에서.
+   *
+   * 저장 실패 시 null을 반환하지 않고 예외를 전파한다 — 호출자(진단 서비스)가
+   * 트랜잭션에서 이 메서드를 쓸 때 실패를 감지해야 하기 때문.
+   */
+  async getOrCreateSnapshot(
+    lat?: number,
+    lon?: number,
+  ): Promise<WeatherSnapshot | null> {
+    const collected = await this.collect(lat, lon);
+    return this.persist(collected);
   }
 
   /**

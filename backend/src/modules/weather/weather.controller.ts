@@ -2,6 +2,7 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiOperation, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { IsNumber, IsOptional, Min, Max } from 'class-validator';
+import { Type } from 'class-transformer';
 import { WeatherService } from './weather.service';
 import { WeatherSnapshotDto } from './dto/weather-snapshot.dto';
 
@@ -12,6 +13,7 @@ import { WeatherSnapshotDto } from './dto/weather-snapshot.dto';
 export class WeatherQueryDto {
   @ApiPropertyOptional({ type: Number, example: 37.5665, description: '위도' })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(-90)
   @Max(90)
@@ -19,6 +21,7 @@ export class WeatherQueryDto {
 
   @ApiPropertyOptional({ type: Number, example: 126.978, description: '경도' })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(-180)
   @Max(180)
