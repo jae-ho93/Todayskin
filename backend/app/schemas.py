@@ -71,6 +71,8 @@ class Product(BaseModel):
     matchedIngredients: list[str]
     category: Literal["moisture", "elasticity", "brightening", "barrier"]
     recommendationId: Optional[str] = None
+    reason: Optional[str] = None  # 날씨 기반 등, 근거 설명을 별도 Recommendation 레코드 없이 바로 보여줄 때 사용
+    timing: Optional[Literal["세안 후", "외출 전", "외출 후"]] = None  # 하루 중 이 제품을 쓰면 좋은 상황
 
 
 class SignupRequest(BaseModel):

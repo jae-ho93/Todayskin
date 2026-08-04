@@ -4,18 +4,21 @@ import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../src/api/client';
+import { FaceIllustration } from '../src/components/FaceIllustration';
 import { MetricBar } from '../src/components/MetricBar';
 import { mockSkinScore } from '../src/data/mock';
 import { colors, radius, shadow, spacing, typography } from '../src/theme';
 import type { FacePart, SkinPartMetric, SkinScoreSnapshot } from '../src/types';
 
+// FaceIllustration의 실제 이목구비 좌표(viewBox 150x200, 얼굴 타원 cx=75 cy=100 rx=48 ry=62)를
+// 기준으로 계산한 퍼센트다. FaceIllustration의 좌표를 바꾸면 이 값도 같이 맞춰야 한다.
 const PIN_POSITION: Record<FacePart, { top: `${number}%`; left: `${number}%` }> = {
-  forehead: { top: '10%', left: '50%' },
-  glabella: { top: '27%', left: '50%' },
-  eyeArea: { top: '34%', left: '28%' },
-  cheek: { top: '54%', left: '72%' },
-  lips: { top: '72%', left: '50%' },
-  jaw: { top: '86%', left: '50%' },
+  forehead: { top: '26%', left: '50%' },
+  glabella: { top: '42%', left: '50%' },
+  eyeArea: { top: '42%', left: '37%' },
+  cheek: { top: '60%', left: '66%' },
+  lips: { top: '65%', left: '50%' },
+  jaw: { top: '78%', left: '50%' },
 };
 
 // 화면 4: 진단 결과 — 얼굴 부위별 요약
@@ -45,7 +48,7 @@ export default function DiagnosisResultScreen() {
 
       <View style={styles.photoWrap}>
         <View style={styles.photoPlaceholder}>
-          <Ionicons name="person-outline" size={64} color={colors.gray300} />
+          <FaceIllustration />
         </View>
         {skinScore.parts.map((p) => (
           <Pressable

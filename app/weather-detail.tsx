@@ -103,16 +103,11 @@ export default function WeatherDetailScreen() {
 
       <MetricCard
         icon="sunny-outline"
-        label="자외선지수"
-        value={weather.uvIndex}
+        label="오늘 최고 자외선지수"
+        value={weather.uvIndexPeak ?? weather.uvIndex}
         unit="지수"
-        status={weather.uvStatus}
-        extra={
-          weather.uvIndexPeak !== undefined && weather.uvStatusPeak
-            ? `오늘 최고 예상: ${weather.uvIndexPeak} (${STATUS_LABEL[weather.uvStatusPeak]})` +
-              (weather.uvIndexPeakHour !== undefined ? ` · ${weather.uvIndexPeakHour}시경` : '')
-            : undefined
-        }
+        status={weather.uvStatusPeak ?? weather.uvStatus}
+        extra={weather.uvIndexPeakHour !== undefined ? `${weather.uvIndexPeakHour}시경 예상` : undefined}
         description="자외선은 피부 세포 신호전달체계에 영향을 줘서 광노화·색소침착을 유발할 수 있어요. 지수가 높을수록 자외선 차단제를 자주 덧발라주세요."
       />
 

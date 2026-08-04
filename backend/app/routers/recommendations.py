@@ -7,9 +7,9 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..database import get_db
 from ..deps import get_current_user
-from ..gemini_client import GeminiUnavailable, generate_recommendations
-from ..mock_data import MOCK_RECOMMENDATIONS
-from ..schemas import EvidenceGrade, GenerateRecommendationsRequest, Product, Recommendation
+from ..gemini_client import GeminiUnavailable, generate_recommendations, generate_weather_products
+from ..mock_data import FALLBACK_WEATHER_PRODUCTS, MOCK_RECOMMENDATIONS
+from ..schemas import EvidenceGrade, GenerateRecommendationsRequest, Product, Recommendation, WeatherSnapshot
 
 router = APIRouter(tags=["recommendations"])
 
@@ -130,3 +130,30 @@ async def list_products(category: Optional[str] = None, db: Session = Depends(ge
     if category is not None:
         query = query.filter(models.ProductRecord.category == category)
     return [_to_product(p) for p in query.all()]
+
+
+@router.post("/products/weather-based", response_model=list[Product])
+async def weather_based_products(weather: WeatherSnapshot) -> list[Product]:
+    """
+    날씨 기반(A등급) 제품 추천: 사용자 촬영 데이터 없이 오늘 날씨/대기질만으로 하루 중 실제로
+    화장품을 쓰는 세 상황(세안 후/외출 전/외출 후)별로 화장품을 하나씩 Gemini에게 추천받는다.
+    유저 비종속이라 DB에 저장하지 않고, GEMINI_API_KEY가 없거나 호출 실패 시 상황별 고정 폴백으로
+    대체한다.
+    """
+    try:
+        items = await generate_weather_products(weather.model_dump())
+        return [
+            Product(
+                id=f"gemini-product-{uuid.uuid4().hex[:8]}",
+                name=item["name"],
+                brand=item["brand"],
+                matchedGrade="A",
+                matchedIngredients=item.get("ingredientTags", []),
+                category=item["category"],
+                reason=item.get("explanation"),
+                timing=item["timing"],
+            )
+            for item in items
+        ]
+    except GeminiUnavailable:
+        return FALLBACK_WEATHER_PRODUCTS

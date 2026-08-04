@@ -262,18 +262,21 @@ async def get_current_weather(lat: Optional[float] = None, lon: Optional[float] 
         if lat is not None and lon is not None:
             region = find_nearest_region(lat, lon)
             area_no = region.kma_area_no
-            # 실제 GPS 좌표로 최인접 측정소를 조회하고, 실패하면 근사표 값으로 폴백
-            nearest = await _fetch_nearest_station(client, lat, lon)
+            # 자외선지수 조회는 근접측정소 조회 결과와 무관하므로(area_no만 필요) 순차 대기하지 않고
+            # 병렬로 실행해 두 정부 API 모두 느릴 때의 왕복 시간을 줄인다. 대기질 조회만 station_name이
+            # 필요해 근접측정소 조회 이후에 실행한다.
+            nearest, uv = await asyncio.gather(
+                _fetch_nearest_station(client, lat, lon),
+                _fetch_uv_index(client, area_no),
+            )
             station_name = nearest.station_name if nearest else region.airkorea_station_name
             region_name = nearest.city_name if nearest else region.city_name
         else:
             area_no, station_name = DEFAULT_KMA_AREA_NO, DEFAULT_AIRKOREA_STATION_NAME
             region_name = DEFAULT_REGION.city_name
+            uv = await _fetch_uv_index(client, area_no)
 
-        uv, air = await asyncio.gather(
-            _fetch_uv_index(client, area_no),
-            _fetch_air_quality(client, station_name),
-        )
+        air = await _fetch_air_quality(client, station_name)
 
     uv_index = uv.current if uv.current is not None else MOCK_WEATHER.uvIndex
     uv_index_peak = uv.peak if uv.peak is not None else MOCK_WEATHER.uvIndexPeak

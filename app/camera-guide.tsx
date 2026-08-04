@@ -118,14 +118,8 @@ export default function CameraGuideScreen() {
       </View>
 
       <SafeAreaView style={styles.topBar} edges={['top']}>
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.closeButton}>
-          <Ionicons name="close" size={22} color={colors.textInverse} />
-        </Pressable>
         <View style={styles.topBarCenter}>
           <Text style={styles.guideText}>{step.title}</Text>
-          <View style={styles.feedbackBadge}>
-            <Text style={styles.feedbackText}>조명이 충분해요</Text>
-          </View>
         </View>
       </SafeAreaView>
 
@@ -139,13 +133,20 @@ export default function CameraGuideScreen() {
             <View key={s.key} style={[styles.stepDot, i <= stepIndex && styles.stepDotActive]} />
           ))}
         </View>
-        <Pressable style={styles.shutter} onPress={handleCapture} disabled={submitting}>
-          {submitting ? (
-            <ActivityIndicator color={colors.textPrimary} />
-          ) : (
-            <View style={styles.shutterInner} />
-          )}
-        </Pressable>
+        {/* 좌측에 X 버튼과 같은 너비의 빈 공간을 둬서 셔터 버튼이 화면 중앙에 오도록 맞춘다 */}
+        <View style={styles.shutterRow}>
+          <View style={styles.closeButtonSpacer} />
+          <Pressable style={styles.shutter} onPress={handleCapture} disabled={submitting}>
+            {submitting ? (
+              <ActivityIndicator color={colors.textPrimary} />
+            ) : (
+              <View style={styles.shutterInner} />
+            )}
+          </Pressable>
+          <Pressable onPress={() => router.back()} hitSlop={12} style={styles.closeButton}>
+            <Ionicons name="close" size={22} color={colors.textInverse} />
+          </Pressable>
+        </View>
       </SafeAreaView>
     </View>
   );
@@ -236,15 +237,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
   },
-  // SafeAreaView의 안전영역 패딩은 자기 자신에게만 적용되고, position:absolute로 띄운 자식에는
-  // 적용되지 않는다. 그래서 closeButton은 절대위치를 쓰지 않고 일반 flow(alignSelf)로 배치해
-  // topBar(SafeAreaView)의 안전영역 패딩을 그대로 물려받게 한다 — 노치/상태바를 피해 정확히 밑에 온다.
-  closeButton: {
-    alignSelf: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    borderRadius: radius.full,
-    padding: spacing.sm,
-  },
   topBarCenter: {
     alignItems: 'center',
     marginTop: spacing.sm,
@@ -254,13 +246,6 @@ const styles = StyleSheet.create({
     ...typography.headline,
     color: '#FFFFFF',
   },
-  feedbackBadge: {
-    backgroundColor: 'rgba(122,158,126,0.85)',
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-  },
-  feedbackText: { ...typography.caption, color: '#FFFFFF' },
   bottomBar: {
     position: 'absolute',
     bottom: 0,
@@ -285,6 +270,12 @@ const styles = StyleSheet.create({
   stepRow: { flexDirection: 'row', gap: spacing.sm },
   stepDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.4)' },
   stepDotActive: { backgroundColor: colors.coral },
+  // 셔터 버튼이 화면 중앙에 오도록, X 버튼과 동일한 너비의 빈 스페이서를 반대쪽에 둔 3분할 행
+  shutterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xl,
+  },
   shutter: {
     width: 72,
     height: 72,
@@ -295,4 +286,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   shutterInner: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#FFFFFF' },
+  closeButton: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeButtonSpacer: { width: 44, height: 44 },
 });
