@@ -2,8 +2,9 @@ import * as Joi from 'joi';
 
 /**
  * 환경변수 검증 스키마.
- * T1 단계에서는 DB/Redis 없이 실행 가능해야 하므로 DATABASE_URL, REDIS_URL은 optional.
- * 운영 전환(T2/T3) 시 required로 강화 예정.
+ * T2 단계: DATABASE_URL은 test 환경을 제외하고 required.
+ * REDIS_URL은 T12(날씨 캐시)에서 required로 전환 예정.
+ * JWT secret은 T3에서 required로 전환 예정.
  */
 export const envValidationSchema = Joi.object({
   NODE_ENV: Joi.string()
@@ -15,8 +16,12 @@ export const envValidationSchema = Joi.object({
   // CORS 허용 목록 — 쉼표로 구분 (예: http://localhost:8081,https://app.todayskin.kr)
   ALLOWED_ORIGINS: Joi.string().allow('').default(''),
 
-  // T1 단계에서는 optional — T2에서 required로 전환
-  DATABASE_URL: Joi.string().uri().allow('').optional(),
+  // T2에서 test 환경을 제외하고 required — PrismaModule이 인스턴스화되지 않을 수 있으므로.
+  DATABASE_URL: Joi.when('NODE_ENV', {
+    is: 'test',
+    then: Joi.string().uri().allow('').optional(),
+    otherwise: Joi.string().uri().required(),
+  }),
   REDIS_URL: Joi.string().uri().allow('').optional(),
 
   // T3에서 required로 전환

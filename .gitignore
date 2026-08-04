@@ -64,3 +64,6 @@ backend/dist/
 backend/coverage/
 backend/.env
 backend/.env.local
+backend/prisma/*.db
+backend/prisma/*.db-journal
+backend/.pgdata/
