@@ -43,6 +43,10 @@ export const envValidationSchema = Joi.object({
   // 외부 API 키 — T5+에서 사용
   KMA_API_KEY: Joi.string().allow('').optional(),
   AIRKOREA_API_KEY: Joi.string().allow('').optional(),
+  // T5: 위치 권한 거부 또는 근접측정소 조회 실패 시 기본 지역 fallback.
+  // 비워두면 REGIONS 기본값(서울 종로구)을 사용한다.
+  KMA_AREA_NO: Joi.string().allow('').optional(),
+  AIRKOREA_STATION_NAME: Joi.string().allow('').optional(),
   GEMINI_API_KEY: Joi.string().allow('').optional(),
   GEMINI_MODEL: Joi.string().default('gemini-flash-latest'),
 });

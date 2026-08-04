@@ -1,0 +1,65 @@
+
+import { Region } from './region';
+
+/**
+ * 지역 근사표 — 기존 FastAPI regions.py의 REGIONS 리스트 이식.
+ * 정확도 안내: 위/경도 중심점은 대략치이고, kmaAreaNo는 법정동코드 표준을 따라 추정.
+ * airkoreaStationName은 실제 측정소명과 다를 수 있어 실연동 후 검증 필요.
+ * 서울은 PM2.5가 구별로 편차가 있어 주요 구를 세분화; 그 외 지역은 광역 단위 대표값.
+ */
+export const REGIONS: Region[] = [
+  new Region('서울 종로구', '서울특별시', 37.5735, 126.9788, '1111000000', '종로구'),
+  new Region('서울 중구', '서울특별시', 37.5641, 126.9979, '1114000000', '중구'),
+  new Region('서울 마포구', '서울특별시', 37.5663, 126.9019, '1144000000', '마포구'),
+  new Region('서울 영등포구', '서울특별시', 37.5264, 126.8963, '1156000000', '영등포구'),
+  new Region('서울 강남구', '서울특별시', 37.5172, 127.0473, '1168000000', '강남구'),
+  new Region('서울 서초구', '서울특별시', 37.4837, 127.0324, '1165000000', '서초구'),
+  new Region('서울 송파구', '서울특별시', 37.5145, 127.1059, '1171000000', '송파구'),
+  new Region('서울 노원구', '서울특별시', 37.6542, 127.0568, '1135000000', '노원구'),
+  new Region('서울 강서구', '서울특별시', 37.5509, 126.8495, '1150000000', '강서구'),
+  new Region('서울 관악구', '서울특별시', 37.4784, 126.9516, '1162000000', '관악구'),
+  new Region('부산광역시', '부산광역시', 35.1796, 129.0756, '2600000000', '중구'),
+  new Region('대구광역시', '대구광역시', 35.8714, 128.6014, '2700000000', '중구'),
+  new Region('인천광역시', '인천광역시', 37.4563, 126.7052, '2800000000', '남동구'),
+  new Region('광주광역시', '광주광역시', 35.1595, 126.8526, '2900000000', '서구'),
+  new Region('대전광역시', '대전광역시', 36.3504, 127.3845, '3000000000', '서구'),
+  new Region('울산광역시', '울산광역시', 35.5384, 129.3114, '3100000000', '남구'),
+  new Region('세종특별자치시', '세종특별자치시', 36.4801, 127.289, '3600000000', '세종'),
+  new Region('경기도 수원', '경기도', 37.2636, 127.0286, '4100000000', '인계동'),
+  new Region('강원특별자치도 춘천', '강원특별자치도', 37.8228, 128.1555, '4200000000', '춘천'),
+  new Region('충청북도 청주', '충청북도', 36.6357, 127.4917, '4300000000', '청주'),
+  new Region('충청남도 홍성', '충청남도', 36.6011, 126.6608, '4400000000', '홍성'),
+  new Region('전북특별자치도 전주', '전북특별자치도', 35.8242, 127.148, '4500000000', '전주'),
+  new Region('전라남도 목포', '전라남도', 34.8118, 126.3922, '4600000000', '목포'),
+  new Region('경상북도 안동', '경상북도', 36.5684, 128.7294, '4700000000', '안동'),
+  new Region('경상남도 창원', '경상남도', 35.2279, 128.6811, '4800000000', '창원'),
+  new Region('제주특별자치도', '제주특별자치도', 33.4996, 126.5312, '5000000000', '제주'),
+];
+
+/** 서울 종로구 */
+export const DEFAULT_REGION = REGIONS[0];
+
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const r = 6371.0;
+  const p1 = (lat1 * Math.PI) / 180;
+  const p2 = (lat2 * Math.PI) / 180;
+  const dphi = ((lat2 - lat1) * Math.PI) / 180;
+  const dlambda = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dphi / 2) ** 2 +
+    Math.cos(p1) * Math.cos(p2) * Math.sin(dlambda / 2) ** 2;
+  return 2 * r * Math.asin(Math.sqrt(a));
+}
+
+export function findNearestRegion(lat: number, lon: number): Region {
+  let best = REGIONS[0];
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (const region of REGIONS) {
+    const dist = haversineKm(lat, lon, region.lat, region.lon);
+    if (dist < bestDist) {
+      best = region;
+      bestDist = dist;
+    }
+  }
+  return best;
+}
