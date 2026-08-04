@@ -154,8 +154,8 @@ model WeatherSnapshot {
   kmaAreaNo       String?  @map("kma_area_no")
   airkoreaStation String?  @map("airkorea_station_name")
 
-  uvIndex        Float?
-  uvStatus       AirStatus?
+  uvIndex        Float?      @map("uv_index")
+  uvStatus       AirStatus?  @map("uv_status")
   uvIndexPeak    Float?      @map("uv_index_peak")
   uvStatusPeak   AirStatus?  @map("uv_status_peak")
   uvIndexPeakHour Int?       @map("uv_index_peak_hour")
