@@ -176,12 +176,12 @@ GitHub branch protection/ruleset은 현재 비공개 저장소 플랜에서 지�
 
 브랜치: `feature/backend-nest-init`
 
-- [ ] NestJS, `AppModule`, `HealthModule` 초기화
-- [ ] `GET /health` 구현
-- [ ] `ConfigModule`과 환경변수 검증
-- [ ] 전역 `ValidationPipe`와 공통 예외 응답 설정
-- [ ] CORS 허용 목록 환경변수화
-- [ ] build/test 스크립트와 Swagger 기반 마련
+- [x] NestJS, `AppModule`, `HealthModule` 초기화
+- [x] `GET /health` 구현
+- [x] `ConfigModule`과 환경변수 검증
+- [x] 전역 `ValidationPipe`와 공통 예외 응답 설정
+- [x] CORS 허용 목록 환경변수화
+- [x] build/test 스크립트와 Swagger 기반 마련
 
 완료 기준: DB 없이 실행되고 `/health`가 정상 응답합니다.
 

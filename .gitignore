@@ -58,3 +58,9 @@ backend/*.egg-info/
 backend/*.db
 backend/*.db-wal
 backend/*.db-shm
+
+# backend (NestJS)
+backend/dist/
+backend/coverage/
+backend/.env
+backend/.env.local
