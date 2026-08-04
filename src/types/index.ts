@@ -64,6 +64,8 @@ export interface Recommendation {
   timing?: RecommendationTiming; // 언제 적용하면 좋은 조언인지 (외출 후 세안법 / 자기 전 케어 등)
 }
 
+export type ProductTiming = '세안 후' | '외출 전' | '외출 후';
+
 export interface Product {
   id: string;
   name: string;
@@ -74,6 +76,7 @@ export interface Product {
   category: 'moisture' | 'elasticity' | 'brightening' | 'barrier';
   recommendationId?: string;
   reason?: string; // 별도 Recommendation 레코드 없이 바로 보여주는 근거 설명 (예: 날씨 기반 추천)
+  timing?: ProductTiming; // 하루 중 이 제품을 쓰면 좋은 상황 (예: 날씨 기반 추천)
 }
 
 export interface PersonalPatternPoint {

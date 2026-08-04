@@ -135,9 +135,10 @@ async def list_products(category: Optional[str] = None, db: Session = Depends(ge
 @router.post("/products/weather-based", response_model=list[Product])
 async def weather_based_products(weather: WeatherSnapshot) -> list[Product]:
     """
-    날씨 기반(A등급) 제품 추천: 사용자 촬영 데이터 없이 오늘 날씨/대기질만으로 카테고리
-    (보습/탄력/미백/장벽강화)별 화장품을 하나씩 Gemini에게 추천받는다. 유저 비종속이라 DB에
-    저장하지 않고, GEMINI_API_KEY가 없거나 호출 실패 시 카테고리별 고정 폴백으로 대체한다.
+    날씨 기반(A등급) 제품 추천: 사용자 촬영 데이터 없이 오늘 날씨/대기질만으로 하루 중 실제로
+    화장품을 쓰는 세 상황(세안 후/외출 전/외출 후)별로 화장품을 하나씩 Gemini에게 추천받는다.
+    유저 비종속이라 DB에 저장하지 않고, GEMINI_API_KEY가 없거나 호출 실패 시 상황별 고정 폴백으로
+    대체한다.
     """
     try:
         items = await generate_weather_products(weather.model_dump())
@@ -150,6 +151,7 @@ async def weather_based_products(weather: WeatherSnapshot) -> list[Product]:
                 matchedIngredients=item.get("ingredientTags", []),
                 category=item["category"],
                 reason=item.get("explanation"),
+                timing=item["timing"],
             )
             for item in items
         ]

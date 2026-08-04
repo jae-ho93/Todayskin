@@ -7,7 +7,7 @@ import { IngredientChip } from '../../src/components/IngredientChip';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { useUserLocation } from '../../src/hooks/useUserLocation';
 import { colors, radius, spacing, typography } from '../../src/theme';
-import type { Product } from '../../src/types';
+import type { Product, ProductTiming } from '../../src/types';
 
 const CATEGORY_FILTERS: { key: Product['category'] | 'all'; label: string }[] = [
   { key: 'all', label: '전체' },
@@ -17,12 +17,16 @@ const CATEGORY_FILTERS: { key: Product['category'] | 'all'; label: string }[] = 
   { key: 'barrier', label: '장벽 강화' },
 ];
 
+// 화장품을 실제로 쓰는 순서대로 정렬
+const TIMING_ORDER: ProductTiming[] = ['세안 후', '외출 전', '외출 후'];
+
 // 화면 7: 제품/성분 추천 리스트 — 날씨 기반 / 피부 기반 / 날씨+피부 기반 3구역
 export default function ProductsScreen() {
   const { coords, loading: locationLoading } = useUserLocation();
   const [category, setCategory] = useState<Product['category'] | 'all'>('all');
-  // null = 아직 로딩 중 — 오늘 날씨를 Gemini에게 보내 카테고리(보습/탄력/미백/장벽강화)별로
-  // 화장품을 하나씩 추천받는다. 피부 기반 / 날씨+피부 기반은 아직 이 화면에 연결하지 않아 구역만 둔다.
+  // null = 아직 로딩 중 — 오늘 날씨를 Gemini에게 보내 하루 중 실제로 화장품을 쓰는 상황
+  // (세안 후/외출 전/외출 후)별로 하나씩 추천받는다. 피부 기반 / 날씨+피부 기반은 아직 이 화면에
+  // 연결하지 않아 구역만 둔다.
   const [weatherProducts, setWeatherProducts] = useState<Product[] | null>(null);
 
   useEffect(() => {
@@ -72,24 +76,31 @@ export default function ProductsScreen() {
           </View>
         ) : filteredWeatherProducts.length > 0 ? (
           <View style={styles.list}>
-            {filteredWeatherProducts.map((p) => (
-              <Card key={p.id} style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <View style={styles.thumb} />
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text style={styles.brand}>{p.brand}</Text>
-                    <Text style={styles.name}>{p.name}</Text>
-                  </View>
-                  <EvidenceBadge grade={p.matchedGrade} />
+            {TIMING_ORDER.map((timing) => {
+              const p = filteredWeatherProducts.find((item) => item.timing === timing);
+              if (!p) return null;
+              return (
+                <View key={timing} style={styles.timingGroup}>
+                  <Text style={styles.timingLabel}>{timing}</Text>
+                  <Card style={styles.card}>
+                    <View style={styles.cardHeader}>
+                      <View style={styles.thumb} />
+                      <View style={{ flex: 1, gap: 2 }}>
+                        <Text style={styles.brand}>{p.brand}</Text>
+                        <Text style={styles.name}>{p.name}</Text>
+                      </View>
+                      <EvidenceBadge grade={p.matchedGrade} />
+                    </View>
+                    <View style={styles.chipRow}>
+                      {p.matchedIngredients.map((tag) => (
+                        <IngredientChip key={tag} label={tag} />
+                      ))}
+                    </View>
+                    {p.reason && <Text style={styles.reason}>{p.reason}</Text>}
+                  </Card>
                 </View>
-                <View style={styles.chipRow}>
-                  {p.matchedIngredients.map((tag) => (
-                    <IngredientChip key={tag} label={tag} />
-                  ))}
-                </View>
-                {p.reason && <Text style={styles.reason}>{p.reason}</Text>}
-              </Card>
-            ))}
+              );
+            })}
           </View>
         ) : (
           <Text style={styles.emptyText}>오늘 날씨 기준으로 추천할 제품이 아직 없어요</Text>
@@ -128,6 +139,8 @@ const styles = StyleSheet.create({
   emptyText: { ...typography.bodySm, color: colors.textTertiary },
   loadingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   list: { gap: spacing.md },
+  timingGroup: { gap: spacing.xs },
+  timingLabel: { ...typography.caption, color: colors.sageDark, fontWeight: '700' },
   card: { gap: spacing.sm },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   thumb: { width: 48, height: 48, borderRadius: radius.md, backgroundColor: colors.gray100 },

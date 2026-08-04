@@ -133,42 +133,36 @@ MOCK_PRODUCTS = [
     ),
 ]
 
-# Gemini 호출이 불가능할 때(API 키 미설정, 요청 실패 등) 대신 보여줄 날씨 기반(A등급) 카테고리별 폴백
+# Gemini 호출이 불가능할 때(API 키 미설정, 요청 실패 등) 대신 보여줄 날씨 기반(A등급) 상황별 폴백
 FALLBACK_WEATHER_PRODUCTS = [
     Product(
-        id="weather-product-moisture",
-        name="데일리 수분 배리어 크림",
+        id="weather-product-after-cleansing",
+        name="진정 수분 토너",
         brand="Greenfield",
         matchedGrade="A",
-        matchedIngredients=["히알루론산", "세라마이드"],
+        matchedIngredients=["히알루론산", "판테놀"],
         category="moisture",
-        reason="건조한 날씨엔 수분 손실이 빨라지기 쉬워 촉촉한 보습이 도움될 수 있어요.",
+        reason="건조한 날씨엔 세안 직후 수분 손실이 빨라지기 쉬워 순한 토너로 결을 정돈해주면 도움될 수 있어요.",
+        timing="세안 후",
     ),
     Product(
-        id="weather-product-elasticity",
-        name="탄력 리프팅 세럼",
+        id="weather-product-before-outing",
+        name="데일리 UV 디펜스 선크림",
         brand="Skinlab",
         matchedGrade="A",
-        matchedIngredients=["펩타이드", "아데노신"],
-        category="elasticity",
-        reason="자외선 노출이 많은 날엔 탄력 저하를 늦추는 성분 보강이 도움될 수 있어요.",
-    ),
-    Product(
-        id="weather-product-brightening",
-        name="브라이트닝 나이아신 앰플",
-        brand="Skinlab",
-        matchedGrade="A",
-        matchedIngredients=["나이아신아마이드"],
-        category="brightening",
-        reason="자외선지수가 높은 날엔 색소침착 예방을 위한 미백 케어가 도움될 수 있어요.",
-    ),
-    Product(
-        id="weather-product-barrier",
-        name="약산성 배리어 클렌저",
-        brand="Greenfield",
-        matchedGrade="A",
-        matchedIngredients=["약산성 클렌저", "판테놀"],
+        matchedIngredients=["징크옥사이드", "나이아신아마이드"],
         category="barrier",
-        reason="미세먼지·오존 농도가 높은 날엔 순한 세정으로 피부 장벽을 지켜주는 게 도움될 수 있어요.",
+        reason="자외선지수가 높은 날엔 외출 전 자외선 차단제로 광노화·색소침착을 예방하는 데 도움될 수 있어요.",
+        timing="외출 전",
+    ),
+    Product(
+        id="weather-product-while-out",
+        name="휴대용 수분 진정 미스트",
+        brand="Skinlab",
+        matchedGrade="A",
+        matchedIngredients=["센텔라", "판테놀"],
+        category="moisture",
+        reason="미세먼지·오존 농도가 높은 날엔 밖에 있는 동안 틈틈이 미스트로 수분을 보충해주면 도움될 수 있어요.",
+        timing="외출 후",
     ),
 ]
