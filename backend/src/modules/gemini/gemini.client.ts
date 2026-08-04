@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EvidencePolicy } from './evidence.policy';
 
 /**
  * GeminiClient — Google Generative Language API 호출을 캡슐화.
@@ -7,7 +8,7 @@ import { ConfigService } from '@nestjs/config';
  * 기존 FastAPI gemini_client.py의 generate_recommendations / generate_weather_products 이식.
  *
  * 설계 원칙 (BACKEND_TASKS.md T8 기준):
- * - 의료적 확정 표현 방지: system prompt로 강제
+ * - 의료적 확정 표현 방지: system prompt로 강제 + EvidencePolicy 사후 검증
  * - grade/sourceLabel은 서버가 고정 (LLM이 결정하지 않음)
  * - ingredientTags는 화이트리스트 강제 필터링
  * - GEMINI_API_KEY가 없거나 호출 실패 시 가짜 데이터로 대체하지 않고 GeminiUnavailable 예외
@@ -154,7 +155,10 @@ export class GeminiClient {
   private readonly endpoint: string;
   private readonly mockEnabled: boolean;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly evidencePolicy: EvidencePolicy,
+  ) {
     this.apiKey = this.configService.get<string>('GEMINI_API_KEY');
     this.model = this.configService.get<string>('GEMINI_MODEL', 'gemini-flash-latest');
     this.endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent`;
@@ -207,6 +211,17 @@ export class GeminiClient {
     for (const item of items) {
       item.ingredientTags = (item.ingredientTags ?? []).filter((t) =>
         (ALLOWED_INGREDIENTS as readonly string[]).includes(t),
+      );
+    }
+
+    // 의료적 확정 표현 사후 검증 — 위반 시 가짜 데이터로 대체하지 않고 503.
+    const policyResult = this.evidencePolicy.validateRecommendations(items);
+    if (!policyResult.ok) {
+      this.logger.warn(
+        `Gemini evidence policy violation: ${JSON.stringify(policyResult.violations)}`,
+      );
+      throw new GeminiUnavailable(
+        'Gemini output violated evidence policy',
       );
     }
 
@@ -268,6 +283,17 @@ export class GeminiClient {
       throw new GeminiUnavailable('Gemini returned no usable product recommendations');
     }
 
+    // 의료적 확정 표현 사후 검증 — 위반 시 가짜 제품으로 대체하지 않고 503.
+    const policyResult = this.evidencePolicy.validateWeatherProducts(results);
+    if (!policyResult.ok) {
+      this.logger.warn(
+        `Gemini evidence policy violation (products): ${JSON.stringify(policyResult.violations)}`,
+      );
+      throw new GeminiUnavailable(
+        'Gemini output violated evidence policy',
+      );
+    }
+
     return results;
   }
 
@@ -327,7 +353,7 @@ export class GeminiClient {
       {
         title: '오늘은 이중 세안을 권장해요',
         explanation:
-          '초미세먼지(PM2.5) 노출은 모공에 침투해 활성산소를 생성할 수 있다는 관찰 연구 결과가 있습니다. 이중 세안으로 잔여 오염물질 제거에 도움될 수 있습니다.',
+          '초미세먼지(PM2.5) 노출은 모공에 침투해 활성산소를 만들 수 있다는 관찰이 있습니다. 이중 세안으로 잔여 오염물질 제거에 도움될 수 있습니다.',
         ingredientTags: ['약산성 클렌저', '세라마이드'],
         timing: '외출 후',
       },
