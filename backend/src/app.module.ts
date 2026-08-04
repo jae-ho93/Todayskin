@@ -8,6 +8,7 @@ import { WeatherModule } from './modules/weather/weather.module';
 import { RecommendationModule } from './modules/recommendations/recommendation.module';
 import { ProductModule } from './modules/products/product.module';
 import { DiagnosisModule } from './modules/diagnosis/diagnosis.module';
+import { PatternModule } from './modules/pattern/pattern.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { DiagnosisModule } from './modules/diagnosis/diagnosis.module';
     RecommendationModule,
     ProductModule,
     DiagnosisModule,
+    PatternModule,
   ],
 })
 export class AppModule {}
