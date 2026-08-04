@@ -6,6 +6,8 @@ describe('envValidationSchema', () => {
     PORT: 3000,
     ALLOWED_ORIGINS: 'http://localhost:8081',
     DATABASE_URL: 'postgresql://user:pass@localhost:5432/todayskin',
+    JWT_ACCESS_SECRET: 'test_access_secret_at_least_32_characters_long',
+    JWT_REFRESH_SECRET: 'test_refresh_secret_at_least_32_characters_long',
   };
 
   it('accepts minimal valid env (T2 단계: DATABASE_URL required)', () => {
@@ -46,6 +48,23 @@ describe('envValidationSchema', () => {
   it('allows empty DATABASE_URL only in test environment', () => {
     const { error } = envValidationSchema.validate(
       { NODE_ENV: 'test', PORT: 3000, ALLOWED_ORIGINS: '', DATABASE_URL: '' },
+      { abortEarly: false, allowUnknown: true },
+    );
+    expect(error).toBeUndefined();
+  });
+
+  it('requires JWT secrets (>=32 chars) in non-test environments', () => {
+    const { error } = envValidationSchema.validate(
+      { ...validBase, JWT_ACCESS_SECRET: 'short', JWT_REFRESH_SECRET: 'short' },
+      { abortEarly: false, allowUnknown: true },
+    );
+    expect(error).toBeDefined();
+    expect(error!.message).toContain('JWT_ACCESS_SECRET');
+  });
+
+  it('allows empty JWT secrets in test environment', () => {
+    const { error } = envValidationSchema.validate(
+      { NODE_ENV: 'test', PORT: 3000, ALLOWED_ORIGINS: '', DATABASE_URL: '', JWT_ACCESS_SECRET: '', JWT_REFRESH_SECRET: '' },
       { abortEarly: false, allowUnknown: true },
     );
     expect(error).toBeUndefined();

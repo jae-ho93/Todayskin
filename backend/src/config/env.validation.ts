@@ -25,8 +25,18 @@ export const envValidationSchema = Joi.object({
   REDIS_URL: Joi.string().uri().allow('').optional(),
 
   // T3에서 required로 전환
-  JWT_ACCESS_SECRET: Joi.string().allow('').optional(),
-  JWT_REFRESH_SECRET: Joi.string().allow('').optional(),
+  // T3: test 환경을 제외하고 JWT secret required.
+  // secret은 최소 32자 이상 권장.
+  JWT_ACCESS_SECRET: Joi.when('NODE_ENV', {
+    is: 'test',
+    then: Joi.string().allow('').optional(),
+    otherwise: Joi.string().min(32).required(),
+  }),
+  JWT_REFRESH_SECRET: Joi.when('NODE_ENV', {
+    is: 'test',
+    then: Joi.string().allow('').optional(),
+    otherwise: Joi.string().min(32).required(),
+  }),
   ACCESS_TOKEN_EXPIRES_IN: Joi.string().default('15m'),
   REFRESH_TOKEN_EXPIRES_IN: Joi.string().default('14d'),
 
