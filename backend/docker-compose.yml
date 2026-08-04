@@ -22,5 +22,23 @@ services:
       timeout: 5s
       retries: 5
 
+  # T12: 날씨 캐시용 Redis. 캐시 부재 시 백엔드는 외부 API/DB fallback으로 동작한다.
+  redis:
+    image: redis:7-alpine
+    container_name: todayskin-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - todayskin_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    # 운영에서는 requirepass로 인증 필수. 개발용은 비인증.
+    # command: redis-server --requirepass yourpassword
+
 volumes:
   todayskin_pg_data:
+  todayskin_redis_data:

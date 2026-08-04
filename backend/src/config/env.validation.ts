@@ -23,6 +23,8 @@ export const envValidationSchema = Joi.object({
     otherwise: Joi.string().uri().required(),
   }),
   REDIS_URL: Joi.string().uri().allow('').optional(),
+  // T12: 날씨 캐시 TTL(초). 기본 300초(5분) — 정부 API 분 단위 갱신 기준.
+  WEATHER_CACHE_TTL_SECONDS: Joi.number().integer().min(0).default(300),
 
   // T3에서 required로 전환
   // T3: test 환경을 제외하고 JWT secret required.
