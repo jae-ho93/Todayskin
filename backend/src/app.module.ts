@@ -9,6 +9,7 @@ import { RecommendationModule } from './modules/recommendations/recommendation.m
 import { ProductModule } from './modules/products/product.module';
 import { DiagnosisModule } from './modules/diagnosis/diagnosis.module';
 import { PatternModule } from './modules/pattern/pattern.module';
+import { NotificationModule } from './modules/notifications/notification.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { PatternModule } from './modules/pattern/pattern.module';
     ProductModule,
     DiagnosisModule,
     PatternModule,
+    NotificationModule,
   ],
 })
 export class AppModule {}
