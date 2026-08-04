@@ -350,11 +350,11 @@ Recommendation(userId, diagnosisId, createdAt)
 
 브랜치: `feature/redis-weather-cache`
 
-- [ ] Redis 연결 모듈
-- [ ] cache key와 TTL 정의
-- [ ] hit/miss 처리
-- [ ] Redis 장애 시 외부 API 또는 최근 DB fallback
-- [ ] live/cached 출처 구분
+- [x] Redis 연결 모듈
+- [x] cache key와 TTL 정의
+- [x] hit/miss 처리
+- [x] Redis 장애 시 외부 API 또는 최근 DB fallback
+- [x] live/cached 출처 구분
 - [ ] 무효화·로그·metric 정책 결정
 
 초기 Redis 범위는 날씨 캐시입니다. AI 작업 큐는 Python AI 서버와 실제 비동기 추론이 필요해질 때 별도 작업으로 추가합니다.

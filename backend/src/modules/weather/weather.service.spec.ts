@@ -8,6 +8,7 @@ import {
 } from './clients/airkorea.client';
 import { StationClient } from './clients/station.client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RedisService } from '../../redis/redis.service';
 import { WeatherSource } from '../../common/enums/weather-source.enum';
 import { AirStatus } from '../../common/enums/air-status.enum';
 
@@ -16,6 +17,7 @@ describe('WeatherService', () => {
   let kmaClient: jest.Mocked<KmaClient>;
   let airKoreaClient: jest.Mocked<AirKoreaClient>;
   let stationClient: jest.Mocked<StationClient>;
+  let redisService: { isAvailable: jest.Mock; getJson: jest.Mock; setJson: jest.Mock };
   let prisma: {
     weatherSnapshot: {
       findFirst: jest.Mock;
@@ -61,6 +63,15 @@ describe('WeatherService', () => {
         { provide: StationClient, useValue: { fetchNearestStation: jest.fn() } },
         { provide: PrismaService, useValue: prisma },
         {
+          provide: RedisService,
+          useValue: {
+            // 기본: 캐시 비활성화 — 기존 테스트는 외부 API 호출 경로를 검증
+            isAvailable: jest.fn().mockReturnValue(false),
+            getJson: jest.fn().mockResolvedValue(null),
+            setJson: jest.fn().mockResolvedValue(true),
+          },
+        },
+        {
           provide: ConfigService,
           useValue: {
             get: (key: string, def?: string) =>
@@ -74,6 +85,7 @@ describe('WeatherService', () => {
     kmaClient = moduleRef.get(KmaClient);
     airKoreaClient = moduleRef.get(AirKoreaClient);
     stationClient = moduleRef.get(StationClient);
+    redisService = moduleRef.get(RedisService);
   });
 
   it('API 키 없음 시 모든 지표 null + source UNAVAILABLE (목업 대체 안 함)', async () => {
@@ -290,5 +302,91 @@ describe('WeatherService', () => {
     const result = await service.getOrCreateSnapshot();
     expect(result?.id).toBe('existing');
     expect(prisma.weatherSnapshot.create).not.toHaveBeenCalled();
+  });
+
+  // ── T12 Redis 날씨 캐시 ──────────────────────────────
+
+  it('캐시 hit 시 외부 API를 호출하지 않고 source=CACHED로 반환한다', async () => {
+    redisService.isAvailable.mockReturnValue(true);
+    redisService.getJson.mockResolvedValue({
+      dto: {
+        observedAt: '2026-08-04T06:30:00.000Z',
+        regionName: '서울특별시',
+        source: WeatherSource.LIVE,
+        uvIndex: 7,
+        pm25: 20,
+      },
+      cachedAt: '2026-08-04T06:35:00.000Z',
+    });
+
+    const result = await service.getCurrentWeather(37.5665, 126.978);
+
+    expect(result.source).toBe(WeatherSource.CACHED);
+    expect(result.uvIndex).toBe(7);
+    expect(kmaClient.fetchUvIndex).not.toHaveBeenCalled();
+    expect(airKoreaClient.fetchAirQuality).not.toHaveBeenCalled();
+    expect(prisma.weatherSnapshot.create).not.toHaveBeenCalled();
+  });
+
+  it('캐시 miss 시 외부 API 호출 후 결과를 캐시에 저장한다', async () => {
+    redisService.isAvailable.mockReturnValue(true);
+    redisService.getJson.mockResolvedValue(null);
+    kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 5 }));
+    airKoreaClient.fetchAirQuality.mockResolvedValue(air({ pm25: 12 }));
+    prisma.weatherSnapshot.findFirst.mockResolvedValue(null);
+
+    const result = await service.getCurrentWeather();
+
+    expect(result.source).toBe(WeatherSource.LIVE);
+    expect(redisService.setJson).toHaveBeenCalledTimes(1);
+    // 캐시 키가 weather:current: 형식
+    const [key] = redisService.setJson.mock.calls[0];
+    expect(key).toMatch(/^weather:current:/);
+  });
+
+  it('Redis 장애 시 외부 API fallback으로 정상 응답한다', async () => {
+    // 실제 RedisService는 장애 시 예외를 잡아 null/false 반환하도록 설계되어 있다.
+    // 여기서는 isAvailable()=false(연결 끊김) 상황을 시뮬레이션해 fallback을 검증한다.
+    redisService.isAvailable.mockReturnValue(false);
+    kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 5 }));
+    airKoreaClient.fetchAirQuality.mockResolvedValue(air({ pm25: 12 }));
+    prisma.weatherSnapshot.findFirst.mockResolvedValue(null);
+
+    const result = await service.getCurrentWeather();
+
+    expect(result.source).toBe(WeatherSource.LIVE);
+    expect(kmaClient.fetchUvIndex).toHaveBeenCalled();
+  });
+
+  it('Redis 비활성화(REDIS_URL 없음) 시 외부 API 직접 호출', async () => {
+    redisService.isAvailable.mockReturnValue(false);
+    kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 5 }));
+    airKoreaClient.fetchAirQuality.mockResolvedValue(air({ pm25: 12 }));
+    prisma.weatherSnapshot.findFirst.mockResolvedValue(null);
+
+    const result = await service.getCurrentWeather();
+
+    expect(result.source).toBe(WeatherSource.LIVE);
+    expect(redisService.getJson).not.toHaveBeenCalled();
+    expect(redisService.setJson).not.toHaveBeenCalled();
+  });
+
+  it('getOrCreateSnapshot은 캐시를 사용하지 않고 항상 외부 API를 호출한다', async () => {
+    redisService.isAvailable.mockReturnValue(true);
+    redisService.getJson.mockResolvedValue({
+      dto: { source: WeatherSource.CACHED, uvIndex: 99 },
+      cachedAt: '2026-08-04T06:35:00.000Z',
+    });
+    kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 5 }));
+    airKoreaClient.fetchAirQuality.mockResolvedValue(air({ pm25: 12 }));
+    prisma.weatherSnapshot.findFirst.mockResolvedValue(null);
+    prisma.weatherSnapshot.create.mockResolvedValue({ id: 'snap-99' });
+
+    const result = await service.getOrCreateSnapshot();
+
+    expect(result?.id).toBe('snap-99');
+    // 캐시가 존재해도 진단용은 외부 API를 호출한다
+    expect(kmaClient.fetchUvIndex).toHaveBeenCalled();
+    expect(redisService.getJson).not.toHaveBeenCalled();
   });
 });

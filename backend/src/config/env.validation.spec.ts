@@ -78,4 +78,12 @@ describe('envValidationSchema', () => {
     expect(value.ACCESS_TOKEN_EXPIRES_IN).toBe('15m');
     expect(value.GEMINI_MODEL).toBe('gemini-flash-latest');
   });
+
+  it('T12: WEATHER_CACHE_TTL_SECONDS 기본값은 300', () => {
+    const { value } = envValidationSchema.validate(validBase, {
+      abortEarly: false,
+      allowUnknown: true,
+    });
+    expect(value.WEATHER_CACHE_TTL_SECONDS).toBe(300);
+  });
 });

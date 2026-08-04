@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { RedisService } from '../../redis/redis.service';
+import { weatherCacheKey } from './weather-cache';
 import { KmaClient, UvForecastWithTime } from './clients/kma.client';
 import {
   AirKoreaClient,
@@ -62,6 +64,7 @@ export class WeatherService {
    private readonly stationClient: StationClient,
    private readonly configService: ConfigService,
    private readonly prisma: PrismaService,
+   private readonly redisService: RedisService,
   ) {
     // 위치 권한 거부 또는 근접측정소 조회 실패 시 폴백용 기본 지역.
     // 환경변수가 없으면 REGIONS 기본값(서울 종로구)을 사용한다.
@@ -79,12 +82,25 @@ export class WeatherService {
     lat?: number,
     lon?: number,
   ): Promise<WeatherSnapshotDto> {
+    // T12: Redis 캐시 조회. 동일 지역·근접 좌표의 반복 요청은 외부 API를 치지 않는다.
+    // 진단용 getOrCreateSnapshot과 달리 응답용은 약간의 지연(최대 TTL)을 허용한다.
+    const cacheKey = this.resolveCacheKey(lat, lon);
+    const cached = await this.tryCache(cacheKey);
+    if (cached) {
+      this.logger.debug(`Weather cache hit: ${cacheKey}`);
+      return cached;
+    }
+
     const collected = await this.collect(lat, lon);
     const dto = this.buildSnapshotDto(collected);
     await this.persist(collected).catch((e) => {
       // 저장 실패가 응답 자체를 막아서는 안 된다. 로깅만 하고 계속.
       this.logger.warn(`WeatherSnapshot persist failed: ${errorName(e)}`);
     });
+
+    // LIVE 수집 결과를 캐시에 기록. UNAVAILABLE도 캐싱해 짧은 시간 내
+    // 외부 API 연쇄 실패 시 동일 응답을 반환한다(외부 API 보호).
+    await this.saveCache(cacheKey, dto);
     return dto;
   }
 
@@ -116,6 +132,7 @@ export class WeatherService {
     lat?: number,
     lon?: number,
   ): Promise<WeatherSnapshot | null> {
+    // T12: 진단/추천 연결용은 캐시를 사용하지 않는다. 재현성·정확성이 캐시 지연보다 중요.
     const collected = await this.collect(lat, lon);
     return this.persist(collected);
   }
@@ -192,8 +209,57 @@ export class WeatherService {
     dto.caiStatus = this.policy.caiStatus(c.air.cai);
     dto.no2Value = c.air.no2;
     dto.so2Value = c.air.so2;
-    dto.coValue = c.air.co;
+   dto.coValue = c.air.co;
 
+   return dto;
+ }
+
+  // ── T12 Redis 캐시 헬퍼 ──────────────────────────────
+
+  /**
+   * 캐시 키 계산. 좌표가 있으면 좌표 기반, 없으면 기본 지역 기반.
+   * 좌표는 소수점 2자리로 그룹화해 GPS 미세 오차의 hit 감소를 막는다.
+   */
+  private resolveCacheKey(lat?: number, lon?: number): string {
+    if (lat !== undefined && lon !== undefined) {
+      return weatherCacheKey('coord', lat, lon);
+    }
+    return weatherCacheKey(this.defaultRegionName());
+  }
+
+  private defaultRegionName(): string {
+    return DEFAULT_REGION.cityName;
+  }
+
+  /**
+   * 캐시 조회. hit 시 source를 CACHED로 override하고 DTO 인스턴스로 복원한다.
+   * Redis 장애 또는 키 부재 시 null 반환 — 호출부가 외부 API fallback으로 진행.
+   */
+  private async tryCache(key: string): Promise<WeatherSnapshotDto | null> {
+    if (!this.redisService.isAvailable()) return null;
+    const cached = await this.redisService.getJson<CachedWeatherPayload>(key);
+    if (!cached) return null;
+    return this.dtoFromCache(cached.dto);
+  }
+
+  /**
+   * 캐시 저장. LIVE/UNAVAILABLE 모두 캐싱해 외부 API 보호.
+   * 저장 실패는 조용히 무시(다음 요청이 외부 API를 친다).
+   */
+  private async saveCache(key: string, dto: WeatherSnapshotDto): Promise<void> {
+    if (!this.redisService.isAvailable()) return;
+    const payload: CachedWeatherPayload = {
+      dto: { ...dto },
+      cachedAt: new Date().toISOString(),
+    };
+    await this.redisService.setJson(key, payload);
+  }
+
+  /** 캐시에서 복원한 객체를 DTO 인스턴스로 복구하고 source를 CACHED로 override. */
+  private dtoFromCache(raw: WeatherSnapshotDto): WeatherSnapshotDto {
+    const dto = new WeatherSnapshotDto();
+    Object.assign(dto, raw);
+    dto.source = WeatherSource.CACHED;
     return dto;
   }
 
@@ -311,4 +377,10 @@ function truncateToMinute(date: Date): Date {
 
 function errorName(e: unknown): string {
   return e instanceof Error ? e.name : String(e);
+}
+
+/** 캐시에 저장되는 페이로드. */
+interface CachedWeatherPayload {
+  dto: WeatherSnapshotDto;
+  cachedAt: string;
 }

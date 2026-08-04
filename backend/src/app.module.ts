@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { envValidationSchema } from './config/env.validation';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { RedisModule } from './redis/redis.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { WeatherModule } from './modules/weather/weather.module';
 import { RecommendationModule } from './modules/recommendations/recommendation.module';
@@ -23,6 +24,7 @@ import { NotificationModule } from './modules/notifications/notification.module'
       },
     }),
     PrismaModule,
+    RedisModule,
     HealthModule,
     AuthModule,
     WeatherModule,
