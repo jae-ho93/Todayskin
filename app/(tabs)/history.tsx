@@ -51,19 +51,23 @@ export default function HistoryScreen() {
         </Card>
       )}
 
-      <View style={styles.list}>
-        {history.map((h) => (
-          <Card key={h.id} style={styles.row}>
-            <View style={styles.thumb}>
-              <Ionicons name="person-outline" size={20} color={colors.gray300} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.date}>{formatDate(h.capturedAt)}</Text>
-            </View>
-            <Text style={styles.score}>{h.overallScore}</Text>
-          </Card>
-        ))}
-      </View>
+      {history.length > 0 ? (
+        <View style={styles.list}>
+          {history.map((h) => (
+            <Card key={h.id} style={styles.row}>
+              <View style={styles.thumb}>
+                <Ionicons name="person-outline" size={20} color={colors.gray300} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.date}>{formatDate(h.capturedAt)}</Text>
+              </View>
+              <Text style={styles.score}>{h.overallScore}</Text>
+            </Card>
+          ))}
+        </View>
+      ) : (
+        <Text style={styles.emptyText}>아직 기록이 없어요</Text>
+      )}
     </ScreenContainer>
   );
 }
@@ -72,6 +76,7 @@ const styles = StyleSheet.create({
   title: { ...typography.displaySm, color: colors.textPrimary },
   trendCard: { gap: spacing.sm },
   trendLabel: { ...typography.subtitle, color: colors.textPrimary },
+  emptyText: { ...typography.bodySm, color: colors.textTertiary, textAlign: 'center', marginTop: spacing.xl },
   list: { gap: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   thumb: {
