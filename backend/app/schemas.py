@@ -9,6 +9,7 @@ PHONE_PATTERN = re.compile(r"^01[016789]-?\d{3,4}-?\d{4}$")
 EvidenceGrade = Literal["A", "B", "C"]
 AirStatus = Literal["good", "moderate", "bad"]
 FacePart = Literal["forehead", "glabella", "eyeArea", "cheek", "lips", "jaw"]
+Gender = Literal["male", "female"]
 
 
 class WeatherSnapshot(BaseModel):
@@ -76,6 +77,7 @@ class SignupRequest(BaseModel):
     phoneNumber: str
     name: str
     birthDate: str  # "YYYY-MM-DD"
+    gender: Optional[Gender] = None  # 선택 입력. 추후 피부 측정/추천 모델의 조건 변수로 활용 예정
 
     @field_validator("phoneNumber")
     @classmethod
@@ -113,6 +115,7 @@ class UserResponse(BaseModel):
     phoneNumber: str
     name: str
     birthDate: str
+    gender: Optional[Gender] = None
     createdAt: str
     accessToken: str
 

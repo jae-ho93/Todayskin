@@ -14,6 +14,7 @@ class User(Base):
     phone_number: Mapped[str] = mapped_column(String(20), unique=True, index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(50), nullable=False)
     birth_date: Mapped[date] = mapped_column(Date, nullable=False)
+    gender: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)  # "male" | "female" | None(선택 안 함)
     access_token: Mapped[Optional[str]] = mapped_column(String(64), unique=True, index=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc)

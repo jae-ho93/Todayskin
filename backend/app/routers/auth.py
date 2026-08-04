@@ -19,6 +19,7 @@ def _to_user_response(user: models.User) -> UserResponse:
         phoneNumber=user.phone_number,
         name=user.name,
         birthDate=user.birth_date.isoformat(),
+        gender=user.gender,
         createdAt=user.created_at.isoformat(),
         accessToken=user.access_token,
     )
@@ -35,6 +36,7 @@ async def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> UserR
         phone_number=payload.phoneNumber,
         name=payload.name,
         birth_date=date.fromisoformat(payload.birthDate),
+        gender=payload.gender,
         access_token=secrets.token_urlsafe(32),
     )
     db.add(user)
