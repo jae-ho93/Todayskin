@@ -8,6 +8,9 @@ export interface WeatherSnapshot {
   regionName: string; // 예: "서울 종로구"
   uvIndex: number; // 자외선지수
   uvStatus: AirStatus;
+  uvIndexPeak?: number; // 오늘 남은 시간대 중 예상 최댓값
+  uvStatusPeak?: AirStatus;
+  uvIndexPeakHour?: number; // 그 최댓값이 나오는 시각(0~23시)
   ozonePpm: number; // 오존 농도
   ozoneStatus: AirStatus;
   pm25: number; // 초미세먼지 (㎍/㎥)

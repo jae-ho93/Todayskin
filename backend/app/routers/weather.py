@@ -24,7 +24,7 @@ AIRKOREA_API_KEY = os.getenv("AIRKOREA_API_KEY")  # 한국환경공단_에어코
 DEFAULT_KMA_AREA_NO = os.getenv("KMA_AREA_NO", DEFAULT_REGION.kma_area_no)
 DEFAULT_AIRKOREA_STATION_NAME = os.getenv("AIRKOREA_STATION_NAME", DEFAULT_REGION.airkorea_station_name)
 
-KMA_UV_ENDPOINT = "https://apis.data.go.kr/1360000/LivingWthrIdxServiceV4/getUVIdxV4"
+KMA_UV_ENDPOINT = "https://apis.data.go.kr/1360000/LivingWthrIdxServiceV5/getUVIdxV5"
 AIRKOREA_ENDPOINT = "https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty"
 # 근접측정소 목록 조회는 대기오염정보 조회 서비스가 아니라 별도의
 # "한국환경공단_에어코리아_측정소정보" 서비스에 속해 있어 data.go.kr에서 별도 활용신청이 필요하다
@@ -98,13 +98,39 @@ class AirQualityData:
     co: Optional[float] = None
 
 
-async def _fetch_uv_index(client: httpx.AsyncClient, area_no: str) -> Optional[float]:
-    """기상청 생활기상지수(자외선) 조회. 실패 시 None을 반환해 상위에서 목업값으로 대체하게 한다."""
+@dataclass
+class UvForecast:
+    current: Optional[float] = None
+    peak: Optional[float] = None  # 오늘 남은 시간대 중 예상 최댓값
+    peakHour: Optional[int] = None  # 그 최댓값이 나오는 시각(0~23시)
+
+
+def _today_remaining_slots(base: datetime) -> list[tuple[int, int]]:
+    """base 시각(3시간 격자)부터 당일 자정 전까지 남은 (h오프셋, 실제 시각의 hour) 목록.
+    응답 필드는 h0~h75(3시간 간격)까지만 있어 그 범위 안에서만 본다."""
+    slots = []
+    for offset in range(0, 76, 3):
+        slot_dt = base + timedelta(hours=offset)
+        if slot_dt.date() != base.date():
+            break
+        slots.append((offset, slot_dt.hour))
+    return slots
+
+
+async def _fetch_uv_index(client: httpx.AsyncClient, area_no: str) -> UvForecast:
+    """
+    기상청 생활기상지수(자외선) 조회. 실패 시 빈 UvForecast를 반환해 상위에서 목업값으로 대체하게 한다.
+    한 번의 호출 응답에 3시간 간격 미래 예보(h0~h75)가 전부 들어있어서, 현재값과 함께 "오늘 남은
+    시간대 중 실제 최댓값"을 추가 호출 없이 같이 뽑아낸다. 고정된 시간대(예: 14시)를 피크로 가정하면
+    이미 그 시간을 지났거나 실제 최고치가 다른 시간대일 때 "피크가 현재보다 낮게" 나오는 모순이
+    생길 수 있어서, 항상 오늘 남은 슬롯 전체를 스캔해 진짜 최댓값과 그 시각을 함께 반환한다.
+    """
     if not KMA_API_KEY:
-        return None
+        return UvForecast()
 
     # 이 시각의 발표자료가 아직 없을 수 있어 3시간 전 정시로 조회
-    query_time = (datetime.now(KST) - timedelta(hours=3)).strftime("%Y%m%d%H")
+    base_time = datetime.now(KST) - timedelta(hours=3)
+    query_time = base_time.strftime("%Y%m%d%H")
     params = {
         "serviceKey": KMA_API_KEY,
         "numOfRows": "1",
@@ -119,15 +145,26 @@ async def _fetch_uv_index(client: httpx.AsyncClient, area_no: str) -> Optional[f
         data = res.json()
         items = data["response"]["body"]["items"]
         item_list = items["item"] if isinstance(items, dict) else items
-        # h0 = 조회 시각 기준 현재 예보값 (3시간 간격 예보이므로 "지금"에 가장 가까운 값)
-        return _safe_float(item_list[0].get("h0"))
+        item = item_list[0]
+        # query_time을 실제 "지금"보다 3시간 전으로 조회했으므로, h0(=query_time 시점 값)이 아니라
+        # h3(=query_time+3시간 ≈ 지금 시점 값)를 읽어야 실제 현재 시각의 예보값과 맞는다
+        current = _safe_float(item.get("h3"))
+
+        peak: Optional[float] = None
+        peak_hour: Optional[int] = None
+        for offset, hour in _today_remaining_slots(base_time):
+            value = _safe_float(item.get(f"h{offset}"))
+            if value is not None and (peak is None or value > peak):
+                peak, peak_hour = value, hour
+
+        return UvForecast(current=current, peak=peak, peakHour=peak_hour)
     except httpx.HTTPStatusError as e:
         # httpx 예외 문자열엔 serviceKey가 담긴 요청 URL이 그대로 포함되므로 절대 통째로 로깅하지 않는다
         logger.warning("KMA UV index fetch failed: HTTP %s", e.response.status_code)
-        return None
+        return UvForecast()
     except Exception as e:  # noqa: BLE001 — 외부 API 스펙/네트워크 문제는 전부 목업 폴백으로 처리
         logger.warning("KMA UV index fetch failed: %s", type(e).__name__)
-        return None
+        return UvForecast()
 
 
 @dataclass
@@ -238,7 +275,8 @@ async def get_current_weather(lat: Optional[float] = None, lon: Optional[float] 
             _fetch_air_quality(client, station_name),
         )
 
-    uv_index = uv if uv is not None else MOCK_WEATHER.uvIndex
+    uv_index = uv.current if uv.current is not None else MOCK_WEATHER.uvIndex
+    uv_index_peak = uv.peak if uv.peak is not None else MOCK_WEATHER.uvIndexPeak
     ozone_ppm = air.ozone if air.ozone is not None else MOCK_WEATHER.ozonePpm
     pm25_value = air.pm25 if air.pm25 is not None else MOCK_WEATHER.pm25
     pm10_value = air.pm10 if air.pm10 is not None else MOCK_WEATHER.pm10
@@ -249,6 +287,9 @@ async def get_current_weather(lat: Optional[float] = None, lon: Optional[float] 
         regionName=region_name,
         uvIndex=uv_index,
         uvStatus=_uv_status(uv_index),
+        uvIndexPeak=uv_index_peak,
+        uvStatusPeak=_uv_status(uv_index_peak) if uv_index_peak is not None else None,
+        uvIndexPeakHour=uv.peakHour if uv.peakHour is not None else MOCK_WEATHER.uvIndexPeakHour,
         ozonePpm=ozone_ppm,
         ozoneStatus=_ozone_status(ozone_ppm),
         pm25=pm25_value,

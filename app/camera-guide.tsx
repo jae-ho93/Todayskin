@@ -17,6 +17,7 @@ const TIPS = [
   { icon: 'sunny-outline' as const, text: '밝은 곳에서 촬영해주세요' },
   { icon: 'scan-outline' as const, text: '가이드 선에 맞춰 정면을 응시해주세요' },
   { icon: 'water-outline' as const, text: '세안 후 맨 얼굴로 촬영하면 더 정확해요' },
+  { icon: 'cut-outline' as const, text: '앞머리를 넘겨 이마가 보이게 촬영해주세요' },
 ];
 
 // 화면 3: 얼굴 촬영 가이드
@@ -232,20 +233,21 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
   },
+  // SafeAreaView의 안전영역 패딩은 자기 자신에게만 적용되고, position:absolute로 띄운 자식에는
+  // 적용되지 않는다. 그래서 closeButton은 절대위치를 쓰지 않고 일반 flow(alignSelf)로 배치해
+  // topBar(SafeAreaView)의 안전영역 패딩을 그대로 물려받게 한다 — 노치/상태바를 피해 정확히 밑에 온다.
   closeButton: {
-    position: 'absolute',
-    top: spacing.md,
-    right: spacing.lg,
+    alignSelf: 'flex-end',
     backgroundColor: 'rgba(0,0,0,0.35)',
     borderRadius: radius.full,
     padding: spacing.sm,
-    zIndex: 1,
   },
   topBarCenter: {
     alignItems: 'center',
-    paddingTop: spacing.xxl + spacing.md,
-    paddingHorizontal: spacing.xl,
+    marginTop: spacing.sm,
     gap: spacing.sm,
   },
   guideText: {
