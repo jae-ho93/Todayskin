@@ -6,17 +6,19 @@ export type AirStatus = 'good' | 'moderate' | 'bad';
 export interface WeatherSnapshot {
   observedAt: string; // ISO timestamp
   regionName: string; // 예: "서울 종로구"
-  uvIndex: number; // 자외선지수
-  uvStatus: AirStatus;
+  // 각 지표는 실제 정부 API(기상청/에어코리아) 호출이 실패하면 undefined다 — 목업으로 채우지 않고
+  // 화면에서 "측정 불가"로 명시적으로 보여준다.
+  uvIndex?: number; // 자외선지수
+  uvStatus?: AirStatus;
   uvIndexPeak?: number; // 오늘 남은 시간대 중 예상 최댓값
   uvStatusPeak?: AirStatus;
   uvIndexPeakHour?: number; // 그 최댓값이 나오는 시각(0~23시)
-  ozonePpm: number; // 오존 농도
-  ozoneStatus: AirStatus;
-  pm25: number; // 초미세먼지 (㎍/㎥)
-  pm25Status: AirStatus;
-  pm10: number; // 미세먼지 (㎍/㎥)
-  pm10Status: AirStatus;
+  ozonePpm?: number; // 오존 농도
+  ozoneStatus?: AirStatus;
+  pm25?: number; // 초미세먼지 (㎍/㎥)
+  pm25Status?: AirStatus;
+  pm10?: number; // 미세먼지 (㎍/㎥)
+  pm10Status?: AirStatus;
   caiValue?: number; // 통합대기환경지수(CAI)
   caiStatus?: AirStatus;
   no2Value?: number;
@@ -77,20 +79,6 @@ export interface Product {
   recommendationId?: string;
   reason?: string; // 별도 Recommendation 레코드 없이 바로 보여주는 근거 설명 (예: 날씨 기반 추천)
   timing?: ProductTiming; // 하루 중 이 제품을 쓰면 좋은 상황 (예: 날씨 기반 추천)
-}
-
-export interface PersonalPatternPoint {
-  date: string; // ISO date
-  skinMetricValue: number;
-  environmentValue: number;
-}
-
-export interface PersonalPattern {
-  id: string;
-  title: string;
-  grade: 'C';
-  description: string;
-  series: PersonalPatternPoint[];
 }
 
 export interface HistoryEntry {

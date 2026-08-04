@@ -9,11 +9,9 @@ import type {
   User,
   WeatherSnapshot,
 } from '../types';
-import { mockProducts, mockRecommendations, mockWeather, mockWeatherProducts } from '../data/mock';
 import { getToken } from '../lib/session';
 
 // 로컬 개발 시 FastAPI 스텁(backend/) 을 http://localhost:8000 에서 구동
-// backend가 떠 있지 않으면 목업 데이터로 자동 폴백
 //
 // 실기기(Expo Go)로 테스트할 때는 localhost가 폰 자신을 가리키므로 동작하지 않는다.
 // 이 경우 .env 에 EXPO_PUBLIC_API_BASE_URL=http://<PC의 LAN IP>:8000 을 설정할 것 (.env.example 참고)
@@ -34,32 +32,33 @@ async function authHeaders(): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function safeFetch<T>(path: string, fallback: T, timeoutMs = 2500): Promise<T> {
+// 목업으로 조용히 대체하지 않는다 — 실패(네트워크 오류·타임아웃·5xx)하면 null을 반환해서
+// 호출부가 "불러올 수 없어요"를 명시적으로 보여주게 한다.
+async function safeFetch<T>(path: string, timeoutMs = 2500): Promise<T | null> {
   try {
-    const res = await fetch(`${API_BASE_URL}${path}`, {
-      // 로컬 스텁 서버가 없을 때 UI 개발이 막히지 않도록 기본은 짧은 타임아웃 사용.
-      // 외부 API를 호출하는 엔드포인트(예: 날씨)는 호출부에서 더 긴 타임아웃을 넘긴다.
-      signal: timeoutSignal(timeoutMs),
-    });
-    if (!res.ok) throw new Error(`API ${path} failed: ${res.status}`);
+    const res = await fetch(`${API_BASE_URL}${path}`, { signal: timeoutSignal(timeoutMs) });
+    if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {
-    return fallback;
+    return null;
   }
 }
 
-// 로그인한 유저 기준 데이터 조회. 실패(네트워크 오류·미인증·404)와 "정상적으로 없음"을
-// 구분해야 하는 화면(예: 아직 촬영 기록 없음)을 위해 null을 반환한다.
-async function authFetch<T>(path: string): Promise<T | null> {
+export type FetchResult<T> = { status: 'ok'; data: T } | { status: 'not_found' } | { status: 'error' };
+
+// 로그인한 유저 기준 데이터 조회. 404("정상적으로 없음")와 그 외 실패(네트워크 오류·타임아웃·5xx)를
+// 구분해야 하는 화면(예: 아직 촬영 기록 없음 vs. 불러오는 데 실패함)을 위해 결과를 분리해서 반환한다.
+async function authFetch<T>(path: string): Promise<FetchResult<T>> {
   try {
     const res = await fetch(`${API_BASE_URL}${path}`, {
       headers: await authHeaders(),
       signal: timeoutSignal(4000),
     });
-    if (!res.ok) return null;
-    return (await res.json()) as T;
+    if (res.status === 404) return { status: 'not_found' };
+    if (!res.ok) return { status: 'error' };
+    return { status: 'ok', data: (await res.json()) as T };
   } catch {
-    return null;
+    return { status: 'error' };
   }
 }
 
@@ -89,36 +88,39 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   return data as T;
 }
 
-// 추천 생성처럼 읽기 성격의 POST는 백엔드/네트워크 문제 시 화면이 막히지 않도록 목업으로 폴백
-async function safePostJson<T>(path: string, body: unknown, fallback: T): Promise<T> {
+// 읽기 성격의 POST(추천 생성 등). 실패 시 목업으로 대체하지 않고 null을 반환한다.
+async function safePostJson<T>(path: string, body: unknown, timeoutMs = 20000): Promise<T | null> {
   try {
     const res = await fetch(`${API_BASE_URL}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
       body: JSON.stringify(body),
-      // Gemini 호출이 걸릴 수 있어 일반 GET보다 여유 있게 타임아웃 설정
-      signal: timeoutSignal(20000),
+      signal: timeoutSignal(timeoutMs),
     });
-    if (!res.ok) throw new Error(`API ${path} failed: ${res.status}`);
+    if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {
-    return fallback;
+    return null;
   }
 }
 
 export const api = {
   // 기상청/에어코리아 등 외부 정부 API를 순차 호출하다 보니 응답이 0.5~16초까지 들쭉날쭉하다
   // (백엔드 자체 타임아웃 예산이 최대 약 16초). 기본 2.5초 타임아웃으로는 정상 응답도 자주 잘려서
-  // 목업으로 폴백해버리므로(특히 앱 최초 구동 시 홈 화면) 여유 있게 20초로 늘린다.
+  // 실패로 오인하기 쉬우므로 여유 있게 20초로 늘린다.
   getWeather: (coords?: { latitude: number; longitude: number }) =>
     safeFetch<WeatherSnapshot>(
       coords ? `/weather?lat=${coords.latitude}&lon=${coords.longitude}` : '/weather',
-      mockWeather,
       20000,
     ),
-  // 아직 한 번도 촬영하지 않았거나 로그인하지 않은 경우 null
+  // 아직 한 번도 촬영하지 않은 경우(status: 'not_found')와 조회 실패(status: 'error')를 구분해서 반환
   getSkinScore: () => authFetch<SkinScoreSnapshot>('/diagnosis/latest'),
-  getHistory: async () => (await authFetch<HistoryEntry[]>('/diagnosis/history')) ?? [],
+  getHistory: async (): Promise<HistoryEntry[] | null> => {
+    const result = await authFetch<HistoryEntry[]>('/diagnosis/history');
+    if (result.status === 'ok') return result.data;
+    if (result.status === 'not_found') return [];
+    return null;
+  },
   // 촬영 3장을 서버로 전송해 진단을 생성·저장한다. 쓰기 요청이므로 실패 시 에러를 던진다.
   submitDiagnosis: async (photos: { front: string; left: string; right: string }) => {
     const formData = new FormData();
@@ -139,30 +141,16 @@ export const api = {
     return data as SkinScoreSnapshot;
   },
   getRecommendations: (grade?: EvidenceGrade) =>
-    safeFetch<Recommendation[]>(
-      grade ? `/recommendations?grade=${grade}` : '/recommendations',
-      grade ? mockRecommendations.filter((r) => r.grade === grade) : mockRecommendations,
-    ),
-  getRecommendationById: (id: string) =>
-    safeFetch<Recommendation>(
-      `/recommendations/${id}`,
-      mockRecommendations.find((r) => r.id === id) ?? mockRecommendations[0],
-    ),
+    safeFetch<Recommendation[]>(grade ? `/recommendations?grade=${grade}` : '/recommendations'),
+  getRecommendationById: (id: string) => safeFetch<Recommendation>(`/recommendations/${id}`),
   // B등급(사진+날씨 매칭): Gemini에게 오늘 피부 측정값 + 날씨를 함께 전달해 추천 생성
   generateRecommendations: (skinScore: SkinScoreSnapshot, weather: WeatherSnapshot) =>
-    safePostJson<Recommendation[]>(
-      '/recommendations/generate',
-      { skinScore, weather },
-      mockRecommendations.filter((r) => r.grade === 'B'),
-    ),
+    safePostJson<Recommendation[]>('/recommendations/generate', { skinScore, weather }),
   getProducts: (category?: Product['category']) =>
-    safeFetch<Product[]>(
-      category ? `/products?category=${category}` : '/products',
-      category ? mockProducts.filter((p) => p.category === category) : mockProducts,
-    ),
-  // 날씨 기반(A등급) 제품 추천: 오늘 날씨/대기질만으로 카테고리별 화장품을 Gemini에게 하나씩 추천받는다
+    safeFetch<Product[]>(category ? `/products?category=${category}` : '/products'),
+  // 날씨 기반(A등급) 제품 추천: 오늘 날씨/대기질만으로 상황(세안 후/외출 전/외출 후)별 화장품을 Gemini에게 하나씩 추천받는다
   generateWeatherProducts: (weather: WeatherSnapshot) =>
-    safePostJson<Product[]>('/products/weather-based', weather, mockWeatherProducts),
+    safePostJson<Product[]>('/products/weather-based', weather),
   signup: (payload: SignupRequest) => postJson<User>('/auth/signup', payload),
   login: (phoneNumber: string) => postJson<User>('/auth/login', { phoneNumber }),
   // 서버 토큰 무효화는 최선 노력만 하고, 실패해도 로컬 세션 정리는 항상 진행되도록 에러를 삼킨다

@@ -27,9 +27,9 @@ function MetricCard({
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
-  value: number;
+  value: number | undefined;
   unit: string;
-  status: AirStatus;
+  status: AirStatus | undefined;
   description: string;
   extra?: string;
 }) {
@@ -40,16 +40,26 @@ function MetricCard({
           <Ionicons name={icon} size={20} color={colors.sageDark} />
         </View>
         <Text style={styles.metricLabel}>{label}</Text>
-        <View style={[styles.statusPill, { backgroundColor: STATUS_COLOR[status] + '22' }]}>
-          <Text style={[styles.statusPillText, { color: STATUS_COLOR[status] }]}>
-            {STATUS_LABEL[status]}
-          </Text>
+        {status ? (
+          <View style={[styles.statusPill, { backgroundColor: STATUS_COLOR[status] + '22' }]}>
+            <Text style={[styles.statusPillText, { color: STATUS_COLOR[status] }]}>
+              {STATUS_LABEL[status]}
+            </Text>
+          </View>
+        ) : (
+          <View style={[styles.statusPill, styles.statusPillUnavailable]}>
+            <Text style={[styles.statusPillText, styles.statusPillTextUnavailable]}>측정 불가</Text>
+          </View>
+        )}
+      </View>
+      {value !== undefined ? (
+        <View style={styles.metricValueRow}>
+          <Text style={styles.metricValue}>{value}</Text>
+          <Text style={styles.metricUnit}>{unit}</Text>
         </View>
-      </View>
-      <View style={styles.metricValueRow}>
-        <Text style={styles.metricValue}>{value}</Text>
-        <Text style={styles.metricUnit}>{unit}</Text>
-      </View>
+      ) : (
+        <Text style={styles.metricUnavailableText}>지금 값을 불러올 수 없어요</Text>
+      )}
       {extra && <Text style={styles.metricExtra}>{extra}</Text>}
       <Text style={styles.metricDescription}>{description}</Text>
     </Card>
@@ -60,23 +70,37 @@ function MetricCard({
 export default function WeatherDetailScreen() {
   const { coords, loading: locationLoading } = useUserLocation();
   const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (locationLoading) return;
     let cancelled = false;
+    setLoading(true);
     api.getWeather(coords ?? undefined).then((w) => {
-      if (!cancelled) setWeather(w);
+      if (cancelled) return;
+      setWeather(w);
+      setLoading(false);
     });
     return () => {
       cancelled = true;
     };
   }, [locationLoading, coords]);
 
-  if (!weather) {
+  if (loading) {
     return (
       <ScreenContainer scroll={false} style={styles.loadingContainer}>
         <ActivityIndicator color={colors.sage} />
-        <Text style={styles.observedAt}>위치 파악 중...</Text>
+        <Text style={styles.observedAt}>날씨를 불러오는 중...</Text>
+      </ScreenContainer>
+    );
+  }
+
+  if (!weather) {
+    return (
+      <ScreenContainer scroll={false} style={styles.loadingContainer}>
+        <Ionicons name="cloud-offline-outline" size={32} color={colors.textTertiary} />
+        <Text style={styles.unavailableTitle}>날씨 정보를 불러올 수 없어요</Text>
+        <Text style={styles.observedAt}>잠시 후 다시 시도해주세요</Text>
       </ScreenContainer>
     );
   }
@@ -180,6 +204,7 @@ export default function WeatherDetailScreen() {
 
 const styles = StyleSheet.create({
   loadingContainer: { alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  unavailableTitle: { ...typography.headline, color: colors.textPrimary },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -204,10 +229,13 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: radius.full,
   },
+  statusPillUnavailable: { backgroundColor: colors.gray100 },
   statusPillText: { ...typography.caption, fontWeight: '700' },
+  statusPillTextUnavailable: { color: colors.gray400 },
   metricValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.xs },
   metricValue: { ...typography.displaySm, color: colors.textPrimary },
   metricUnit: { ...typography.bodySm, color: colors.textSecondary },
+  metricUnavailableText: { ...typography.bodySm, color: colors.gray400 },
   metricExtra: { ...typography.bodySm, color: colors.sageDark, fontWeight: '600' },
   metricDescription: { ...typography.bodySm, color: colors.textSecondary },
   extraTitle: { ...typography.subtitle, color: colors.textPrimary, marginBottom: spacing.sm },

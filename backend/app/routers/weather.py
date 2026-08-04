@@ -9,7 +9,6 @@ import httpx
 from fastapi import APIRouter
 from pyproj import Transformer
 
-from ..mock_data import MOCK_WEATHER
 from ..regions import DEFAULT_REGION, find_nearest_region
 from ..schemas import AirStatus, WeatherSnapshot
 
@@ -256,7 +255,8 @@ async def get_current_weather(lat: Optional[float] = None, lon: Optional[float] 
     없으면(권한 거부) 환경변수 기본 지역으로 조회한다.
     에어코리아는 오존/초미세먼지뿐 아니라 PM10·통합대기환경지수(CAI)·NO2·SO2·CO까지 한 번에 받아온다.
     온도/체감온도/습도는 아직 연동하지 않아 응답에 포함하지 않는다.
-    각 필드는 독립적으로 폴백된다 — 키가 없거나 호출이 실패해도 그 항목만 목업으로 대체된다.
+    각 필드는 독립적으로 실패할 수 있다 — 키가 없거나 호출이 실패하면 그 항목만 None으로 응답한다
+    (목업으로 대체하지 않는다. 프론트에서 "측정 불가"로 명시적으로 표시한다).
     """
     async with httpx.AsyncClient(timeout=8.0) as client:
         if lat is not None and lon is not None:
@@ -278,30 +278,26 @@ async def get_current_weather(lat: Optional[float] = None, lon: Optional[float] 
 
         air = await _fetch_air_quality(client, station_name)
 
-    uv_index = uv.current if uv.current is not None else MOCK_WEATHER.uvIndex
-    uv_index_peak = uv.peak if uv.peak is not None else MOCK_WEATHER.uvIndexPeak
-    ozone_ppm = air.ozone if air.ozone is not None else MOCK_WEATHER.ozonePpm
-    pm25_value = air.pm25 if air.pm25 is not None else MOCK_WEATHER.pm25
-    pm10_value = air.pm10 if air.pm10 is not None else MOCK_WEATHER.pm10
-    cai_value = air.cai if air.cai is not None else MOCK_WEATHER.caiValue
+    uv_index = uv.current
+    uv_index_peak = uv.peak
 
     return WeatherSnapshot(
         observedAt=datetime.now(timezone.utc).isoformat(),
         regionName=region_name,
         uvIndex=uv_index,
-        uvStatus=_uv_status(uv_index),
+        uvStatus=_uv_status(uv_index) if uv_index is not None else None,
         uvIndexPeak=uv_index_peak,
         uvStatusPeak=_uv_status(uv_index_peak) if uv_index_peak is not None else None,
-        uvIndexPeakHour=uv.peakHour if uv.peakHour is not None else MOCK_WEATHER.uvIndexPeakHour,
-        ozonePpm=ozone_ppm,
-        ozoneStatus=_ozone_status(ozone_ppm),
-        pm25=pm25_value,
-        pm25Status=_pm25_status(pm25_value),
-        pm10=pm10_value,
-        pm10Status=_pm10_status(pm10_value),
-        caiValue=cai_value,
-        caiStatus=_cai_status(cai_value) if cai_value is not None else None,
-        no2Value=air.no2 if air.no2 is not None else MOCK_WEATHER.no2Value,
-        so2Value=air.so2 if air.so2 is not None else MOCK_WEATHER.so2Value,
-        coValue=air.co if air.co is not None else MOCK_WEATHER.coValue,
+        uvIndexPeakHour=uv.peakHour,
+        ozonePpm=air.ozone,
+        ozoneStatus=_ozone_status(air.ozone) if air.ozone is not None else None,
+        pm25=air.pm25,
+        pm25Status=_pm25_status(air.pm25) if air.pm25 is not None else None,
+        pm10=air.pm10,
+        pm10Status=_pm10_status(air.pm10) if air.pm10 is not None else None,
+        caiValue=air.cai,
+        caiStatus=_cai_status(air.cai) if air.cai is not None else None,
+        no2Value=air.no2,
+        so2Value=air.so2,
+        coValue=air.co,
     )

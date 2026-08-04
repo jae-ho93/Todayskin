@@ -8,7 +8,6 @@ import { CircularGauge } from '../../src/components/CircularGauge';
 import { RecommendationCard } from '../../src/components/RecommendationCard';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { WeatherCard } from '../../src/components/WeatherCard';
-import { mockSkinScore } from '../../src/data/mock';
 import { useUserLocation } from '../../src/hooks/useUserLocation';
 import { getSession } from '../../src/lib/session';
 import { colors, radius, shadow, spacing, typography } from '../../src/theme';
@@ -17,13 +16,15 @@ import type { Recommendation, SkinScoreSnapshot, WeatherSnapshot } from '../../s
 export default function HomeDashboard() {
   const { coords, loading: locationLoading } = useUserLocation();
   const [userName, setUserName] = useState<string | null>(null);
-  // null = 아직 날씨 못 받아옴(위치 파악/조회 중) — 목업으로 미리 채워두지 않고 로딩 문구를 보여준다
+  // null = 아직 못 불러옴(로딩 중이거나 실패) — weatherLoading으로 둘을 구분한다
   const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
-  const [skinScore, setSkinScore] = useState<SkinScoreSnapshot>(mockSkinScore);
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [weatherLoading, setWeatherLoading] = useState(true);
+  const [skinScore, setSkinScore] = useState<SkinScoreSnapshot | null>(null);
+  const [recommendations, setRecommendations] = useState<Recommendation[] | null>(null);
   const [loadingRecommendations, setLoadingRecommendations] = useState(true);
   // null = 아직 확인 중, false = 촬영 기록 없음(신규 유저), true = 촬영 기록 있음
   const [hasCaptured, setHasCaptured] = useState<boolean | null>(null);
+  const [skinScoreUnavailable, setSkinScoreUnavailable] = useState(false);
 
   useEffect(() => {
     getSession().then((user) => setUserName(user?.name ?? null));
@@ -37,32 +38,41 @@ export default function HomeDashboard() {
     let cancelled = false;
 
     async function load() {
+      setWeatherLoading(true);
       const weatherSnapshot = await api.getWeather(coords ?? undefined);
       if (cancelled) return;
       setWeather(weatherSnapshot);
+      setWeatherLoading(false);
 
-      const skinSnapshot = await api.getSkinScore();
+      const skinResult = await api.getSkinScore();
       if (cancelled) return;
-      const captured = skinSnapshot !== null;
-      setHasCaptured(captured);
 
-      // 아직 한 번도 촬영하지 않은 유저에게는 피부 점수/추천을 보여줄 근거 자체가 없으므로
-      // 목업으로라도 채우지 않고 날씨만 보여준다 (Gemini 호출도 하지 않아 불필요한 비용을 아낀다)
-      if (!captured) {
+      if (skinResult.status === 'not_found') {
+        setHasCaptured(false);
+        setLoadingRecommendations(false);
+        return;
+      }
+      if (skinResult.status === 'error') {
+        setSkinScoreUnavailable(true);
         setLoadingRecommendations(false);
         return;
       }
 
-      setSkinScore(skinSnapshot);
+      setHasCaptured(true);
+      setSkinScore(skinResult.data);
 
       // A등급(공인 가이드라인)은 날씨만으로 즉시 판단, B등급은 어젯밤 촬영한 피부 상태 +
-      // 오늘 날씨를 함께 Gemini에 보내 근거 기반으로 생성
+      // 오늘 날씨를 함께 Gemini에 보내 근거 기반으로 생성 (날씨를 못 불러왔으면 B등급은 건너뜀)
       const [aGrade, bGrade] = await Promise.all([
         api.getRecommendations('A'),
-        api.generateRecommendations(skinSnapshot, weatherSnapshot),
+        weatherSnapshot ? api.generateRecommendations(skinResult.data, weatherSnapshot) : Promise.resolve(null),
       ]);
       if (cancelled) return;
-      setRecommendations([...aGrade, ...bGrade]);
+      if (aGrade === null && bGrade === null) {
+        setRecommendations(null);
+      } else {
+        setRecommendations([...(aGrade ?? []), ...(bGrade ?? [])]);
+      }
       setLoadingRecommendations(false);
     }
 
@@ -79,10 +89,15 @@ export default function HomeDashboard() {
 
         {weather ? (
           <WeatherCard weather={weather} />
-        ) : (
+        ) : weatherLoading ? (
           <Card style={styles.weatherLoading}>
             <ActivityIndicator color={colors.sage} />
             <Text style={styles.weatherLoadingText}>위치 파악 중...</Text>
+          </Card>
+        ) : (
+          <Card style={styles.weatherLoading}>
+            <Ionicons name="cloud-offline-outline" size={24} color={colors.textTertiary} />
+            <Text style={styles.weatherLoadingText}>날씨 정보를 불러올 수 없어요</Text>
           </Card>
         )}
 
@@ -96,7 +111,15 @@ export default function HomeDashboard() {
           </View>
         )}
 
-        {hasCaptured && (
+        {skinScoreUnavailable && (
+          <View style={styles.emptyState}>
+            <Ionicons name="cloud-offline-outline" size={28} color={colors.textTertiary} />
+            <Text style={styles.emptyStateText}>피부 스코어를 불러올 수 없어요</Text>
+            <Text style={styles.emptyStateSubtext}>잠시 후 다시 시도해주세요</Text>
+          </View>
+        )}
+
+        {hasCaptured && skinScore && (
           <>
             <View style={styles.scoreCard}>
               <CircularGauge value={skinScore.overallScore} label="종합 점수" />
@@ -120,6 +143,8 @@ export default function HomeDashboard() {
                     어젯밤 피부 상태와 오늘 날씨를 분석하고 있어요…
                   </Text>
                 </View>
+              ) : recommendations === null ? (
+                <Text style={styles.recommendationLoadingText}>추천을 불러올 수 없어요</Text>
               ) : (
                 <View style={styles.recommendationList}>
                   {recommendations.slice(0, 4).map((rec) => (

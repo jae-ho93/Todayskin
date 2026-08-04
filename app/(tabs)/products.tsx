@@ -24,18 +24,22 @@ const TIMING_ORDER: ProductTiming[] = ['세안 후', '외출 전', '외출 후']
 export default function ProductsScreen() {
   const { coords, loading: locationLoading } = useUserLocation();
   const [category, setCategory] = useState<Product['category'] | 'all'>('all');
-  // null = 아직 로딩 중 — 오늘 날씨를 Gemini에게 보내 하루 중 실제로 화장품을 쓰는 상황
-  // (세안 후/외출 전/외출 후)별로 하나씩 추천받는다. 피부 기반 / 날씨+피부 기반은 아직 이 화면에
-  // 연결하지 않아 구역만 둔다.
+  // null = 로딩 중이거나 실패 — weatherProductsLoading으로 둘을 구분한다. 오늘 날씨를 Gemini에게
+  // 보내 하루 중 실제로 화장품을 쓰는 상황(세안 후/외출 전/외출 후)별로 하나씩 추천받는다.
+  // 피부 기반 / 날씨+피부 기반은 아직 이 화면에 연결하지 않아 구역만 둔다.
   const [weatherProducts, setWeatherProducts] = useState<Product[] | null>(null);
+  const [weatherProductsLoading, setWeatherProductsLoading] = useState(true);
 
   useEffect(() => {
     if (locationLoading) return;
     let cancelled = false;
     async function load() {
+      setWeatherProductsLoading(true);
       const weather = await api.getWeather(coords ?? undefined);
-      const products = await api.generateWeatherProducts(weather);
-      if (!cancelled) setWeatherProducts(products);
+      const products = weather ? await api.generateWeatherProducts(weather) : null;
+      if (cancelled) return;
+      setWeatherProducts(products);
+      setWeatherProductsLoading(false);
     }
     load();
     return () => {
@@ -44,7 +48,7 @@ export default function ProductsScreen() {
   }, [locationLoading, coords]);
 
   const filteredWeatherProducts = useMemo(() => {
-    if (!weatherProducts) return null;
+    if (!weatherProducts) return weatherProducts;
     return category === 'all' ? weatherProducts : weatherProducts.filter((p) => p.category === category);
   }, [weatherProducts, category]);
 
@@ -69,11 +73,13 @@ export default function ProductsScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>날씨 기반 추천</Text>
-        {!filteredWeatherProducts ? (
+        {weatherProductsLoading ? (
           <View style={styles.loadingRow}>
             <ActivityIndicator color={colors.sage} />
             <Text style={styles.emptyText}>오늘 날씨를 분석해서 제품을 고르고 있어요…</Text>
           </View>
+        ) : filteredWeatherProducts === null ? (
+          <Text style={styles.emptyText}>지금은 추천을 불러올 수 없어요</Text>
         ) : filteredWeatherProducts.length > 0 ? (
           <View style={styles.list}>
             {TIMING_ORDER.map((timing) => {

@@ -15,17 +15,19 @@ Gender = Literal["male", "female"]
 class WeatherSnapshot(BaseModel):
     observedAt: str
     regionName: str
-    uvIndex: float
-    uvStatus: AirStatus
+    # 각 지표는 실제 정부 API(기상청/에어코리아) 호출이 실패하면 목업으로 채우지 않고 None으로 둔다 —
+    # 프론트에서 "측정 불가"로 명시적으로 보여주기 위함.
+    uvIndex: Optional[float] = None
+    uvStatus: Optional[AirStatus] = None
     uvIndexPeak: Optional[float] = None  # 오늘 남은 시간대 중 예상 최댓값
     uvStatusPeak: Optional[AirStatus] = None
     uvIndexPeakHour: Optional[int] = None  # 그 최댓값이 나오는 시각(0~23시)
-    ozonePpm: float
-    ozoneStatus: AirStatus
-    pm25: float
-    pm25Status: AirStatus
-    pm10: float
-    pm10Status: AirStatus
+    ozonePpm: Optional[float] = None
+    ozoneStatus: Optional[AirStatus] = None
+    pm25: Optional[float] = None
+    pm25Status: Optional[AirStatus] = None
+    pm10: Optional[float] = None
+    pm10Status: Optional[AirStatus] = None
     caiValue: Optional[float] = None  # 통합대기환경지수(CAI)
     caiStatus: Optional[AirStatus] = None
     no2Value: Optional[float] = None
