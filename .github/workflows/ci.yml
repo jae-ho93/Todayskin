@@ -63,8 +63,12 @@ jobs:
       - run: npm run build
       - env:
           DATABASE_URL: postgresql://todayskin:secret@localhost:5432/todayskin_test
+          JWT_ACCESS_SECRET: ci_test_access_secret_at_least_32_characters_long
+          JWT_REFRESH_SECRET: ci_test_refresh_secret_at_least_32_characters_long
         run: npm test
       - env:
           DATABASE_URL: postgresql://todayskin:secret@localhost:5432/todayskin_test
+          JWT_ACCESS_SECRET: ci_test_access_secret_at_least_32_characters_long
+          JWT_REFRESH_SECRET: ci_test_refresh_secret_at_least_32_characters_long
         run: npm run test:e2e
       - run: npm run lint
