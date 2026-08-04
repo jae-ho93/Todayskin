@@ -52,4 +52,6 @@ export const envValidationSchema = Joi.object({
   // T7/T8: 개발용 Gemini mock 응답. 운영에서는 반드시 false여야 함.
   // default를 두면 process.env 값을 덮어쓰는 경우가 있어 기본값을 생략한다.
   MOCK_GEMINI: Joi.string().valid('true', 'false').allow('').optional(),
+  // T9: 개발/통합 테스트용 mock 진단 추론. 운영에서는 반드시 false여야 함.
+  MOCK_INFERENCE: Joi.string().valid('true', 'false').allow('').optional(),
 });
