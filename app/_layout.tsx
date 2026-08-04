@@ -19,6 +19,7 @@ export default function RootLayout() {
         <Stack.Screen name="diagnosis-result" />
         <Stack.Screen name="recommendation/[id]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="trend" />
+        <Stack.Screen name="weather-detail" />
       </Stack>
     </SafeAreaProvider>
   );

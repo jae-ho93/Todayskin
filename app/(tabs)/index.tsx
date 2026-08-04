@@ -3,23 +3,31 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../src/api/client';
+import { Card } from '../../src/components/Card';
 import { CircularGauge } from '../../src/components/CircularGauge';
 import { RecommendationCard } from '../../src/components/RecommendationCard';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { WeatherCard } from '../../src/components/WeatherCard';
-import { mockSkinScore, mockWeather } from '../../src/data/mock';
+import { mockSkinScore } from '../../src/data/mock';
 import { useUserLocation } from '../../src/hooks/useUserLocation';
+import { getSession } from '../../src/lib/session';
 import { colors, radius, shadow, spacing, typography } from '../../src/theme';
 import type { Recommendation, SkinScoreSnapshot, WeatherSnapshot } from '../../src/types';
 
 export default function HomeDashboard() {
   const { coords, loading: locationLoading } = useUserLocation();
-  const [weather, setWeather] = useState<WeatherSnapshot>(mockWeather);
+  const [userName, setUserName] = useState<string | null>(null);
+  // null = 아직 날씨 못 받아옴(위치 파악/조회 중) — 목업으로 미리 채워두지 않고 로딩 문구를 보여준다
+  const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
   const [skinScore, setSkinScore] = useState<SkinScoreSnapshot>(mockSkinScore);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loadingRecommendations, setLoadingRecommendations] = useState(true);
   // null = 아직 확인 중, false = 촬영 기록 없음(신규 유저), true = 촬영 기록 있음
   const [hasCaptured, setHasCaptured] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    getSession().then((user) => setUserName(user?.name ?? null));
+  }, []);
 
   useEffect(() => {
     // 위치 권한 응답(허용/거부)이 결정될 때까지 기다렸다가 조회 — 거부돼도 coords만 없을 뿐
@@ -67,12 +75,16 @@ export default function HomeDashboard() {
   return (
     <View style={styles.flex}>
       <ScreenContainer style={styles.content}>
-        <View>
-          <Text style={styles.greeting}>안녕하세요 👋</Text>
-          <Text style={styles.title}>오늘의 날씨예요</Text>
-        </View>
+        <Text style={styles.greeting}>안녕하세요, {userName ?? '회원'}님</Text>
 
-        <WeatherCard weather={weather} />
+        {weather ? (
+          <WeatherCard weather={weather} />
+        ) : (
+          <Card style={styles.weatherLoading}>
+            <ActivityIndicator color={colors.sage} />
+            <Text style={styles.weatherLoadingText}>위치 파악 중...</Text>
+          </Card>
+        )}
 
         {hasCaptured === false && (
           <View style={styles.emptyState}>
@@ -134,8 +146,9 @@ export default function HomeDashboard() {
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.background },
   content: { paddingBottom: spacing.xxxl * 2 },
-  greeting: { ...typography.body, color: colors.textSecondary },
-  title: { ...typography.displaySm, color: colors.textPrimary, marginTop: 2 },
+  greeting: { ...typography.displaySm, color: colors.textPrimary },
+  weatherLoading: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
+  weatherLoadingText: { ...typography.bodySm, color: colors.textSecondary },
   emptyState: {
     alignItems: 'center',
     gap: spacing.sm,

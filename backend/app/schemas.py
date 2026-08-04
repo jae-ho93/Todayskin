@@ -16,6 +16,9 @@ class WeatherSnapshot(BaseModel):
     regionName: str
     uvIndex: float
     uvStatus: AirStatus
+    uvIndexPeak: Optional[float] = None  # 오늘 남은 시간대 중 예상 최댓값
+    uvStatusPeak: Optional[AirStatus] = None
+    uvIndexPeakHour: Optional[int] = None  # 그 최댓값이 나오는 시각(0~23시)
     ozonePpm: float
     ozoneStatus: AirStatus
     pm25: float
