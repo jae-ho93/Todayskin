@@ -23,7 +23,7 @@ export function WeatherCard({ weather }: { weather: WeatherSnapshot }) {
           <Text style={styles.caiLine}>오늘 종합 대기질: {CAI_LABEL[weather.caiStatus]}</Text>
         )}
         <View style={styles.badgeRow}>
-          <StatusBadge status={weather.uvStatus} label="자외선" />
+          <StatusBadge status={weather.uvStatusPeak ?? weather.uvStatus} label="자외선" />
           <StatusBadge status={weather.ozoneStatus} label="오존" />
           <StatusBadge status={weather.pm10Status} label="미세먼지" />
           <StatusBadge status={weather.pm25Status} label="초미세먼지" />
