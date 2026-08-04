@@ -2,7 +2,7 @@
 
 FastAPI 기반 백엔드를 NestJS + TypeScript + PostgreSQL(Prisma) + Redis 구조로 전환하는 작업의 진행 중입니다.
 
-현재 단계: **T2 — PostgreSQL + Prisma**
+현재 단계: **T13 — 테스트와 API 계약 (완료)**
 
 ## 실행
 
@@ -52,6 +52,45 @@ docker compose down -v      # 정지 + 데이터 삭제 (init 스크립트 재�
 | `npm run prisma:migrate` | 마이그레이션 생성·적용 (`migrate dev`) |
 | `npm run prisma:seed` | seed 데이터 실행 (upsert, idempotent) |
 | `npm run prisma:studio` | Prisma Studio 실행 |
+
+## 테스트
+
+단위 테스트와 e2e 테스트가 분리되어 있다.
+
+### 단위 테스트
+
+```bash
+export DATABASE_URL=postgresql://todayskin:secret@localhost:5432/todayskin_test
+export JWT_ACCESS_SECRET=test_access_secret_at_least_32_characters_long
+export JWT_REFRESH_SECRET=test_refresh_secret_at_least_32_characters_long
+npm test
+```
+
+ — Service/Guard 단위 로직을 Prisma/GeminiClient mock으로 검증.
+
+### e2e 테스트
+
+```bash
+export DATABASE_URL=postgresql://todayskin:secret@localhost:5432/todayskin_test
+export JWT_ACCESS_SECRET=e2e_access_secret_at_least_32_characters_long
+export JWT_REFRESH_SECRET=e2e_refresh_secret_at_least_32_characters_long
+export MOCK_INFERENCE=true
+npm run test:e2e
+```
+
+ — 실제 PostgreSQL(test DB)에 대해 전체 HTTP 경로를 검증.
+로 순차 실행하여 test DB race condition을 방지한다.
+
+테스트 범위 (T13):
+- Auth/USER/ADMIN 권한 + 소유권 (RolesGuard 단위, e2e 인증 경로)
+- Migration/seed 멱등성 + 스키마 무결성
+- Weather parser/fallback (UNAVAILABLE, 근접측정소 폴백)
+- 추천 중복 생성 방지 (diagnosisId 기반)
+- 진단 multipart 파일 검증 (필드, MIME, 크기, 중복)
+- Pattern locked/ready (404 아닌 200 + LOCKED)
+- 프론트 API response contract (camelCase, detail 필드)
+- 운영 환경 mock fallback 비활성화 (GeminiClient.isMockEnabled)
+- 날씨 지표 undefined + 추천 API 503 계약
 
 ## 환경변수
 

@@ -363,15 +363,15 @@ Recommendation(userId, diagnosisId, createdAt)
 
 브랜치: `test/backend-contracts`
 
-- [ ] Auth, USER/ADMIN, 소유권 테스트
-- [ ] migration/seed 테스트
-- [ ] Weather parser/fallback 테스트
-- [ ] 추천 중복 생성 방지 테스트
-- [ ] 진단 파일 검증 테스트
-- [ ] Pattern locked/ready 테스트
-- [ ] 프론트 API response contract 테스트
-- [ ] 운영 환경 mock fallback 비활성화 테스트
-- [ ] 날씨 지표 `undefined`와 추천 API `503` 계약 테스트
+- [x] Auth, USER/ADMIN, 소유권 테스트
+- [x] migration/seed 테스트
+- [x] Weather parser/fallback 테스트
+- [x] 추천 중복 생성 방지 테스트
+- [x] 진단 파일 검증 테스트
+- [x] Pattern locked/ready 테스트
+- [x] 프론트 API response contract 테스트
+- [x] 운영 환경 mock fallback 비활성화 테스트
+- [x] 날씨 지표 `undefined`와 추천 API `503` 계약 테스트
 
 ### T14. Docker와 GitHub Actions
 

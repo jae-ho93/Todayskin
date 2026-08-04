@@ -172,6 +172,14 @@ export class GeminiClient {
   }
 
   /**
+   * 운영 환경에서 mock fallback이 비활성화되어 있는지 검증 가능한 지점.
+   * 테스트(T13)와 운영 시작 로그에서 mock이 꺼져 있는지 확인한다.
+   */
+  isMockEnabled(): boolean {
+    return this.mockEnabled;
+  }
+
+  /**
    * B등급 추천 생성 — 피부 측정값 + 날씨를 Gemini에 전달.
    * 서버가 grade=B, sourceLabel을 고정한다 (LLM이 결정하지 않음).
    */
