@@ -1,0 +1,14 @@
+node_modules
+dist
+coverage
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+README.md
+BACKEND_TASKS.md
+decision.md
+requirements.txt

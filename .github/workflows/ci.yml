@@ -49,6 +49,11 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    env:
+      DATABASE_URL: postgresql://todayskin:secret@localhost:5432/todayskin_test
+      SHADOW_DATABASE_URL: postgresql://todayskin:secret@localhost:5432/todayskin_shadow
+      JWT_ACCESS_SECRET: ci_test_access_secret_at_least_32_characters_long
+      JWT_REFRESH_SECRET: ci_test_refresh_secret_at_least_32_characters_long
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -58,17 +63,13 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npm run prisma:generate
-      - run: DATABASE_URL=postgresql://todayskin:secret@localhost:5432/todayskin_test npx prisma migrate deploy
-      - run: DATABASE_URL=postgresql://todayskin:secret@localhost:5432/todayskin_test npx prisma db seed
+      # migration 검사: schema.prisma를 변경했지만 migration을 추가하지 않으면 실패(exit 2).
+      # diff 검사용 shadow DB를 먼저 생성한다.
+      - run: psql "$DATABASE_URL" -c "CREATE DATABASE todayskin_shadow;"
+      - run: npx prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code
+      - run: npx prisma migrate deploy
+      - run: npx prisma db seed
       - run: npm run build
-      - env:
-          DATABASE_URL: postgresql://todayskin:secret@localhost:5432/todayskin_test
-          JWT_ACCESS_SECRET: ci_test_access_secret_at_least_32_characters_long
-          JWT_REFRESH_SECRET: ci_test_refresh_secret_at_least_32_characters_long
-        run: npm test
-      - env:
-          DATABASE_URL: postgresql://todayskin:secret@localhost:5432/todayskin_test
-          JWT_ACCESS_SECRET: ci_test_access_secret_at_least_32_characters_long
-          JWT_REFRESH_SECRET: ci_test_refresh_secret_at_least_32_characters_long
-        run: npm run test:e2e
+      - run: npm test
+      - run: npm run test:e2e
       - run: npm run lint
