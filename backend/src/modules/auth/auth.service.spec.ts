@@ -153,14 +153,16 @@ describe('AuthService', () => {
     });
     const loginResult = await service.login({ phoneNumber: testPhone });
 
-    const refreshed = await service.refresh(loginResult.refreshToken);
+    // login이 UserResponseDto를 반환하므로 refreshToken은 optional.
+    const refreshToken = loginResult.refreshToken!;
+    const refreshed = await service.refresh(refreshToken);
 
     expect(refreshed.accessToken).toBeDefined();
     expect(refreshed.refreshToken).toBeDefined();
-    expect(refreshed.refreshToken).not.toBe(loginResult.refreshToken);
+    expect(refreshed.refreshToken).not.toBe(refreshToken);
 
     // 기존 토큰은 폐기되어 재사용 불가
-    await expect(service.refresh(loginResult.refreshToken)).rejects.toThrow(
+    await expect(service.refresh(refreshToken)).rejects.toThrow(
       UnauthorizedException,
     );
   });
@@ -173,9 +175,11 @@ describe('AuthService', () => {
     });
     const loginResult = await service.login({ phoneNumber: testPhone });
 
+    const refreshToken = loginResult.refreshToken!;
+
     await service.logout(signupRes.id);
 
-    await expect(service.refresh(loginResult.refreshToken)).rejects.toThrow(
+    await expect(service.refresh(refreshToken)).rejects.toThrow(
       UnauthorizedException,
     );
   });

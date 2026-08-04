@@ -20,6 +20,12 @@ export class UserResponseDto {
   @ApiProperty({ example: '2026-08-04T10:00:00.000Z' })
   createdAt!: string;
 
-  @ApiProperty({ example: 'eyJhbGciOiJIUzI1NiIs...' })
+  @ApiPropertyOptional({ example: 'eyJhbGciOiJIUzI1NiIs...', description: 'JWT Access Token (signup/me 응답에 포함)' })
   accessToken?: string;
+
+  @ApiPropertyOptional({ example: 'eyJhbGciOiJIUzI1NiIs...', description: 'Refresh Token (login 응답에 포함)' })
+  refreshToken?: string;
+
+  @ApiPropertyOptional({ example: 900, description: 'Access Token 만료(초) (login 응답에 포함)' })
+  expiresIn?: number;
 }

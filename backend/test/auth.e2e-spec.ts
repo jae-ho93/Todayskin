@@ -3,6 +3,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
 
 /**
  * Auth e2e 테스트.
@@ -34,6 +35,7 @@ describe('AuthController (e2e)', () => {
         transform: true,
       }),
     );
+    app.useGlobalFilters(new HttpExceptionFilter());
     prisma = app.get(PrismaService);
     await app.init();
     await prisma.$connect();
@@ -65,6 +67,9 @@ describe('AuthController (e2e)', () => {
       expect(res.body.phoneNumber).toBe(testPhone);
       expect(res.body.name).toBe('이이보');
       expect(res.body.accessToken).toBeDefined();
+      // signup도 login과 동일하게 refresh token을 발급한다
+      expect(res.body.refreshToken).toBeDefined();
+      expect(res.body.expiresIn).toBe(900);
     });
 
     it('중복 전화번호 → 409', async () => {
@@ -84,11 +89,15 @@ describe('AuthController (e2e)', () => {
           name: '이이보',
           birthDate: '1995-05-05',
         })
-        .expect(409);
+        .expect(409)
+        .then((res) => {
+          // 에러 응답에 detail 필드 포함 (FastAPI 호환)
+          expect(res.body.detail).toContain('이미 가입된');
+        });
     });
 
     it('잘못된 전화번호 형식 → 400', async () => {
-      await request(app.getHttpServer())
+      const res = await request(app.getHttpServer())
         .post('/auth/signup')
         .send({
           phoneNumber: '02-123-4567',
@@ -96,6 +105,9 @@ describe('AuthController (e2e)', () => {
           birthDate: '1995-05-05',
         })
         .expect(400);
+
+      // class-validator 메시지가 detail로 노출되는지 확인
+      expect(res.body.detail).toBeDefined();
     });
 
     it('gender 선택 필드 포함', async () => {
@@ -113,7 +125,7 @@ describe('AuthController (e2e)', () => {
     });
 
     it('gender 잘못된 값 → 400', async () => {
-      await request(app.getHttpServer())
+      const res = await request(app.getHttpServer())
         .post('/auth/signup')
         .send({
           phoneNumber: testPhone,
@@ -122,6 +134,8 @@ describe('AuthController (e2e)', () => {
           gender: 'other',
         })
         .expect(400);
+
+      expect(res.body.detail).toBeDefined();
     });
   });
 
@@ -146,11 +160,65 @@ describe('AuthController (e2e)', () => {
       expect(res.body.expiresIn).toBe(900);
     });
 
+    it('login 응답에 User 필드 포함 (FastAPI 호환)', async () => {
+      // 프론트(src/api/client.ts)는 login 응답 전체를 User 세션으로 저장한다.
+      // id/phoneNumber/name/birthDate/gender/createdAt이 모두 있어야 한다.
+      await request(app.getHttpServer())
+        .post('/auth/signup')
+        .send({
+          phoneNumber: testPhone,
+          name: '이이보',
+          birthDate: '1995-05-05',
+        })
+        .expect(201);
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ phoneNumber: testPhone })
+        .expect(200);
+
+      expect(res.body.id).toBeDefined();
+      expect(res.body.phoneNumber).toBe(testPhone);
+      expect(res.body.name).toBe('이이보');
+      expect(res.body.birthDate).toBe('1995-05-05');
+      expect(res.body.createdAt).toBeDefined();
+      expect(res.body.accessToken).toBeDefined();
+    });
+
+    it('login - 하이픈 포함 전화번호 정규화', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/signup')
+        .send({
+          phoneNumber: testPhone,
+          name: '이이보',
+          birthDate: '1995-05-05',
+        })
+        .expect(201);
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ phoneNumber: '010-7777-7777' })
+        .expect(200);
+
+      expect(res.body.phoneNumber).toBe(testPhone);
+    });
+
     it('미가입 전화번호 → 404', async () => {
       await request(app.getHttpServer())
         .post('/auth/login')
         .send({ phoneNumber: '01066666666' })
         .expect(404);
+    });
+
+    it('에러 응답에 detail 필드 포함 (FastAPI 호환)', async () => {
+      // 프론트 extractErrorMessage는 data.detail에서 메시지를 추출한다.
+      const res = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ phoneNumber: '01066666666' })
+        .expect(404);
+
+      expect(res.body.detail).toBeDefined();
+      expect(typeof res.body.detail).toBe('string');
     });
   });
 
