@@ -5,7 +5,7 @@ from typing import Any
 import httpx
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
 GEMINI_ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 
 # 7.2 성분 추천 필터링 원칙: 임상 근거가 확립된 성분으로만 한정 (LLM이 임의 성분을 지어내지 못하게 강제)
