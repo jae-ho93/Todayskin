@@ -250,14 +250,14 @@ Recommendation(userId, diagnosisId, createdAt)
 
 브랜치: `feature/migrate-weather-api`
 
-- [ ] `WeatherController`, `WeatherService` 구현
-- [ ] `KmaClient`, `AirKoreaClient`, 측정소 Client 분리
-- [ ] 지역 선택과 좌표 처리 이식
-- [ ] UV, PM2.5, PM10, 오존, CAI, NO2, SO2, CO 파싱
-- [ ] 상태 계산을 `WeatherStatusPolicy`로 분리
-- [ ] timeout·외부 API 오류·응답 스키마 검증
-- [ ] `LIVE | CACHED | FALLBACK` 출처 구분
-- [ ] API 키가 로그에 나오지 않는지 확인
+- [x] `WeatherController`, `WeatherService` 구현
+- [x] `KmaClient`, `AirKoreaClient`, 측정소 Client 분리
+- [x] 지역 선택과 좌표 처리 이식
+- [x] UV, PM2.5, PM10, 오존, CAI, NO2, SO2, CO 파싱
+- [x] 상태 계산을 `WeatherStatusPolicy`로 분리
+- [x] timeout·외부 API 오류·응답 스키마 검증
+- [x] `LIVE | CACHED | UNAVAILABLE` 출처 구분
+- [x] API 키가 로그에 나오지 않는지 확인
 
 정부 API 실패 시 지표를 임의 목업값으로 채우지 않습니다. `LIVE`, `CACHED`, `UNAVAILABLE`을 구분하고, 프론트가 측정 불가 상태를 표시할 수 있도록 합니다.
 
@@ -294,7 +294,6 @@ Recommendation(userId, diagnosisId, createdAt)
 브랜치: `feature/migrate-gemini-recommendation`
 
 - [ ] Gemini 호출을 `GeminiClient`로 분리
-- [ ] timeout·JSON schema·성분 whitelist·timing 검증
 - [ ] 의료적 확정 표현 검증
 - [ ] grade와 sourceLabel 서버 고정
 - [ ] 요청은 측정값 전체가 아니라 `diagnosisId` 중심으로 변경
