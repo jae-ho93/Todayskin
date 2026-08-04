@@ -1,13 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { EvidenceBadge } from '../../src/components/EvidenceBadge';
 import { IngredientChip } from '../../src/components/IngredientChip';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
-import { mockRecommendations } from '../../src/data/mock';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type { Product, Recommendation } from '../../src/types';
 
@@ -15,24 +14,46 @@ import type { Product, Recommendation } from '../../src/types';
 export default function RecommendationDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [showExplanation, setShowExplanation] = useState(false);
-  const [recommendation, setRecommendation] = useState<Recommendation>(
-    mockRecommendations.find((r) => r.id === id) ?? mockRecommendations[0],
-  );
+  const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
+  const [loading, setLoading] = useState(true);
+  // 관련 제품은 부가 정보라 불러오기 실패해도 조용히 빈 목록으로 둔다(별도 실패 UI 없음)
   const [products, setProducts] = useState<Product[]>([]);
 
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
     api.getRecommendationById(id).then((result) => {
-      if (!cancelled) setRecommendation(result);
+      if (cancelled) return;
+      setRecommendation(result);
+      setLoading(false);
     });
     api.getProducts().then((result) => {
-      if (!cancelled) setProducts(result);
+      if (!cancelled) setProducts(result ?? []);
     });
     return () => {
       cancelled = true;
     };
   }, [id]);
+
+  if (loading) {
+    return (
+      <ScreenContainer scroll={false} style={styles.centered}>
+        <ActivityIndicator color={colors.sage} />
+      </ScreenContainer>
+    );
+  }
+
+  if (!recommendation) {
+    return (
+      <ScreenContainer scroll={false} style={styles.centered}>
+        <Ionicons name="cloud-offline-outline" size={32} color={colors.textTertiary} />
+        <Text style={styles.unavailableTitle}>추천 정보를 불러올 수 없어요</Text>
+        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.unavailableCta}>
+          <Text style={styles.unavailableCtaText}>닫기</Text>
+        </Pressable>
+      </ScreenContainer>
+    );
+  }
 
   const relatedProducts = products.filter((p) => recommendation.relatedProductIds.includes(p.id));
 
@@ -98,6 +119,15 @@ export default function RecommendationDetailScreen() {
 
 const styles = StyleSheet.create({
   closeButton: { alignSelf: 'flex-end' },
+  centered: { alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+  unavailableTitle: { ...typography.headline, color: colors.textPrimary },
+  unavailableCta: {
+    backgroundColor: colors.sage,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+  },
+  unavailableCtaText: { ...typography.subtitle, color: colors.textInverse },
   title: { ...typography.displaySm, color: colors.textPrimary },
   gradeCard: { gap: spacing.md },
   gradeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

@@ -1,12 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../src/api/client';
 import { FaceIllustration } from '../src/components/FaceIllustration';
 import { MetricBar } from '../src/components/MetricBar';
-import { mockSkinScore } from '../src/data/mock';
 import { colors, radius, shadow, spacing, typography } from '../src/theme';
 import type { FacePart, SkinPartMetric, SkinScoreSnapshot } from '../src/types';
 
@@ -24,17 +23,40 @@ const PIN_POSITION: Record<FacePart, { top: `${number}%`; left: `${number}%` }> 
 // 화면 4: 진단 결과 — 얼굴 부위별 요약
 export default function DiagnosisResultScreen() {
   const [selected, setSelected] = useState<SkinPartMetric | null>(null);
-  const [skinScore, setSkinScore] = useState<SkinScoreSnapshot>(mockSkinScore);
+  const [skinScore, setSkinScore] = useState<SkinScoreSnapshot | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     api.getSkinScore().then((result) => {
-      if (!cancelled && result) setSkinScore(result);
+      if (cancelled) return;
+      if (result.status === 'ok') setSkinScore(result.data);
+      setLoading(false);
     });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  if (loading) {
+    return (
+      <View style={[styles.flex, styles.centered]}>
+        <ActivityIndicator color={colors.sage} />
+      </View>
+    );
+  }
+
+  if (!skinScore) {
+    return (
+      <View style={[styles.flex, styles.centered]}>
+        <Ionicons name="cloud-offline-outline" size={32} color={colors.textTertiary} />
+        <Text style={styles.unavailableTitle}>진단 결과를 불러올 수 없어요</Text>
+        <Pressable onPress={() => router.replace('/(tabs)')} hitSlop={12} style={styles.unavailableCta}>
+          <Text style={styles.unavailableCtaText}>홈으로 돌아가기</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.flex}>
@@ -91,6 +113,16 @@ export default function DiagnosisResultScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.background },
+  centered: { alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl },
+  unavailableTitle: { ...typography.headline, color: colors.textPrimary },
+  unavailableCta: {
+    marginTop: spacing.sm,
+    backgroundColor: colors.sage,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+  },
+  unavailableCtaText: { ...typography.subtitle, color: colors.textInverse },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

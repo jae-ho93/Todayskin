@@ -9,11 +9,20 @@ const STATUS_META: Record<AirStatus, { color: string; bg: string; label: string 
 };
 
 interface StatusBadgeProps {
-  status: AirStatus;
+  status?: AirStatus; // undefined = 해당 항목 조회 실패 — "측정 불가"로 표시
   label: string; // 예: "자외선", "오존"
 }
 
 export function StatusBadge({ status, label }: StatusBadgeProps) {
+  if (!status) {
+    return (
+      <View style={[styles.badge, styles.badgeUnavailable]}>
+        <View style={[styles.dot, styles.dotUnavailable]} />
+        <Text style={[styles.text, styles.textUnavailable]}>{label} 측정 불가</Text>
+      </View>
+    );
+  }
+
   const meta = STATUS_META[status];
   return (
     <View style={[styles.badge, { backgroundColor: meta.bg }]}>
@@ -43,4 +52,7 @@ const styles = StyleSheet.create({
     ...typography.caption,
     fontWeight: '700',
   },
+  badgeUnavailable: { backgroundColor: colors.gray100 },
+  dotUnavailable: { backgroundColor: colors.gray400 },
+  textUnavailable: { color: colors.gray400 },
 });

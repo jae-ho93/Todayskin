@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
 import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
@@ -15,19 +15,23 @@ function formatDate(iso: string) {
 
 // 화면 8: 마이 히스토리 / 기록
 export default function HistoryScreen() {
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  // null = 로딩 중이거나 불러오기 실패 — loading으로 둘을 구분한다
+  const [history, setHistory] = useState<HistoryEntry[] | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     api.getHistory().then((result) => {
-      if (!cancelled) setHistory(result);
+      if (cancelled) return;
+      setHistory(result);
+      setLoading(false);
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const scores = [...history].reverse();
+  const scores = [...(history ?? [])].reverse();
   const width = 300;
   const height = 60;
   const max = Math.max(...scores.map((s) => s.overallScore));
@@ -51,7 +55,13 @@ export default function HistoryScreen() {
         </Card>
       )}
 
-      {history.length > 0 ? (
+      {loading ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={colors.sage} />
+        </View>
+      ) : history === null ? (
+        <Text style={styles.emptyText}>기록을 불러올 수 없어요</Text>
+      ) : history.length > 0 ? (
         <View style={styles.list}>
           {history.map((h) => (
             <Card key={h.id} style={styles.row}>
@@ -77,6 +87,7 @@ const styles = StyleSheet.create({
   trendCard: { gap: spacing.sm },
   trendLabel: { ...typography.subtitle, color: colors.textPrimary },
   emptyText: { ...typography.bodySm, color: colors.textTertiary, textAlign: 'center', marginTop: spacing.xl },
+  loadingRow: { alignItems: 'center', paddingVertical: spacing.xl },
   list: { gap: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   thumb: {

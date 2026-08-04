@@ -1,29 +1,8 @@
 from datetime import datetime, timezone
 
-from .schemas import Product, Recommendation, SkinPartMetric, SkinScoreSnapshot, WeatherSnapshot
+from .schemas import Product, Recommendation, SkinPartMetric, SkinScoreSnapshot
 
 _now = datetime.now(timezone.utc).isoformat()
-
-MOCK_WEATHER = WeatherSnapshot(
-    observedAt=_now,
-    regionName="서울 종로구",
-    uvIndex=8,
-    uvStatus="bad",
-    uvIndexPeak=9,
-    uvStatusPeak="bad",
-    uvIndexPeakHour=14,
-    ozonePpm=0.072,
-    ozoneStatus="moderate",
-    pm25=18,
-    pm25Status="good",
-    pm10=32,
-    pm10Status="moderate",
-    caiValue=68,
-    caiStatus="moderate",
-    no2Value=0.021,
-    so2Value=0.004,
-    coValue=0.5,
-)
 
 MOCK_SKIN_SCORE = SkinScoreSnapshot(
     id="snap-2026-08-03",
@@ -130,39 +109,5 @@ MOCK_PRODUCTS = [
         matchedIngredients=["세라마이드", "시어버터"],
         category="moisture",
         recommendationId="rec-4",
-    ),
-]
-
-# Gemini 호출이 불가능할 때(API 키 미설정, 요청 실패 등) 대신 보여줄 날씨 기반(A등급) 상황별 폴백
-FALLBACK_WEATHER_PRODUCTS = [
-    Product(
-        id="weather-product-after-cleansing",
-        name="진정 수분 토너",
-        brand="Greenfield",
-        matchedGrade="A",
-        matchedIngredients=["히알루론산", "판테놀"],
-        category="moisture",
-        reason="건조한 날씨엔 세안 직후 수분 손실이 빨라지기 쉬워 순한 토너로 결을 정돈해주면 도움될 수 있어요.",
-        timing="세안 후",
-    ),
-    Product(
-        id="weather-product-before-outing",
-        name="데일리 UV 디펜스 선크림",
-        brand="Skinlab",
-        matchedGrade="A",
-        matchedIngredients=["징크옥사이드", "나이아신아마이드"],
-        category="barrier",
-        reason="자외선지수가 높은 날엔 외출 전 자외선 차단제로 광노화·색소침착을 예방하는 데 도움될 수 있어요.",
-        timing="외출 전",
-    ),
-    Product(
-        id="weather-product-while-out",
-        name="휴대용 수분 진정 미스트",
-        brand="Skinlab",
-        matchedGrade="A",
-        matchedIngredients=["센텔라", "판테놀"],
-        category="moisture",
-        reason="미세먼지·오존 농도가 높은 날엔 밖에 있는 동안 틈틈이 미스트로 수분을 보충해주면 도움될 수 있어요.",
-        timing="외출 후",
     ),
 ]

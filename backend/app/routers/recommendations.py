@@ -8,7 +8,6 @@ from .. import models
 from ..database import get_db
 from ..deps import get_current_user
 from ..gemini_client import GeminiUnavailable, generate_recommendations, generate_weather_products
-from ..mock_data import FALLBACK_WEATHER_PRODUCTS, MOCK_RECOMMENDATIONS
 from ..schemas import EvidenceGrade, GenerateRecommendationsRequest, Product, Recommendation, WeatherSnapshot
 
 router = APIRouter(tags=["recommendations"])
@@ -68,28 +67,30 @@ async def generate(
     B등급(사진 기반) 매칭 로직: 오늘 피부 측정값 + 오늘 날씨를 Gemini에 함께 전달해
     확립된 피부과학 지식에 근거한 추천을 생성한다. 근거등급은 LLM이 아니라 서버가
     강제로 B로 고정하고, 출처도 LLM이 지어내지 못하도록 서버가 고정된 문구를 붙인다.
-    GEMINI_API_KEY가 없거나 호출이 실패하면 정적 B등급 목업으로 폴백한다.
+    GEMINI_API_KEY가 없거나 호출이 실패하면 가짜 데이터로 대체하지 않고 503을 반환한다 —
+    호출부(프론트)가 "지금은 추천을 만들 수 없어요"를 명시적으로 보여줘야 한다.
     생성된 추천은 유저 + 해당 진단(diagnosis_id)에 연결해 이력으로 저장한다.
     """
     try:
         items = await generate_recommendations(
             payload.skinScore.model_dump(), payload.weather.model_dump()
         )
-        results = [
-            Recommendation(
-                id=f"gemini-{uuid.uuid4().hex[:8]}",
-                title=item["title"],
-                grade="B",
-                sourceLabel=GEMINI_SOURCE_LABEL,
-                explanation=item["explanation"],
-                ingredientTags=item.get("ingredientTags", []),
-                relatedProductIds=[],
-                timing=item.get("timing"),
-            )
-            for item in items
-        ]
-    except GeminiUnavailable:
-        results = [r for r in MOCK_RECOMMENDATIONS if r.grade == "B"]
+    except GeminiUnavailable as e:
+        raise HTTPException(status_code=503, detail="AI 추천을 생성할 수 없어요. 잠시 후 다시 시도해주세요.") from e
+
+    results = [
+        Recommendation(
+            id=f"gemini-{uuid.uuid4().hex[:8]}",
+            title=item["title"],
+            grade="B",
+            sourceLabel=GEMINI_SOURCE_LABEL,
+            explanation=item["explanation"],
+            ingredientTags=item.get("ingredientTags", []),
+            relatedProductIds=[],
+            timing=item.get("timing"),
+        )
+        for item in items
+    ]
 
     for r in results:
         db.add(
@@ -137,23 +138,24 @@ async def weather_based_products(weather: WeatherSnapshot) -> list[Product]:
     """
     날씨 기반(A등급) 제품 추천: 사용자 촬영 데이터 없이 오늘 날씨/대기질만으로 하루 중 실제로
     화장품을 쓰는 세 상황(세안 후/외출 전/외출 후)별로 화장품을 하나씩 Gemini에게 추천받는다.
-    유저 비종속이라 DB에 저장하지 않고, GEMINI_API_KEY가 없거나 호출 실패 시 상황별 고정 폴백으로
-    대체한다.
+    유저 비종속이라 DB에 저장하지 않고, GEMINI_API_KEY가 없거나 호출 실패 시 가짜 데이터로
+    대체하지 않고 503을 반환한다 — 프론트가 "지금은 추천을 만들 수 없어요"를 명시적으로 보여준다.
     """
     try:
         items = await generate_weather_products(weather.model_dump())
-        return [
-            Product(
-                id=f"gemini-product-{uuid.uuid4().hex[:8]}",
-                name=item["name"],
-                brand=item["brand"],
-                matchedGrade="A",
-                matchedIngredients=item.get("ingredientTags", []),
-                category=item["category"],
-                reason=item.get("explanation"),
-                timing=item["timing"],
-            )
-            for item in items
-        ]
-    except GeminiUnavailable:
-        return FALLBACK_WEATHER_PRODUCTS
+    except GeminiUnavailable as e:
+        raise HTTPException(status_code=503, detail="AI 추천을 생성할 수 없어요. 잠시 후 다시 시도해주세요.") from e
+
+    return [
+        Product(
+            id=f"gemini-product-{uuid.uuid4().hex[:8]}",
+            name=item["name"],
+            brand=item["brand"],
+            matchedGrade="A",
+            matchedIngredients=item.get("ingredientTags", []),
+            category=item["category"],
+            reason=item.get("explanation"),
+            timing=item["timing"],
+        )
+        for item in items
+    ]
