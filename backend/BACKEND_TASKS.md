@@ -294,14 +294,14 @@ Recommendation(userId, diagnosisId, createdAt)
 
 브랜치: `feature/migrate-gemini-recommendation`
 
-- [ ] Gemini 호출을 `GeminiClient`로 분리
-- [ ] 의료적 확정 표현 검증
-- [ ] grade와 sourceLabel 서버 고정
-- [ ] 요청은 측정값 전체가 아니라 `diagnosisId` 중심으로 변경
-- [ ] 서버가 소유권 확인 후 diagnosis/weather 조회
-- [ ] 생성 결과를 user/diagnosis에 연결
-- [ ] Gemini 실패 시 503과 명시적 unavailable 상태 반환
-- [ ] 개발용 mock 응답과 운영 응답을 분리
+- [x] Gemini 호출을 `GeminiClient`로 분리
+- [x] 의료적 확정 표현 검증 (`EvidencePolicy` 사후 검증 추가)
+- [x] grade와 sourceLabel 서버 고정
+- [x] 요청은 측정값 전체가 아니라 `diagnosisId` 중심으로 변경
+- [x] 서버가 소유권 확인 후 diagnosis/weather 조회
+- [x] 생성 결과를 user/diagnosis에 연결
+- [x] Gemini 실패 시 503과 명시적 unavailable 상태 반환
+- [x] 개발용 mock 응답과 운영 응답을 분리
 
 ### T9. 진단 도메인 기반
 

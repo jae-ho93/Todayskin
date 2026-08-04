@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { EvidencePolicy } from './evidence.policy';
 import { GeminiClient } from './gemini.client';
 
 /**
@@ -6,7 +7,7 @@ import { GeminiClient } from './gemini.client';
  * RecommendationModule, ProductModule이 모두 GeminiClient를 사용한다.
  */
 @Module({
-  providers: [GeminiClient],
-  exports: [GeminiClient],
+  providers: [GeminiClient, EvidencePolicy],
+  exports: [GeminiClient, EvidencePolicy],
 })
 export class GeminiModule {}
