@@ -1,0 +1,23 @@
+# 로컬 개발용 PostgreSQL 컨테이너.
+# 운영/CI에서는 별도 관리. 실행: docker compose up -d
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: todayskin-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: todayskin
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: todayskin_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - todayskin_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U todayskin -d todayskin_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  todayskin_pg_data:

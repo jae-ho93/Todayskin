@@ -1,0 +1,285 @@
+// Todayskin Prisma schema
+// PostgreSQL + Prisma — T2 기준 초기 스키마
+// 기존 SQLite 모델(models.py)과 최신 API 계약(BACKEND_TASKS.md)을 반영.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ── 권한 ──────────────────────────────────────────
+enum Role {
+  USER
+  ADMIN
+}
+
+// ── 회원 ──────────────────────────────────────────
+model User {
+  id          Int      @id @default(autoincrement())
+  phoneNumber String   @unique @map("phone_number")
+  name        String
+  birthDate   DateTime @map("birth_date")
+  // 선택 입력. 모델 학습 전에는 추천 로직에 임의로 사용하지 않는다.
+  gender      Gender?
+  // T3에서 access token은 User 테이블에 저장하지 않고 RefreshSession으로 분리한다.
+  role        Role     @default(USER)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  refreshSessions        RefreshSession[]
+  diagnoses              Diagnosis[]
+  recommendations        Recommendation[]
+  notificationPreference NotificationPreference?
+  consentRecords         ConsentRecord[]
+
+  @@map("users")
+}
+
+enum Gender {
+  male
+  female
+}
+
+// Refresh Token 회전·폐기·해시 저장 (T3에서 본격 사용)
+model RefreshSession {
+  id        String    @id @default(uuid())
+  userId    Int       @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  userAgent String?   @map("user_agent")
+  ipAddress String?   @map("ip_address")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_sessions")
+}
+
+// 동의 기록 (원본 이미지 비저장 동의 등)
+model ConsentRecord {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  type      String   // 예: "image_not_stored"
+  agreed    Boolean  @default(false)
+  version   String   @default("1.0.0")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("consent_records")
+}
+
+// ── 진단 ──────────────────────────────────────────
+enum DiagnosisStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum FacePart {
+  forehead
+  glabella
+  eyeArea
+  cheek
+  lips
+  jaw
+}
+
+model Diagnosis {
+  id                 String          @id
+  userId             Int             @map("user_id")
+  capturedAt         DateTime        @map("captured_at")
+  overallScore       Float           @map("overall_score")
+  // 원본 이미지는 저장하지 않는다. 필요시 동의 기반 별도 보관.
+  thumbnailUri       String?         @map("thumbnail_uri")
+  status             DiagnosisStatus @default(PENDING)
+  modelVersion       String?         @map("model_version")
+  weatherSnapshotId  String?         @map("weather_snapshot_id")
+  createdAt          DateTime        @default(now()) @map("created_at")
+
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skinMetrics     SkinMetric[]
+  weatherSnapshot WeatherSnapshot? @relation(fields: [weatherSnapshotId], references: [id])
+  recommendations Recommendation[]
+
+  @@index([userId, capturedAt])
+  @@map("diagnoses")
+}
+
+// 부위별 측정값 — 프론트 6개 부위 유지
+model SkinMetric {
+  id         Int      @id @default(autoincrement())
+  diagnosisId String   @map("diagnosis_id")
+  part       FacePart
+  label      String
+  grade      String
+  moisture   Float?
+  elasticity Float?
+  note       String?
+
+  diagnosis Diagnosis @relation(fields: [diagnosisId], references: [id], onDelete: Cascade)
+
+  @@unique([diagnosisId, part])
+  @@index([diagnosisId])
+  @@map("skin_metrics")
+}
+
+// ── 날씨 ──────────────────────────────────────────
+// 정부 API 실패 시 목업값으로 채우지 않고 nullable로 둔다.
+enum WeatherSource {
+  LIVE
+  CACHED
+  UNAVAILABLE
+}
+
+enum AirStatus {
+  good
+  moderate
+  bad
+}
+
+model WeatherSnapshot {
+  id              String   @id @default(uuid())
+  observedAt      DateTime @map("observed_at")
+  collectedAt     DateTime @default(now()) @map("collected_at")
+  regionName      String   @map("region_name")
+  cityName        String?  @map("city_name")
+  latitude        Float?
+  longitude       Float?
+  kmaAreaNo       String?  @map("kma_area_no")
+  airkoreaStation String?  @map("airkorea_station_name")
+
+  uvIndex        Float?
+  uvStatus       AirStatus?
+  uvIndexPeak    Float?      @map("uv_index_peak")
+  uvStatusPeak   AirStatus?  @map("uv_status_peak")
+  uvIndexPeakHour Int?       @map("uv_index_peak_hour")
+  ozonePpm       Float?      @map("ozone_ppm")
+  ozoneStatus    AirStatus?  @map("ozone_status")
+  pm25           Float?
+  pm25Status     AirStatus?  @map("pm25_status")
+  pm10           Float?
+  pm10Status     AirStatus?  @map("pm10_status")
+  caiValue       Float?      @map("cai_value")
+  caiStatus      AirStatus?  @map("cai_status")
+  no2Value       Float?      @map("no2_value")
+  so2Value       Float?      @map("so2_value")
+  coValue        Float?      @map("co_value")
+
+  source WeatherSource @default(LIVE)
+
+  diagnoses Diagnosis[]
+
+  @@index([regionName, observedAt])
+  @@map("weather_snapshots")
+}
+
+// ── 추천 ──────────────────────────────────────────
+enum EvidenceGrade {
+  A
+  B
+  C
+}
+
+// 전역 A등급 템플릿 — user/diagnosis 없는 고정 문구
+model RecommendationTemplate {
+  id               String        @id
+  title            String
+  grade            EvidenceGrade
+  sourceLabel      String        @map("source_label")
+  explanation      String
+  observationalNote String?       @map("observational_note")
+  ingredientTags   String[]      @default([]) @map("ingredient_tags")
+  timing           String?
+  createdAt        DateTime      @default(now()) @map("created_at")
+
+  recommendations Recommendation[]
+
+  @@map("recommendation_templates")
+}
+
+// 사용자별 생성 추천 (B등급: 사진+날씨 매칭, C등급: 개인 패턴)
+model Recommendation {
+  id               String   @id
+  userId           Int?     @map("user_id")
+  diagnosisId      String?  @map("diagnosis_id")
+  templateId       String?  @map("template_id")
+  title            String
+  grade            EvidenceGrade
+  sourceLabel      String   @map("source_label")
+  explanation      String
+  observationalNote String? @map("observational_note")
+  ingredientTags   String[] @default([]) @map("ingredient_tags")
+  timing           String?
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  user      User?                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  diagnosis Diagnosis?             @relation(fields: [diagnosisId], references: [id], onDelete: SetNull)
+  template  RecommendationTemplate? @relation(fields: [templateId], references: [id])
+  products  RecommendationProduct[]
+
+  @@index([userId, diagnosisId, createdAt])
+  @@map("recommendations")
+}
+
+enum ProductCategory {
+  moisture
+  elasticity
+  brightening
+  barrier
+}
+
+model Product {
+  id                 String          @id
+  name               String
+  brand              String
+  imageUri           String?         @map("image_uri")
+  matchedGrade       EvidenceGrade   @map("matched_grade")
+  matchedIngredients String[]        @default([]) @map("matched_ingredients")
+  category           ProductCategory
+  // 날씨 기반 제품의 근거/타이밍 (reason, timing)
+  reason             String?
+  timing             String?
+  createdAt          DateTime        @default(now()) @map("created_at")
+
+  recommendations RecommendationProduct[]
+
+  @@map("products")
+}
+
+// 추천-제품 중간 테이블
+model RecommendationProduct {
+  id               Int      @id @default(autoincrement())
+  recommendationId String   @map("recommendation_id")
+  productId        String   @map("product_id")
+  displayOrder     Int      @default(0) @map("display_order")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  recommendation Recommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  product        Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([recommendationId, productId])
+  @@index([productId])
+  @@map("recommendation_products")
+}
+
+// ── 알림 설정 ──────────────────────────────────────
+model NotificationPreference {
+  id                Int      @id @default(autoincrement())
+  userId            Int      @unique @map("user_id")
+  // 푸시 발송은 T11 이후. DB 저장만.
+  pushEnabled       Boolean  @default(false) @map("push_enabled")
+  uvAlertEnabled    Boolean  @default(true) @map("uv_alert_enabled")
+  dustAlertEnabled  Boolean  @default(true) @map("dust_alert_enabled")
+  morningReminder   Boolean  @default(false) @map("morning_reminder")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}

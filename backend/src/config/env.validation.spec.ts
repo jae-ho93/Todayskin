@@ -5,9 +5,10 @@ describe('envValidationSchema', () => {
     NODE_ENV: 'development',
     PORT: 3000,
     ALLOWED_ORIGINS: 'http://localhost:8081',
+    DATABASE_URL: 'postgresql://user:pass@localhost:5432/todayskin',
   };
 
-  it('accepts minimal valid env (T1 단계: DB/Redis/JWT optional)', () => {
+  it('accepts minimal valid env (T2 단계: DATABASE_URL required)', () => {
     const { error, value } = envValidationSchema.validate(validBase, {
       abortEarly: false,
       allowUnknown: true,
@@ -33,9 +34,18 @@ describe('envValidationSchema', () => {
     expect(error).toBeDefined();
   });
 
-  it('allows empty DATABASE_URL and REDIS_URL in T1', () => {
+  it('requires DATABASE_URL in non-test environments', () => {
     const { error } = envValidationSchema.validate(
-      { ...validBase, DATABASE_URL: '', REDIS_URL: '' },
+      { NODE_ENV: 'development', PORT: 3000, ALLOWED_ORIGINS: '' },
+      { abortEarly: false, allowUnknown: true },
+    );
+    expect(error).toBeDefined();
+    expect(error!.message).toContain('DATABASE_URL');
+  });
+
+  it('allows empty DATABASE_URL only in test environment', () => {
+    const { error } = envValidationSchema.validate(
+      { NODE_ENV: 'test', PORT: 3000, ALLOWED_ORIGINS: '', DATABASE_URL: '' },
       { abortEarly: false, allowUnknown: true },
     );
     expect(error).toBeUndefined();
