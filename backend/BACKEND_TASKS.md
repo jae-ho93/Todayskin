@@ -279,16 +279,16 @@ Recommendation(userId, diagnosisId, createdAt)
 
 브랜치: `feature/migrate-recommendation-api`
 
-- [ ] Recommendation과 Product 모듈 분리
-- [ ] 전역 A등급 템플릿과 사용자별 추천 분리
-- [ ] 제품 목록·category 필터 이식
-- [ ] `POST /products/weather-based` 이식
-- [ ] 날씨 기반 제품의 `reason`, `timing` 응답 계약 유지
-- [ ] Recommendation-Product 중간 테이블 설계
-- [ ] 추천 상세 소유권 검사
-- [ ] 동일 진단 중복 생성 방지
-- [ ] A/B/C 등급을 서버에서 결정
-- [ ] C등급을 전역 seed에서 분리
+- [x] Recommendation과 Product 모듈 분리
+- [x] 전역 A등급 템플릿과 사용자별 추천 분리
+- [x] 제품 목록·category 필터 이식
+- [x] `POST /products/weather-based` 이식
+- [x] 날씨 기반 제품의 `reason`, `timing` 응답 계약 유지
+- [x] Recommendation-Product 중간 테이블 설계
+- [x] 추천 상세 소유권 검사
+- [x] 동일 진단 중복 생성 방지
+- [x] A/B/C 등급을 서버에서 결정
+- [x] C등급을 전역 seed에서 분리
 
 ### T8. Gemini와 근거 정책
 

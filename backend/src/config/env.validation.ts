@@ -49,4 +49,7 @@ export const envValidationSchema = Joi.object({
   AIRKOREA_STATION_NAME: Joi.string().allow('').optional(),
   GEMINI_API_KEY: Joi.string().allow('').optional(),
   GEMINI_MODEL: Joi.string().default('gemini-flash-latest'),
+  // T7/T8: 개발용 Gemini mock 응답. 운영에서는 반드시 false여야 함.
+  // default를 두면 process.env 값을 덮어쓰는 경우가 있어 기본값을 생략한다.
+  MOCK_GEMINI: Joi.string().valid('true', 'false').allow('').optional(),
 });
