@@ -34,7 +34,9 @@ export class AuthController {
   @Post('login')
   @ApiOperation({ summary: '로그인 (전화번호만, 비밀번호 없음 — MVP)' })
   @HttpCode(200)
-  async login(@Body() dto: LoginDto): Promise<TokenResponseDto> {
+  // 기존 FastAPI /auth/login 호환: 프론트는 응답 전체를 User 세션 객체로 저장한다.
+  // User 필드 + accessToken + refreshToken + expiresIn을 함께 반환한다.
+  async login(@Body() dto: LoginDto): Promise<UserResponseDto> {
     return this.authService.login(dto);
   }
 

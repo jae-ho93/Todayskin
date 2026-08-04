@@ -34,7 +34,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       `${request.method} ${request.url} → ${status} ${JSON.stringify(message)}`,
     );
 
-    response.status(status).json({
+    const body: Record<string, unknown> = {
       statusCode: status,
       error:
         typeof exceptionResponse === 'object' && exceptionResponse !== null
@@ -44,6 +44,18 @@ export class HttpExceptionFilter implements ExceptionFilter {
       message,
       timestamp: new Date().toISOString(),
       path: request.url,
-    });
+    };
+
+    // 기존 FastAPI 에러 응답 호환: 프론트(src/api/client.ts extractErrorMessage)는
+    // { detail: "메시지" } 형태에서 에러 메시지를 추출한다. NestJS 표준 필드와 함께
+    // detail을 같이 제공해 프론트 변경 없이 사용자 친화적 메시지가 노출되도록 한다.
+    // message가 배열(class-validator)인 경우 첫 번째 항목, 문자열인 경우 그대로 사용.
+    if (Array.isArray(message)) {
+      body.detail = message[0] ?? message.join(' ');
+    } else {
+      body.detail = message;
+    }
+
+    response.status(status).json(body);
   }
 }

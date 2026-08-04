@@ -79,10 +79,17 @@ export class AuthService {
 
     const tokens = await this.issueTokens(user.id, user.role);
 
-    return this.toUserResponse(user, tokens.accessToken);
+    // signup 시에도 refresh token을 발급해 login과 동일한 세션 수명을 제공한다.
+    // 기존 프론트는 accessToken만 사용하므로 refreshToken/expiresIn은 무시된다.
+    return this.toUserResponse(
+      user,
+      tokens.accessToken,
+      tokens.refreshToken,
+      tokens.expiresIn,
+    );
   }
 
-  async login(dto: LoginDto): Promise<TokenResponseDto> {
+  async login(dto: LoginDto): Promise<UserResponseDto> {
     const phoneNumber = this.normalizePhone(dto.phoneNumber);
 
     const user = await this.prisma.user.findUnique({
@@ -92,7 +99,17 @@ export class AuthService {
       throw new NotFoundException('가입되지 않은 휴대폰 번호입니다');
     }
 
-    return this.issueTokens(user.id, user.role);
+    // 기존 FastAPI /auth/login 응답 호환:
+    // 프론트는 login 응답을 User 객체로 취급해 id/name/phoneNumber/... 와 accessToken을
+    // AsyncStorage에 세션으로 저장한다. 토큰만 반환하면 프론트 호환이 깨지므로
+    // User 필드 + 토큰을 함께 반환한다.
+    const tokens = await this.issueTokens(user.id, user.role);
+    return this.toUserResponse(
+      user,
+      tokens.accessToken,
+      tokens.refreshToken,
+      tokens.expiresIn,
+    );
   }
 
   async logout(userId: number): Promise<void> {
@@ -249,6 +266,8 @@ export class AuthService {
       createdAt: Date;
     },
     accessToken?: string,
+    refreshToken?: string,
+    expiresIn?: number,
   ): UserResponseDto {
     const res: UserResponseDto = {
       id: user.id,
@@ -260,6 +279,12 @@ export class AuthService {
     };
     if (accessToken) {
       res.accessToken = accessToken;
+    }
+    if (refreshToken) {
+      res.refreshToken = refreshToken;
+    }
+    if (expiresIn !== undefined) {
+      res.expiresIn = expiresIn;
     }
     return res;
   }
