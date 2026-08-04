@@ -161,13 +161,16 @@ POST /products/weather-based
 
 브랜치: `chore/backend-collaboration-setup`
 
-- [ ] `main` 직접 push 금지
-- [ ] PR 승인 최소 1명과 필수 CI 체크 설정
-- [ ] 브랜치·커밋·PR 규칙 공유
-- [ ] `.env`, `.env.bak`, SQLite DB가 Git에 포함되지 않았는지 확인
-- [ ] `backend/.env.example`에는 변수명만 기록
-- [ ] 담당자와 수정 파일 범위 공유
-- [ ] Issue와 PR 연결 규칙 확정
+- [x] `main` 직접 push 금지 규칙 문서화
+- [x] PR 승인 최소 1명과 CI 성공 후 merge 규칙 문서화
+- [x] 브랜치·커밋·PR 규칙을 `CONTRIBUTING.md`로 공유
+- [x] `.env`, `.env.bak`, SQLite DB, IDE/로컬 인덱스 ignore 확인
+- [x] `backend/.env.example`에 secret 없이 필요한 변수명 정리
+- [x] 담당자와 수정 파일 범위를 Issue에 기록하는 규칙 추가
+- [x] Issue와 PR 연결 템플릿 추가
+- [x] PR CI workflow 추가
+
+GitHub branch protection/ruleset은 현재 비공개 저장소 플랜에서 지원되지 않아 API 설정이 거부됩니다. 플랜이 지원될 때까지 `main` 직접 push 금지, 승인 1명, CI 성공 후 merge를 팀 규칙으로 적용합니다.
 
 ### T1. NestJS 기본 구조
 
