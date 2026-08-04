@@ -377,15 +377,17 @@ Recommendation(userId, diagnosisId, createdAt)
 
 브랜치: `chore/backend-ci-cd`
 
-- [ ] NestJS Dockerfile
-- [ ] PostgreSQL·Redis 로컬 컨테이너
-- [ ] 환경변수 주입 문서화
-- [ ] install/build/test workflow
-- [ ] PR 자동 테스트
-- [ ] Prisma migration 검사
-- [ ] 배포 전략 결정
+- [x] NestJS Dockerfile
+- [x] PostgreSQL·Redis 로컬 컨테이너
+- [x] 환경변수 주입 문서화
+- [x] install/build/test workflow
+- [x] PR 자동 테스트
+- [x] Prisma migration 검사
+- [x] 배포 전략 결정
 
 Python AI 서버 컨테이너는 모델 학습과 서버 구현 완료 뒤 별도 작업으로 추가합니다.
+
+참고: Dockerfile, docker-compose backend 서비스, CI migration diff 검사 단계, 배포 전략 문서(`docker/DEPLOYMENT.md`)를 추가했다. `prisma generate` 후 `npm run build`, 단위 테스트 112개, e2e 테스트 76개, lint가 모두 로컬에서 통과한다. CI의 migration diff 검사는 별도 shadow DB(`todayskin_shadow`)를 사용한다.
 
 ## 데이터 설계 기준
 

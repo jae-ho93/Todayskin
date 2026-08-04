@@ -148,3 +148,35 @@ T13 구현 중 에이전트가 임의로 결정할 수 없어 사용자(리뷰�
     단, 이는 T3 미완료 항목을 T13에서 끌어오는 것이므로 범위 확장.
 - 변경 위치:
   - (b) 선택 시 `src/modules/admin/` 임시 컨트롤러 + `test/admin.e2e-spec.ts` 추가
+
+## 6. migration_lock 파일 형식 통일 (T14)
+
+- 현재 구현: `prisma/migrations/`에 `migration_lock.json`(기존)과
+  `migration_lock.toml`(T14에서 CI migration diff 검사용으로 추가)이 공존.
+  - `prisma migrate deploy`, `prisma migrate status` — `migration_lock.json`을 읽음.
+  - `prisma migrate diff --from-migrations` (CI 검사) — `migration_lock.toml`을 요구.
+- 필요한 결정: Prisma 7에서 정식 lock 파일 형식을 확인 후 하나로 통일.
+- 확인 방법:
+  ```bash
+  cd backend
+  npx prisma migrate dev --name test_lock_format --create-only
+  ls prisma/migrations/migration_lock.*
+  ```
+  위 명령으로 Prisma 7이 새로 생성하는 lock 파일 형식을 확인한 뒤, 다른 하나를 삭제.
+- 변경 위치:
+  - `prisma/migrations/migration_lock.json` 또는 `migration_lock.toml` 중 하나 삭제.
+
+## 7. 운영 인프라 및 배포 방식 확정 (T14)
+
+- 현재 구현: `docker/DEPLOYMENT.md`에 단일 서버 + docker compose를 추천으로 기재.
+  CI는 build/test/lint/migration diff 검사까지 완료. 자동 CD는 미설정.
+- 필요한 결정: 운영 환경을 확정해야 자동 CD 워크플로우 추가 가능.
+- 결정 항목:
+  - 운영 서버 유형 (VPS / 클라우드 VM / 컨테이너 플랫폼)
+  - 컨테이너 이미지 저장소 (GHCR / Docker Hub / 사내 registry)
+  - 시크릿 주입 방식 (환경변수 파일 마운트 / 시크릿 매니저 / 오케스트레이터 내장 시크릿)
+  - 운영 DB 관리 방식 (컨테이너 내부 / 외부 관리형 DB)
+  - 배포 자동화 여부 (CI 통과 후 자동 push + deploy / 수동 승인 후 배포)
+- 변경 위치:
+  - 항목 확정 시 `.github/workflows/`에 CD 워크플로우 추가.
+  - 운영 환경 변수 주입 설정 (docker compose `env_file` 또는 시크릿 매니저 연동).

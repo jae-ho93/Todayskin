@@ -1,6 +1,7 @@
-# 로컬 개발용 PostgreSQL 컨테이너.
+# 로컬 개발용 PostgreSQL + Redis + NestJS 백엔드 컨테이너 (T14).
 # 개발/테스트 DB를 하나의 인스턴스에 분리한다. 운영 DB는 별도 관리.
-# 실행: docker compose up -d
+# 실행: docker compose up -d            # DB + Redis만 실행
+# 실행: docker compose --profile backend up -d --build   # 백엔드 포함 전체 실행
 services:
   postgres:
     image: postgres:16-alpine
@@ -38,6 +39,33 @@ services:
       retries: 5
     # 운영에서는 requirepass로 인증 필수. 개발용은 비인증.
     # command: redis-server --requirepass yourpassword
+
+  # T14: NestJS 백엔드. 빌드된 이미지로 DB/Redis와 통합 환경을 구성한다.
+  backend:
+    profiles: ["backend"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: todayskin-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      ALLOWED_ORIGINS: http://localhost:8081
+      DATABASE_URL: postgresql://todayskin:secret@postgres:5432/todayskin_dev
+      REDIS_URL: redis://redis:6379
+      # 로컬 통합 환경용 임시 시크릿. 운영에서는 별도 주입.
+      JWT_ACCESS_SECRET: local_dev_access_secret_at_least_32_characters_long
+      JWT_REFRESH_SECRET: local_dev_refresh_secret_at_least_32_characters_long
+      MOCK_GEMINI: "true"
+      MOCK_INFERENCE: "true"
+    ports:
+      - "3000:3000"
 
 volumes:
   todayskin_pg_data:
