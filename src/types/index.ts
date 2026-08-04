@@ -73,6 +73,7 @@ export interface Product {
   matchedIngredients: string[];
   category: 'moisture' | 'elasticity' | 'brightening' | 'barrier';
   recommendationId?: string;
+  reason?: string; // 별도 Recommendation 레코드 없이 바로 보여주는 근거 설명 (예: 날씨 기반 추천)
 }
 
 export interface PersonalPatternPoint {

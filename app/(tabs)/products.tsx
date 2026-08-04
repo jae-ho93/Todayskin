@@ -1,11 +1,11 @@
-import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { EvidenceBadge } from '../../src/components/EvidenceBadge';
 import { IngredientChip } from '../../src/components/IngredientChip';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
+import { useUserLocation } from '../../src/hooks/useUserLocation';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type { Product } from '../../src/types';
 
@@ -17,30 +17,32 @@ const CATEGORY_FILTERS: { key: Product['category'] | 'all'; label: string }[] = 
   { key: 'barrier', label: '장벽 강화' },
 ];
 
-// 화면 7: 제품/성분 추천 리스트
+// 화면 7: 제품/성분 추천 리스트 — 날씨 기반 / 피부 기반 / 날씨+피부 기반 3구역
 export default function ProductsScreen() {
+  const { coords, loading: locationLoading } = useUserLocation();
   const [category, setCategory] = useState<Product['category'] | 'all'>('all');
-  const [products, setProducts] = useState<Product[]>([]);
+  // null = 아직 로딩 중 — 오늘 날씨를 Gemini에게 보내 카테고리(보습/탄력/미백/장벽강화)별로
+  // 화장품을 하나씩 추천받는다. 피부 기반 / 날씨+피부 기반은 아직 이 화면에 연결하지 않아 구역만 둔다.
+  const [weatherProducts, setWeatherProducts] = useState<Product[] | null>(null);
 
   useEffect(() => {
+    if (locationLoading) return;
     let cancelled = false;
-    api.getProducts().then((result) => {
-      if (!cancelled) setProducts(result);
-    });
+    async function load() {
+      const weather = await api.getWeather(coords ?? undefined);
+      const products = await api.generateWeatherProducts(weather);
+      if (!cancelled) setWeatherProducts(products);
+    }
+    load();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [locationLoading, coords]);
 
-  const byCategory = useMemo(
-    () => (category === 'all' ? products : products.filter((p) => p.category === category)),
-    [category, products],
-  );
-
-  // A등급(공인 가이드라인)은 날씨 조건만으로 판단된 추천이라 "날씨 기반 추천" 구역에 해당한다.
-  // 피부 기반 / 날씨+피부 기반은 각각 촬영 결과만 쓰는 추천, Gemini가 촬영+날씨를 함께 쓰는 B등급
-  // 추천에 대응할 예정이지만 아직 이 화면에 연결하지 않았으므로 구역만 만들어둔다.
-  const weatherBased = useMemo(() => byCategory.filter((p) => p.matchedGrade === 'A'), [byCategory]);
+  const filteredWeatherProducts = useMemo(() => {
+    if (!weatherProducts) return null;
+    return category === 'all' ? weatherProducts : weatherProducts.filter((p) => p.category === category);
+  }, [weatherProducts, category]);
 
   return (
     <ScreenContainer>
@@ -63,9 +65,14 @@ export default function ProductsScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>날씨 기반 추천</Text>
-        {weatherBased.length > 0 ? (
+        {!filteredWeatherProducts ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator color={colors.sage} />
+            <Text style={styles.emptyText}>오늘 날씨를 분석해서 제품을 고르고 있어요…</Text>
+          </View>
+        ) : filteredWeatherProducts.length > 0 ? (
           <View style={styles.list}>
-            {weatherBased.map((p) => (
+            {filteredWeatherProducts.map((p) => (
               <Card key={p.id} style={styles.card}>
                 <View style={styles.cardHeader}>
                   <View style={styles.thumb} />
@@ -80,11 +87,7 @@ export default function ProductsScreen() {
                     <IngredientChip key={tag} label={tag} />
                   ))}
                 </View>
-                {p.recommendationId && (
-                  <Pressable onPress={() => router.push(`/recommendation/${p.recommendationId}`)}>
-                    <Text style={styles.link}>왜 추천됐나요? →</Text>
-                  </Pressable>
-                )}
+                {p.reason && <Text style={styles.reason}>{p.reason}</Text>}
               </Card>
             ))}
           </View>
@@ -123,6 +126,7 @@ const styles = StyleSheet.create({
   section: { gap: spacing.sm },
   sectionTitle: { ...typography.headline, color: colors.textPrimary },
   emptyText: { ...typography.bodySm, color: colors.textTertiary },
+  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   list: { gap: spacing.md },
   card: { gap: spacing.sm },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
@@ -130,5 +134,5 @@ const styles = StyleSheet.create({
   brand: { ...typography.caption, color: colors.textTertiary },
   name: { ...typography.subtitle, color: colors.textPrimary },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
-  link: { ...typography.bodySm, color: colors.sageDark, fontWeight: '600' },
+  reason: { ...typography.bodySm, color: colors.textSecondary },
 });

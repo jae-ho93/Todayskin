@@ -155,6 +155,13 @@ export const api = {
       category ? `/products?category=${category}` : '/products',
       category ? mockProducts.filter((p) => p.category === category) : mockProducts,
     ),
+  // 날씨 기반(A등급) 제품 추천: 오늘 날씨/대기질만으로 카테고리별 화장품을 Gemini에게 하나씩 추천받는다
+  generateWeatherProducts: (weather: WeatherSnapshot) =>
+    safePostJson<Product[]>(
+      '/products/weather-based',
+      weather,
+      mockProducts.filter((p) => p.matchedGrade === 'A'),
+    ),
   signup: (payload: SignupRequest) => postJson<User>('/auth/signup', payload),
   login: (phoneNumber: string) => postJson<User>('/auth/login', { phoneNumber }),
   // 서버 토큰 무효화는 최선 노력만 하고, 실패해도 로컬 세션 정리는 항상 진행되도록 에러를 삼킨다
