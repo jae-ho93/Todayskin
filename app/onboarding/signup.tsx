@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../../src/api/client';
 import { saveSession } from '../../src/lib/session';
 import { colors, radius, spacing, typography } from '../../src/theme';
+import type { Gender } from '../../src/types';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -70,6 +71,7 @@ export default function SignupScreen() {
   const [name, setName] = useState('');
   const [phoneDigits, setPhoneDigits] = useState('');
   const [birthDateDigits, setBirthDateDigits] = useState('');
+  const [gender, setGender] = useState<Gender | null>(null); // 선택 입력이라 폼 유효성엔 영향 없음
   const [focusedField, setFocusedField] = useState<Field | null>('name');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -120,6 +122,7 @@ export default function SignupScreen() {
         phoneNumber: phoneDigits,
         name: trimmedName,
         birthDate: toIsoDate(birthDateDigits),
+        gender: gender ?? undefined,
       });
       await saveSession(user);
       router.replace('/(tabs)');
@@ -214,6 +217,33 @@ export default function SignupScreen() {
             </View>
           )}
 
+          {step >= 2 && (
+            <View style={styles.field}>
+              <Text style={styles.label}>성별 (선택)</Text>
+              <View style={styles.genderRow}>
+                {(
+                  [
+                    { value: 'female' as const, label: '여성' },
+                    { value: 'male' as const, label: '남성' },
+                  ]
+                ).map((option) => {
+                  const selected = gender === option.value;
+                  return (
+                    <Pressable
+                      key={option.value}
+                      onPress={() => setGender(selected ? null : option.value)}
+                      style={[styles.genderPill, selected && styles.genderPillSelected]}
+                    >
+                      <Text style={[styles.genderPillText, selected && styles.genderPillTextSelected]}>
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+
           {error && <Text style={styles.error}>{error}</Text>}
         </ScrollView>
 
@@ -264,6 +294,21 @@ const styles = StyleSheet.create({
   inputFocused: {
     borderBottomColor: colors.sage,
   },
+  genderRow: { flexDirection: 'row', gap: spacing.sm },
+  genderPill: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderColor: colors.border,
+  },
+  genderPillSelected: {
+    borderColor: colors.sage,
+    backgroundColor: colors.sageLight,
+  },
+  genderPillText: { ...typography.subtitle, color: colors.textSecondary },
+  genderPillTextSelected: { color: colors.sageDark, fontWeight: '700' },
   nextButton: { alignSelf: 'flex-end', paddingVertical: spacing.sm },
   nextButtonText: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },
   nextButtonTextDisabled: { color: colors.gray300 },

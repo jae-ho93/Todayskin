@@ -96,10 +96,13 @@ export interface HistoryEntry {
   thumbnailUri?: string;
 }
 
+export type Gender = 'male' | 'female';
+
 export interface SignupRequest {
   phoneNumber: string;
   name: string;
   birthDate: string; // "YYYY-MM-DD"
+  gender?: Gender; // 선택 입력. 추후 피부 측정/추천 모델의 조건 변수로 활용 예정
 }
 
 export interface User {
@@ -107,6 +110,7 @@ export interface User {
   phoneNumber: string;
   name: string;
   birthDate: string; // "YYYY-MM-DD"
+  gender?: Gender;
   createdAt: string;
   accessToken: string;
 }
