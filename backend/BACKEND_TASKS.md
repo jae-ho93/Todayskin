@@ -189,15 +189,15 @@ GitHub branch protection/ruleset은 현재 비공개 저장소 플랜에서 지�
 
 브랜치: `feature/prisma-postgres-schema`
 
-- [ ] PostgreSQL 로컬 실행 방식 결정
-- [ ] `DATABASE_URL` 연결 및 `PrismaService` 구현
-- [ ] `schema.prisma`, migration, `prisma/seed.ts` 작성
-- [ ] 제품·추천 템플릿 seed를 upsert로 구현
-- [ ] 개발/테스트/운영 DB 분리
-- [ ] NestJS 시작 시 자동 `create_all` 사용 금지
-- [ ] 기존 SQLite 데이터 보존 및 중복 데이터 처리 정책 결정
-- [ ] `User.gender` nullable enum(`male`, `female`) 반영
-- [ ] `WeatherSnapshot`에 UV peak와 측정 불가 상태 반영
+- [x] PostgreSQL 로컬 실행 방식 결정
+- [x] `DATABASE_URL` 연결 및 `PrismaService` 구현
+- [x] `schema.prisma`, migration, `prisma/seed.ts` 작성
+- [x] 제품·추천 템플릿 seed를 upsert로 구현
+- [x] 개발/테스트/운영 DB 분리
+- [x] NestJS 시작 시 자동 `create_all` 사용 금지
+- [x] 기존 SQLite 데이터 보존 및 중복 데이터 처리 정책 결정
+- [x] `User.gender` nullable enum(`male`, `female`) 반영
+- [x] `WeatherSnapshot`에 UV peak와 측정 불가 상태 반영
 - [ ] 날씨 기반 생성 제품의 `reason`, `timing` 저장 여부 결정
 
 초기 모델:
