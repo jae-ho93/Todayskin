@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   Logger,
   NotFoundException,
@@ -13,6 +14,7 @@ import {
   RecommendationTemplate,
   Recommendation as RecommendationModel,
 } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 
 /**
  * LLM이 만들어내지 않는, 서버가 통제하는 정직한 출처 표기 (허위 인용 방지).
@@ -67,8 +69,18 @@ export class RecommendationService {
    */
   async generate(
     userId: number,
-    payload: { diagnosisId?: string; skinScore?: Record<string, unknown>; weather?: Record<string, unknown> },
+    payload: {
+      diagnosisId?: string;
+      skinScore?: Record<string, unknown>;
+      weather?: object;
+    },
   ): Promise<RecommendationDto[]> {
+    if (!payload.diagnosisId && (!payload.skinScore || !payload.weather)) {
+      throw new BadRequestException(
+        'diagnosisId 또는 skinScore와 weather를 함께 보내야 합니다',
+      );
+    }
+
     let skinInput: Record<string, unknown>;
     let weatherInput: Record<string, unknown>;
     let diagnosisId: string | undefined = payload.diagnosisId;
@@ -110,7 +122,9 @@ export class RecommendationService {
       // 호환 — 기존 프론트가 skinScore+weather를 직접 보내는 경우.
       // diagnosisId가 없으면 진단 연결 없이 생성한다 (user에만 연결).
       skinInput = payload.skinScore ?? {};
-      weatherInput = payload.weather ?? {};
+      weatherInput = payload.weather
+        ? { ...(payload.weather as Record<string, unknown>) }
+        : {};
     }
 
     // 동일 진단에 대한 중복 생성 방지.
@@ -139,31 +153,49 @@ export class RecommendationService {
       throw e;
     }
 
-    // 서버가 grade=B, sourceLabel을 고정한다.
-    const results: RecommendationDto[] = [];
-    for (const item of items) {
+    // 서버가 grade=B, sourceLabel을 고정한다. 모든 row를 먼저 구성한 뒤
+    // 하나의 transaction에서 일괄 저장한다. 기존 구현처럼 item별 create를
+    // 순차 실행하면 중간 DB 오류 때 추천이 일부만 남을 수 있다.
+    const createdAt = new Date();
+    const data = items.map((item) => {
       const id = `gemini-${this.shortId()}`;
       const timing = (item.timing as RecommendationTiming | null) ?? null;
+      return {
+        id,
+        userId,
+        diagnosisId: diagnosisId ?? null,
+        title: item.title,
+        grade: EvidenceGrade.B,
+        sourceLabel: B_GRADE_SOURCE_LABEL,
+        explanation: item.explanation,
+        observationalNote: null,
+        ingredientTags: item.ingredientTags,
+        timing,
+      };
+    });
 
-      const created = await this.prisma.recommendation.create({
-        data: {
-          id,
-          userId,
-          diagnosisId: diagnosisId ?? null,
-          title: item.title,
-          grade: EvidenceGrade.B,
-          sourceLabel: B_GRADE_SOURCE_LABEL,
-          explanation: item.explanation,
-          observationalNote: null,
-          ingredientTags: item.ingredientTags,
-          timing,
-        },
-      });
+    const persisted = await this.prisma.$transaction(async (tx) => {
+      // 같은 진단에 대한 동시 요청은 DB advisory lock으로 직렬화한다.
+      // lock은 transaction 종료 시 자동 해제되므로 별도 unlock 누락이 없다.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`todayskin:recommendation:${diagnosisId ?? `user:${userId}`}`}))`;
 
-      results.push(this.modelToDto(created));
-    }
+      // 첫 조회와 Gemini 호출 사이에 다른 요청이 저장했을 수 있으므로
+      // lock을 획득한 뒤 반드시 다시 확인한다.
+      if (diagnosisId) {
+        const existing = await tx.recommendation.findMany({
+          where: { diagnosisId, userId },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (existing.length > 0) return existing;
+      }
 
-    return results;
+      await tx.recommendation.createMany({ data });
+      // 응답에 필요한 값은 모두 서버가 생성한 data에 있으므로 저장 직후
+      // 같은 row를 다시 조회하는 불필요한 DB round-trip을 만들지 않는다.
+      return data.map((row) => ({ ...row, createdAt }));
+    });
+
+    return persisted.map((r) => this.modelToDto(r as RecommendationModel));
   }
 
   /**
@@ -275,6 +307,6 @@ export class RecommendationService {
   }
 
   private shortId(): string {
-    return Math.random().toString(16).slice(2, 10) + Date.now().toString(16).slice(-4);
+    return randomUUID().replace(/-/g, '').slice(0, 20);
   }
 }

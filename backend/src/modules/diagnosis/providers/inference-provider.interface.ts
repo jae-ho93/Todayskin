@@ -59,3 +59,16 @@ export interface InferenceImages {
  * @Inject(INFERENCE_PROVIDER)로 주입한다.
  */
 export const INFERENCE_PROVIDER = Symbol('INFERENCE_PROVIDER');
+
+/**
+ * 실제 추론 서버가 연결되지 않은 환경에서 사용하는 fail-closed provider.
+ *
+ * Mock 결과를 실제 진단 결과처럼 반환하면 사용자는 잘못된 피부 정보를
+ * 받게 되므로, mock이 명시적으로 켜지지 않은 경우에는 항상 호출을 실패시킨다.
+ */
+export class InferenceUnavailable extends Error {
+  constructor(message = 'Inference provider is not configured') {
+    super(message);
+    this.name = 'InferenceUnavailable';
+  }
+}

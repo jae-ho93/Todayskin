@@ -2,7 +2,7 @@
 
 FastAPI 기반 백엔드를 NestJS + TypeScript + PostgreSQL(Prisma) + Redis 구조로 전환하는 작업의 진행 중입니다.
 
-현재 단계: **T13 — 테스트와 API 계약 (완료)**
+현재 단계: **T14 — 전체 구조 정리 및 검증**
 
 ## 실행
 
@@ -47,7 +47,7 @@ docker compose down -v      # 정지 + 데이터 삭제 (init 스크립트 재�
 | `npm run start:prod` | `dist/main.js` 실행 |
 | `npm test` | Jest 유닛 테스트 |
 | `npm run test:e2e` | Jest e2e 테스트 |
-| `npm run lint` | ESLint 실행 및 자동 수정 |
+| `npm run lint` | ESLint 검사 (소스 수정 없음) |
 | `npm run prisma:generate` | Prisma Client 생성 |
 | `npm run prisma:migrate` | 마이그레이션 생성·적용 (`migrate dev`) |
 | `npm run prisma:seed` | seed 데이터 실행 (upsert, idempotent) |

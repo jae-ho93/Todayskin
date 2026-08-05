@@ -41,12 +41,17 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
     try {
       this.client = new Redis(url, {
-        maxRetriesPerRequest: 2,
+        maxRetriesPerRequest: 1,
+        enableOfflineQueue: false,
         enableReadyCheck: true,
         lazyConnect: false,
+        connectTimeout: 2_000,
+        commandTimeout: 2_000,
+        retryStrategy: (times) => Math.min(times * 500, 5_000),
       });
 
       this.client.on('error', (err: Error) => {
+        this.available = false;
         this.logger.warn(`Redis error: ${err.name} — 캐시 fallback 모드`);
       });
 
@@ -54,10 +59,30 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         this.logger.log('Redis connected');
       });
 
-      await this.client.ping().catch(() => {
-        this.logger.warn('Redis ping 실패 — 캐시 fallback 모드로 시작');
+      this.client.on('ready', () => {
+        this.available = true;
+        this.logger.log('Redis ready');
       });
-      this.available = true;
+
+      this.client.on('close', () => {
+        this.available = false;
+        this.logger.warn('Redis connection closed — 캐시 fallback 모드');
+      });
+
+      this.client.on('end', () => {
+        this.available = false;
+        this.logger.warn('Redis reconnect ended — 캐시 fallback 모드');
+      });
+
+      try {
+        await this.client.ping();
+        this.available = this.client.status === 'ready';
+      } catch (e) {
+        this.available = false;
+        this.logger.warn(
+          `Redis ping 실패: ${errorName(e)} — 캐시 fallback 모드로 시작`,
+        );
+      }
     } catch (e) {
       this.logger.warn(`Redis 연결 실패: ${errorName(e)} — 캐시 비활성화`);
       this.client = null;
@@ -66,14 +91,21 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    if (this.client) {
-      await this.client.quit().catch(() => undefined);
+    const client = this.client;
+    this.available = false;
+    this.client = null;
+    if (client) {
+      if (client.status === 'ready') {
+        await client.quit().catch(() => undefined);
+      } else {
+        client.disconnect();
+      }
       this.logger.log('Redis disconnected');
     }
   }
 
   isAvailable(): boolean {
-    return this.available && this.client !== null;
+    return this.available && this.client?.status === 'ready';
   }
 
   get weatherTtl(): number {
@@ -91,6 +123,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       if (!raw) return null;
       return JSON.parse(raw) as T;
     } catch (e) {
+      this.available = false;
       this.logger.debug(`Redis get 실패: ${errorName(e)} — 캐시 miss 처리`);
       return null;
     }
@@ -108,6 +141,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       await this.client.set(key, raw, 'EX', ttl);
       return true;
     } catch (e) {
+      this.available = false;
       this.logger.debug(`Redis set 실패: ${errorName(e)} — 캐시 저장 생략`);
       return false;
     }
@@ -120,6 +154,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       await this.client.del(key);
       return true;
     } catch (e) {
+      this.available = false;
       this.logger.debug(`Redis del 실패: ${errorName(e)}`);
       return false;
     }
@@ -147,6 +182,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       } while (cursor !== '0');
       return count;
     } catch (e) {
+      this.available = false;
       this.logger.debug(`Redis invalidatePattern 실패: ${errorName(e)}`);
       return 0;
     }

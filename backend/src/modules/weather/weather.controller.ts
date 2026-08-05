@@ -1,5 +1,5 @@
 
-import { Controller, Get, Query } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
 import { ApiOperation, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { IsNumber, IsOptional, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -46,6 +46,9 @@ export class WeatherController {
   async getCurrentWeather(
     @Query() query: WeatherQueryDto,
   ): Promise<WeatherSnapshotDto> {
+    if ((query.lat === undefined) !== (query.lon === undefined)) {
+      throw new BadRequestException('lat과 lon은 함께 보내야 합니다');
+    }
     return this.weatherService.getCurrentWeather(query.lat, query.lon);
   }
 }

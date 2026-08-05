@@ -26,6 +26,10 @@ describe('RolesGuard', () => {
   it('Roles 메타데이터가 없으면 모든 요청 통과', () => {
     reflector.getAllAndOverride.mockReturnValue(undefined);
     expect(guard.canActivate(ctx({ sub: 1, role: Role.USER }))).toBe(true);
+    expect(reflector.getAllAndOverride).toHaveBeenCalledWith(
+      'roles',
+      expect.arrayContaining([expect.any(Function), expect.any(Function)]),
+    );
   });
 
   it('USER가 USER 권한 API에 접근 시 통과', () => {

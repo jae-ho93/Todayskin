@@ -17,7 +17,7 @@ import { HistoryEntryDto } from './dto/history-entry.dto';
 import { SubmitDiagnosisQueryDto } from './dto/submit-diagnosis-query.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { JwtPayload } from '../../common/strategies/jwt.strategy';
+import type { JwtPayload } from '../../common/strategies/jwt.strategy';
 import { InferenceImage } from './providers/inference-provider.interface';
 import { memoryStorage } from 'multer';
 
@@ -61,7 +61,7 @@ export class DiagnosisController {
     FileFieldsInterceptor(DIAGNOSIS_FILE_FIELDS, {
       storage: memoryStorage(),
       // 파일 크기 상한은 서비스에서도 재검증하지만, multer 단에서도 막아 과도한 메모리 사용을 방지한다.
-      limits: { fileSize: 10 * 1024 * 1024 },
+      limits: { fileSize: 10 * 1024 * 1024, files: 3, parts: 6 },
     }),
   )
   @HttpCode(201)
@@ -77,6 +77,9 @@ export class DiagnosisController {
     const right = files?.right?.[0];
     if (!front || !left || !right) {
       throw new BadRequestException('정면(front), 좌(left), 우(right) 이미지 3장이 모두 필요합니다');
+    }
+    if ((query.lat === undefined) !== (query.lon === undefined)) {
+      throw new BadRequestException('lat과 lon은 함께 보내야 합니다');
     }
 
     const images = {

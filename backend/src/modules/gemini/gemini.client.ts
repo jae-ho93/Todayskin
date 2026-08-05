@@ -95,6 +95,40 @@ interface SkinInput {
   [key: string]: unknown;
 }
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function isGeneratedRecommendation(value: unknown): value is GeneratedRecommendation {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Record<string, unknown>;
+  return (
+    isNonEmptyString(item.title) &&
+    isNonEmptyString(item.explanation) &&
+    isStringArray(item.ingredientTags) &&
+    (item.timing === null ||
+      (typeof item.timing === 'string' &&
+        (RECOMMENDATION_TIMINGS as readonly string[]).includes(item.timing)))
+  );
+}
+
+function isGeneratedWeatherProduct(value: unknown): value is GeneratedWeatherProduct {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Record<string, unknown>;
+  return (
+    isNonEmptyString(item.timing) &&
+    isNonEmptyString(item.category) &&
+    isNonEmptyString(item.name) &&
+    isNonEmptyString(item.brand) &&
+    isNonEmptyString(item.explanation) &&
+    isStringArray(item.ingredientTags)
+  );
+}
+
 const SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 근거 기반 추천 작성자입니다.
 사용자의 오늘 피부 측정값과 오늘의 날씨/대기질 데이터를 함께 보고, 확립된 피부과학 지식
 (자외선-광노화, 오존/미세먼지로 인한 산화 스트레스와 콜라겐 분해, 습도 저하와 피부장벽 손상 등)에
@@ -168,7 +202,14 @@ export class GeminiClient {
       this.configService.get<string>('MOCK_GEMINI') ??
       process.env.MOCK_GEMINI ??
       'false';
-    this.mockEnabled = mockFlag === 'true';
+    const nodeEnv =
+      this.configService.get<string>('NODE_ENV') ?? process.env.NODE_ENV;
+    this.mockEnabled = mockFlag === 'true' && nodeEnv !== 'production';
+    if (mockFlag === 'true' && nodeEnv === 'production') {
+      this.logger.error(
+        'production 환경에서는 MOCK_GEMINI를 사용할 수 없습니다. 실제 Gemini 호출 또는 503 응답만 허용합니다.',
+      );
+    }
   }
 
   /**
@@ -213,7 +254,14 @@ export class GeminiClient {
       },
     };
 
-    const items = await this.callGemini<GeneratedRecommendation[]>(payload);
+    const rawItems = await this.callGemini<unknown>(payload);
+    if (!Array.isArray(rawItems) || rawItems.length === 0) {
+      throw new GeminiUnavailable('Gemini returned no recommendation items');
+    }
+    const items = rawItems.filter(isGeneratedRecommendation);
+    if (items.length !== rawItems.length || items.length === 0) {
+      throw new GeminiUnavailable('Gemini returned an invalid recommendation shape');
+    }
 
     // 화이트리스트 강제 필터링
     for (const item of items) {
@@ -265,7 +313,14 @@ export class GeminiClient {
       },
     };
 
-    const items = await this.callGemini<GeneratedWeatherProduct[]>(payload);
+    const rawItems = await this.callGemini<unknown>(payload);
+    if (!Array.isArray(rawItems)) {
+      throw new GeminiUnavailable('Gemini returned an invalid product list');
+    }
+    const items = rawItems.filter(isGeneratedWeatherProduct);
+    if (items.length !== rawItems.length) {
+      throw new GeminiUnavailable('Gemini returned an invalid product shape');
+    }
 
     // timing별 정확히 1개만 남기고, category/성분 화이트리스트 검증
     const seenTimings = new Set<string>();
@@ -287,8 +342,10 @@ export class GeminiClient {
       results.push(item);
     }
 
-    if (results.length === 0) {
-      throw new GeminiUnavailable('Gemini returned no usable product recommendations');
+    if (results.length !== PRODUCT_TIMINGS.length) {
+      throw new GeminiUnavailable(
+        'Gemini returned an incomplete product recommendation set',
+      );
     }
 
     // 의료적 확정 표현 사후 검증 — 위반 시 가짜 제품으로 대체하지 않고 503.

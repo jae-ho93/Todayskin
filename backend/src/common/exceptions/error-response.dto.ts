@@ -15,4 +15,7 @@ export class ErrorResponseDto {
 
   @ApiProperty({ example: '/auth/signup' })
   path!: string;
+
+  @ApiProperty({ example: 'phoneNumber은 필수입니다' })
+  detail!: string | string[];
 }

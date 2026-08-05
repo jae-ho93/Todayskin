@@ -9,17 +9,18 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
-  InferenceProvider,
   InferenceImage,
   InferenceImages,
   InferredPartMetric,
   INFERENCE_PROVIDER,
 } from './providers/inference-provider.interface';
+import type { InferenceProvider } from './providers/inference-provider.interface';
 import { WeatherService } from '../weather/weather.service';
 import { SkinScoreSnapshotDto } from './dto/skin-score-snapshot.dto';
 import { HistoryEntryDto } from './dto/history-entry.dto';
 import { SkinPartMetricDto } from './dto/skin-part-metric.dto';
 import { Diagnosis, SkinMetric } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 
 /**
  * 허용 MIME 집합. 이미지 파일이 아닌 업로드를 거부한다.
@@ -79,10 +80,11 @@ export class DiagnosisService {
   ) {}
 
   /**
-   * 진단 제출: 3장 이미지 검증 → 추론 → (선택) 날씨 스냅샷 확보 → transaction 저장.
+   * 진단 제출: 3장 이미지 검증 → 추론 → 날씨 스냅샷 확보 → transaction 저장.
    *
-   * 날씨 연결은 선택 사항. getOrCreateSnapshot 실패 또는 UNAVAILABLE(null)이면
-   * weatherSnapshotId를 null로 두고 진단을 완료한다(환경 데이터 부재가 진단을 막지 않는다).
+   * 좌표가 없으면 WeatherService가 기본 지역을 사용한다. getOrCreateSnapshot 실패
+   * 또는 UNAVAILABLE(null)이면 weatherSnapshotId를 null로 두고 진단을 완료한다
+   * (환경 데이터 부재가 진단을 막지 않는다).
    * 단, InferenceProvider 실패는 진단 자체를 실패시킨다(503).
    */
   async submit(
@@ -112,15 +114,17 @@ export class DiagnosisService {
     // 4. 추론 결과 범위 검증.
     this.validateInference(inference.overallScore, inference.parts);
 
-    // 5. (선택) 날씨 스냅샷 확보. 실패해도 진단은 진행한다.
+    // 5. 날씨 스냅샷 확보. 좌표가 없으면 WeatherService가 기본 지역으로 조회한다.
+    // 실패해도 진단 자체는 진행한다.
     let weatherSnapshotId: string | null = null;
-    if (opts?.lat !== undefined && opts?.lon !== undefined) {
-      try {
-        const snapshot = await this.weatherService.getOrCreateSnapshot(opts.lat, opts.lon);
-        weatherSnapshotId = snapshot?.id ?? null;
-      } catch (e) {
-        this.logger.warn(`Weather snapshot unavailable, continuing without: ${errorName(e)}`);
-      }
+    try {
+      const snapshot = await this.weatherService.getOrCreateSnapshot(
+        opts?.lat,
+        opts?.lon,
+      );
+      weatherSnapshotId = snapshot?.id ?? null;
+    } catch (e) {
+      this.logger.warn(`Weather snapshot unavailable, continuing without: ${errorName(e)}`);
     }
 
     // 6. transaction 저장 — Diagnosis + SkinMetric을 원자적으로 기록.
@@ -128,6 +132,30 @@ export class DiagnosisService {
     const capturedAt = new Date();
 
     const diagnosis = await this.prisma.$transaction(async (tx) => {
+      // 사전 조회(guardDuplicate)와 저장 사이의 경쟁 조건을 닫는다.
+      // PostgreSQL transaction advisory lock은 사용자별로 짧게 유지되고
+      // transaction 종료 시 자동 해제된다.
+      if (typeof tx.$executeRaw === 'function') {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`todayskin:diagnosis:${userId}`}))`;
+      }
+
+      const recent = await tx.diagnosis.findFirst({
+        where: {
+          userId,
+          createdAt: {
+            gte: new Date(
+              Date.now() - DiagnosisService.DEDUP_WINDOW_SECONDS * 1000,
+            ),
+          },
+        },
+        select: { id: true },
+      });
+      if (recent) {
+        throw new BadRequestException(
+          '최근 진단 제출이 처리 중입니다. 잠시 후 다시 시도해주세요.',
+        );
+      }
+
       const created = await tx.diagnosis.create({
         data: {
           id: diagnosisId,
@@ -231,10 +259,16 @@ export class DiagnosisService {
         `${field} 이미지 형식이 지원되지 않습니다 (jpeg, png, webp만 가능)`,
       );
     }
-    if (img.size > MAX_FILE_BYTES) {
+    if (img.size > MAX_FILE_BYTES || img.buffer.length > MAX_FILE_BYTES) {
       throw new BadRequestException(
         `${field} 이미지가 너무 큽니다 (최대 10MB)`,
       );
+    }
+    if (img.size !== img.buffer.length) {
+      throw new BadRequestException(`${field} 이미지 크기 정보가 올바르지 않습니다`);
+    }
+    if (!hasImageSignature(img.buffer, img.mimetype)) {
+      throw new BadRequestException(`${field} 이미지 내용이 MIME 형식과 일치하지 않습니다`);
     }
   }
 
@@ -339,7 +373,20 @@ export class DiagnosisService {
 }
 
 function shortId(): string {
-  return Math.random().toString(16).slice(2, 10) + Date.now().toString(16).slice(-4);
+  return randomUUID().replace(/-/g, '').slice(0, 20);
+}
+
+function hasImageSignature(buffer: Buffer, mimetype: string): boolean {
+  if (mimetype === 'image/jpeg') {
+    return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  }
+  if (mimetype === 'image/png') {
+    return buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  }
+  if (mimetype === 'image/webp') {
+    return buffer.length >= 12 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP';
+  }
+  return false;
 }
 
 function errorName(e: unknown): string {

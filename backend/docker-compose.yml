@@ -40,7 +40,9 @@ services:
     # 운영에서는 requirepass로 인증 필수. 개발용은 비인증.
     # command: redis-server --requirepass yourpassword
 
-  # T14: NestJS 백엔드. 빌드된 이미지로 DB/Redis와 통합 환경을 구성한다.
+  # T14: NestJS 백엔드. 로컬 통합 환경은 development 모드로 실행해
+  # MOCK_GEMINI/INFERENCE를 안전하게 사용할 수 있게 한다. 운영은 이 compose의
+  # 임시 mock 설정을 재사용하지 말고 별도 secret/config를 주입한다.
   backend:
     profiles: ["backend"]
     build:
@@ -54,7 +56,7 @@ services:
       redis:
         condition: service_healthy
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       PORT: "3000"
       ALLOWED_ORIGINS: http://localhost:8081
       DATABASE_URL: postgresql://todayskin:secret@postgres:5432/todayskin_dev

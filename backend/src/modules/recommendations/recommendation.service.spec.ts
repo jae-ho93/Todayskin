@@ -28,11 +28,12 @@ describe('RecommendationService', () => {
       recommendation: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
-        create: jest.fn(),
+        createMany: jest.fn(),
       },
       diagnosis: {
         findUnique: jest.fn(),
       },
+      $transaction: jest.fn(),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -44,6 +45,13 @@ describe('RecommendationService', () => {
     }).compile();
 
     service = moduleRef.get(RecommendationService);
+    prisma.$transaction.mockImplementation(
+      async (callback: (tx: Record<string, unknown>) => unknown) =>
+        callback({
+          ...prisma,
+          $executeRaw: jest.fn().mockResolvedValue(1),
+        }),
+    );
   });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -90,15 +98,6 @@ describe('RecommendationService', () => {
           timing: '외출 후',
         },
       ]);
-      prisma.recommendation.create.mockResolvedValue({
- id: 'gemini-1', userId: 1, diagnosisId: null,
-        title: '이중 세안 권장', grade: 'B',
-        sourceLabel: 'AI 종합 분석 · 피부과학 일반 지식 기반',
-        explanation: 'PM2.5로 인해 이중 세안이 도움될 수 있어요.',
-        observationalNote: null,
-        ingredientTags: ['세라마이드', '약산성 클렌저'],
-        timing: '외출 후', createdAt: new Date(),
-      });
 
       const result = await service.generate(1, {
         skinScore: { id: 'snap-1', overallScore: 70 },
@@ -108,7 +107,7 @@ describe('RecommendationService', () => {
       expect(result).toHaveLength(1);
       expect(result[0].grade).toBe(EvidenceGrade.B);
       expect(result[0].timing).toBe('외출 후');
-      expect(prisma.recommendation.create).toHaveBeenCalledTimes(1);
+      expect(prisma.recommendation.createMany).toHaveBeenCalledTimes(1);
     });
 
     it('Gemini 실패 시 503 ServiceUnavailable', async () => {
@@ -145,13 +144,6 @@ describe('RecommendationService', () => {
       geminiClient.generateRecommendations.mockResolvedValue([
         { title: 'T', explanation: 'E', ingredientTags: [], timing: null },
       ]);
-      prisma.recommendation.create.mockResolvedValue({
-        id: 'gemini-1', userId: 1, diagnosisId: 'diag-1',
-        title: 'T', grade: 'B',
-        sourceLabel: 'AI 종합 분석 · 피부과학 일반 지식 기반',
-        explanation: 'E', observationalNote: null,
-        ingredientTags: [], timing: null, createdAt: new Date(),
-      });
 
       const result = await service.generate(1, { diagnosisId: 'diag-1' });
       expect(result).toHaveLength(1);
@@ -196,7 +188,7 @@ describe('RecommendationService', () => {
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe('gemini-old');
       expect(geminiClient.generateRecommendations).not.toHaveBeenCalled();
-      expect(prisma.recommendation.create).not.toHaveBeenCalled();
+      expect(prisma.recommendation.createMany).not.toHaveBeenCalled();
     });
   });
 

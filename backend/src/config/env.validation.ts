@@ -3,8 +3,8 @@ import * as Joi from 'joi';
 /**
  * 환경변수 검증 스키마.
  * T2 단계: DATABASE_URL은 test 환경을 제외하고 required.
- * REDIS_URL은 T12(날씨 캐시)에서 required로 전환 예정.
- * JWT secret은 T3에서 required로 전환 예정.
+ * REDIS_URL은 캐시 장애 시에도 애플리케이션이 동작하도록 선택 사항이다.
+ * JWT secret은 test 환경을 제외하고 required다.
  */
 export const envValidationSchema = Joi.object({
   NODE_ENV: Joi.string()

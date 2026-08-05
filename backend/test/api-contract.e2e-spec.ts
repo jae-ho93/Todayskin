@@ -35,8 +35,11 @@ describe('API Response Contract (e2e)', () => {
     process.env.JWT_ACCESS_SECRET = 'e2e_access_secret_at_least_32_characters_long';
     process.env.JWT_REFRESH_SECRET = 'e2e_refresh_secret_at_least_32_characters_long';
     process.env.ALLOWED_ORIGINS = '';
-    // 추천 503 테스트를 위해 Gemini mock 비활성화 + 키 없음
-    // (개별 테스트에서 override)
+    // 다른 e2e suite가 같은 Jest worker에서 먼저 실행될 수 있으므로
+    // 환경변수를 명시적으로 초기화한다. 테스트 순서에 의존하면
+    // recommendation-product의 MOCK_GEMINI=true가 이 suite로 누수된다.
+    process.env.MOCK_GEMINI = 'false';
+    delete process.env.GEMINI_API_KEY;
 
     const moduleRef: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -78,6 +81,8 @@ describe('API Response Contract (e2e)', () => {
     });
     await prisma.user.deleteMany({ where: { phoneNumber: testPhone } });
     await app.close();
+    delete process.env.MOCK_GEMINI;
+    delete process.env.GEMINI_API_KEY;
   });
 
   describe('날씨 지표 undefined (측정 불가) 계약', () => {
