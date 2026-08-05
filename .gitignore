@@ -43,6 +43,8 @@ yarn-error.*
 .idea/
 .repowise/
 .codebase-memory/
+.ua/
+.understand-anything/
 
 # typescript
 *.tsbuildinfo
