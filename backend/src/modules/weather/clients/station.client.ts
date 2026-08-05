@@ -8,6 +8,16 @@ import { DEFAULT_REGION } from '../regions/region.registry';
 const NEARBY_STATION_ENDPOINT =
   'https://apis.data.go.kr/B552584/MsrstnInfoInqireSvc/getNearbyMsrstnList';
 
+/**
+ * EPSG:5181 — Korea 2000 / Central Belt (GRS80 중부원점).
+ * proj4 기본 defs에는 포함되지 않으므로 명시적으로 등록한다.
+ * 미등록 상태에서 변환을 호출하면 예외가 나며, 좌표 기반 /weather가 500으로 터진다.
+ */
+const EPSG_5181 =
+  '+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=500000 +ellps=GRS80 +units=m +no_defs';
+
+proj4.defs('EPSG:5181', EPSG_5181);
+
 export interface NearestStation {
   /** 대기질 실시간 조회에 쓰는 측정소명 (예: "중구") */
   stationName: string;
@@ -43,18 +53,19 @@ export class StationClient {
       return null;
     }
 
-    // WGS84(lon,lat 순서) → EPSG:5181 (TM 중부원점, x=lon, y=lat)
-    const [tmX, tmY] = proj4('EPSG:4326', 'EPSG:5181', [lon, lat]);
-
-    const params = new URLSearchParams({
-      serviceKey: this.apiKey,
-      returnType: 'json',
-      tmX: String(tmX),
-      tmY: String(tmY),
-      ver: '1.1',
-    });
-
     try {
+      // WGS84(lon,lat 순서) → EPSG:5181 (TM 중부원점, x=lon, y=lat)
+      // 변환 실패도 폴백 대상이므로 try 안에서 처리한다.
+      const [tmX, tmY] = proj4('EPSG:4326', 'EPSG:5181', [lon, lat]);
+
+      const params = new URLSearchParams({
+        serviceKey: this.apiKey,
+        returnType: 'json',
+        tmX: String(tmX),
+        tmY: String(tmY),
+        ver: '1.1',
+      });
+
       const url = `${NEARBY_STATION_ENDPOINT}?${params.toString()}`;
       const res = await fetchWithTimeout(url, this.timeoutMs);
       if (!res.ok) {
