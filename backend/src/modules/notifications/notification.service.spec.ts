@@ -16,7 +16,7 @@
    beforeEach(async () => {
      prisma = {
        notificationPreference: {
-         findUnique: jest.fn(),
+        findUnique: jest.fn(),
          upsert: jest.fn(),
        },
      };
@@ -65,11 +65,10 @@
    });
  
    describe('updatePreference', () => {
-     it('row가 없으면 기본값에서 시작해 전달된 필드만 갱신해 upsert로 1 row를 만든다', async () => {
-       prisma.notificationPreference.findUnique.mockResolvedValue(null);
-       prisma.notificationPreference.upsert.mockImplementation((args: any) =>
-         Promise.resolve({
-           userId: 1,
+    it('row가 없으면 기본값에서 시작해 전달된 필드만 갱신해 upsert로 1 row를 만든다', async () => {
+      prisma.notificationPreference.upsert.mockImplementation((args: any) =>
+        Promise.resolve({
+          userId: 1,
            ...args.create,
            updatedAt: new Date('2026-08-05T10:00:00.000Z'),
          }),
@@ -78,13 +77,10 @@
        const result = await service.updatePreference(1, { pushEnabled: true });
  
        expect(prisma.notificationPreference.upsert).toHaveBeenCalledWith({
-         where: { userId: 1 },
-         update: {
-           pushEnabled: true,
-           uvAlertEnabled: NOTIFICATION_DEFAULTS.uvAlertEnabled,
-           dustAlertEnabled: NOTIFICATION_DEFAULTS.dustAlertEnabled,
-           morningReminder: NOTIFICATION_DEFAULTS.morningReminder,
-         },
+        where: { userId: 1 },
+        update: {
+          pushEnabled: true,
+        },
          create: {
            userId: 1,
            pushEnabled: true,
@@ -96,34 +92,25 @@
        expect(result.pushEnabled).toBe(true);
      });
  
-     it('기존 row가 있으면 전달된 필드만 갱신한다', async () => {
-       const existing = {
-         userId: 1,
-         pushEnabled: false,
-         uvAlertEnabled: true,
-         dustAlertEnabled: true,
-         morningReminder: false,
-         updatedAt: new Date('2026-08-04T00:00:00.000Z'),
-       };
-       prisma.notificationPreference.findUnique.mockResolvedValue(existing);
-       prisma.notificationPreference.upsert.mockImplementation((args: any) =>
-         Promise.resolve({
-           ...args.update,
-           userId: 1,
-           updatedAt: new Date('2026-08-05T10:00:00.000Z'),
-         }),
+    it('기존 row가 있으면 전달된 필드만 갱신한다', async () => {
+      prisma.notificationPreference.upsert.mockImplementation((args: any) =>
+        Promise.resolve({
+          userId: 1,
+          pushEnabled: false,
+          uvAlertEnabled: true,
+          dustAlertEnabled: true,
+          morningReminder: args.update.morningReminder,
+          updatedAt: new Date('2026-08-05T10:00:00.000Z'),
+        }),
        );
  
        const result = await service.updatePreference(1, { morningReminder: true });
  
        expect(prisma.notificationPreference.upsert).toHaveBeenCalledWith({
-         where: { userId: 1 },
-         update: {
-           pushEnabled: false,
-           uvAlertEnabled: true,
-           dustAlertEnabled: true,
-           morningReminder: true,
-         },
+        where: { userId: 1 },
+        update: {
+          morningReminder: true,
+        },
          create: {
            userId: 1,
            pushEnabled: false,
@@ -136,30 +123,24 @@
        expect(result.pushEnabled).toBe(false);
      });
  
-     it('빈 DTO면 기존값을 그대로 유지한다', async () => {
-       const existing = {
-         userId: 1,
-         pushEnabled: true,
-         uvAlertEnabled: false,
-         dustAlertEnabled: false,
-         morningReminder: true,
-         updatedAt: new Date('2026-08-04T00:00:00.000Z'),
-       };
-       prisma.notificationPreference.findUnique.mockResolvedValue(existing);
-       prisma.notificationPreference.upsert.mockImplementation((args: any) =>
-         Promise.resolve({
-           ...args.update,
-           userId: 1,
-           updatedAt: new Date('2026-08-05T10:00:00.000Z'),
-         }),
+    it('빈 DTO면 기본값으로 신규 row를 만든다', async () => {
+      prisma.notificationPreference.upsert.mockImplementation(() =>
+        Promise.resolve({
+          userId: 1,
+          pushEnabled: NOTIFICATION_DEFAULTS.pushEnabled,
+          uvAlertEnabled: NOTIFICATION_DEFAULTS.uvAlertEnabled,
+          dustAlertEnabled: NOTIFICATION_DEFAULTS.dustAlertEnabled,
+          morningReminder: NOTIFICATION_DEFAULTS.morningReminder,
+          updatedAt: new Date('2026-08-05T10:00:00.000Z'),
+        }),
        );
  
        const result = await service.updatePreference(1, {});
  
-       expect(result.pushEnabled).toBe(true);
-       expect(result.uvAlertEnabled).toBe(false);
-       expect(result.dustAlertEnabled).toBe(false);
-       expect(result.morningReminder).toBe(true);
-     });
+      expect(result.pushEnabled).toBe(NOTIFICATION_DEFAULTS.pushEnabled);
+      expect(result.uvAlertEnabled).toBe(NOTIFICATION_DEFAULTS.uvAlertEnabled);
+      expect(result.dustAlertEnabled).toBe(NOTIFICATION_DEFAULTS.dustAlertEnabled);
+      expect(result.morningReminder).toBe(NOTIFICATION_DEFAULTS.morningReminder);
+    });
    });
  });

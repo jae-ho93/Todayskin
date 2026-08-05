@@ -9,6 +9,8 @@ import { ProductCategory } from './enums/product-category.enum';
 import { EvidenceGrade } from '../recommendations/enums/evidence-grade.enum';
 import { ProductDto, ProductTiming } from './dto/product.dto';
 import { Product } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
+import { WeatherInputDto } from '../weather/dto/weather-snapshot.dto';
 
 /**
  * ProductService — 제품 카탈로그 목록과 날씨 기반 제품 생성.
@@ -54,11 +56,11 @@ export class ProductService {
    * 현재는 프론트가 보낸 날씨를 Gemini 입력으로 사용한다(contract migration 전까지).
    */
   async generateWeatherBased(
-    weather: Record<string, unknown>,
+    weather: WeatherInputDto,
   ): Promise<ProductDto[]> {
     let items;
     try {
-      items = await this.geminiClient.generateWeatherProducts(weather);
+      items = await this.geminiClient.generateWeatherProducts({ ...weather });
     } catch (e) {
       if (e instanceof GeminiUnavailable) {
         throw new ServiceUnavailableException(
@@ -105,6 +107,6 @@ export class ProductService {
   }
 
   private shortId(): string {
-    return Math.random().toString(16).slice(2, 10) + Date.now().toString(16).slice(-4);
+    return randomUUID().replace(/-/g, '').slice(0, 20);
   }
 }

@@ -5,6 +5,7 @@ import { DiagnosisService } from './diagnosis.service';
 import {
   InferenceProvider,
   INFERENCE_PROVIDER,
+  InferenceUnavailable,
 } from './providers/inference-provider.interface';
 import { MockInferenceProvider } from './providers/mock-inference.provider';
 import { WeatherModule } from '../weather/weather.module';
@@ -13,10 +14,9 @@ import { WeatherModule } from '../weather/weather.module';
  * DiagnosisModule — T9.
  *
  * InferenceProvider는 환경 변수로 선택한다:
- *   - MOCK_INFERENCE=true (기본) → MockInferenceProvider (개발/통합 테스트용)
- *   - MOCK_INFERENCE=false → 현재는 실제 PythonInferenceProvider가 없으므로
- *     폴백으로 MockInferenceProvider를 반환하되 경고 로그를 남긴다.
- *     운영 환경에서 mock이 실제 추론처럼 보이지 않도록 T13 테스트가 이 계약을 검증한다.
+ *   - MOCK_INFERENCE=true (개발/통합 테스트용) → MockInferenceProvider
+ *   - 그 외 → 실제 provider가 준비되지 않았음을 나타내는 fail-closed provider
+ *     (진단 API는 503을 반환한다.)
  *   Python AI 서버가 준비되면 useFactory에 PythonInferenceProvider 분기를 추가한다.
  *
  * DiagnosisService는 PrismaService(PrismaModule 전역), WeatherService(WeatherModule),
@@ -31,16 +31,29 @@ import { WeatherModule } from '../weather/weather.module';
       inject: [ConfigService],
       useFactory: (config: ConfigService): InferenceProvider => {
         const logger = new Logger('DiagnosisModule');
-        const useMock =
-          config.get<string>('MOCK_INFERENCE', 'true') === 'true';
-        // Python AI 서버 준비 전까지는 두 분기 모두 mock을 반환한다.
-        // useMock === false인 경우는 운영 테스트(T13)가 503 계약을 검증하는 대상이다.
-        if (!useMock) {
+        const useMock = config.get<string>('MOCK_INFERENCE', 'false') === 'true';
+        const isProduction =
+          config.get<string>('NODE_ENV') === 'production' ||
+          process.env.NODE_ENV === 'production';
+
+        if (useMock && !isProduction) {
+          return new MockInferenceProvider();
+        }
+
+        if (useMock && isProduction) {
+          logger.error(
+            'production 환경에서는 MOCK_INFERENCE를 사용할 수 없습니다. 진단 API는 실제 provider가 연결될 때까지 503을 반환합니다.',
+          );
+        } else {
           logger.warn(
-            'MOCK_INFERENCE=false 이지만 실제 InferenceProvider가 아직 준비되지 않아 MockInferenceProvider로 폴백합니다. 운영에서는 PythonInferenceProvider 추가 후 이 폴백을 제거해야 합니다.',
+            '실제 InferenceProvider가 아직 연결되지 않았습니다. 진단 API는 provider가 준비될 때까지 503을 반환합니다.',
           );
         }
-        return new MockInferenceProvider();
+        return {
+          infer: async () => {
+            throw new InferenceUnavailable();
+          },
+        };
       },
     },
     DiagnosisService,

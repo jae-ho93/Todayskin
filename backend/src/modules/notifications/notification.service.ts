@@ -49,32 +49,33 @@
    * row가 없으면 기본값에서 시작해 upsert로 1 row를 보장한다.
    * userId에 unique 제약이 있으므로 중복 row가 생성되지 않는다.
    */
-   async updatePreference(
+  async updatePreference(
    userId: number,
    dto: UpdateNotificationPreferenceDto,
-   ): Promise<NotificationPreferenceDto> {
-     const current = await this.prisma.notificationPreference.findUnique({
-       where: { userId },
-     });
- 
-     // row가 없으면 기본값에서 시작. 전달된 필드만 덮어쓴다.
-     const base = current ?? {
-       userId,
-       ...NOTIFICATION_DEFAULTS,
-     };
- 
-     const next = {
-       pushEnabled: dto.pushEnabled ?? base.pushEnabled,
-       uvAlertEnabled: dto.uvAlertEnabled ?? base.uvAlertEnabled,
-       dustAlertEnabled: dto.dustAlertEnabled ?? base.dustAlertEnabled,
-       morningReminder: dto.morningReminder ?? base.morningReminder,
-     };
- 
-     const row = await this.prisma.notificationPreference.upsert({
-       where: { userId },
-       update: next,
-       create: { userId, ...next },
-     });
+  ): Promise<NotificationPreferenceDto> {
+    // update에는 전달된 필드만 넣고, create에만 기본값을 합친다. 먼저
+    // findUnique로 읽고 upsert하면 최초 동시 요청이 서로 같은 부재 상태를
+    // 읽을 수 있으므로, 단일 원자 upsert로 경쟁 창을 제거한다.
+    const update = {
+      ...(dto.pushEnabled !== undefined
+        ? { pushEnabled: dto.pushEnabled }
+        : {}),
+      ...(dto.uvAlertEnabled !== undefined
+        ? { uvAlertEnabled: dto.uvAlertEnabled }
+        : {}),
+      ...(dto.dustAlertEnabled !== undefined
+        ? { dustAlertEnabled: dto.dustAlertEnabled }
+        : {}),
+      ...(dto.morningReminder !== undefined
+        ? { morningReminder: dto.morningReminder }
+        : {}),
+    };
+
+    const row = await this.prisma.notificationPreference.upsert({
+      where: { userId },
+      update,
+      create: { userId, ...NOTIFICATION_DEFAULTS, ...update },
+    });
  
      this.logger.log(`알림 설정 갱신: userId=${userId}`);
      return this.toDto(row);

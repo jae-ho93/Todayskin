@@ -26,10 +26,13 @@ describe('DiagnosisService', () => {
   let weatherService: { getOrCreateSnapshot: jest.Mock };
   let prisma: Record<string, any>;
 
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0x00]);
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const webp = Buffer.from('RIFF0000WEBP', 'ascii');
   const validImages: InferenceImages = {
-    front: { buffer: Buffer.from('front'), mimetype: 'image/jpeg', size: 100 },
-    left: { buffer: Buffer.from('left'), mimetype: 'image/png', size: 100 },
-    right: { buffer: Buffer.from('right'), mimetype: 'image/webp', size: 100 },
+    front: { buffer: jpeg, mimetype: 'image/jpeg', size: jpeg.length },
+    left: { buffer: png, mimetype: 'image/png', size: png.length },
+    right: { buffer: webp, mimetype: 'image/webp', size: webp.length },
   };
 
   const validInference: InferenceResult = {
@@ -92,7 +95,11 @@ describe('DiagnosisService', () => {
           weatherSnapshotId: null,
         };
         const tx = {
-          diagnosis: { create: jest.fn().mockResolvedValue(created) },
+          diagnosis: {
+            findFirst: jest.fn().mockResolvedValue(null),
+            create: jest.fn().mockResolvedValue(created),
+          },
+          $executeRaw: jest.fn().mockResolvedValue(1),
           skinMetric: { createMany: jest.fn().mockResolvedValue({ count: 6 }) },
         };
         return cb(tx);
@@ -105,6 +112,10 @@ describe('DiagnosisService', () => {
       expect(result.overallScore).toBe(78);
       expect(result.parts).toHaveLength(6);
       expect(prisma.$transaction).toHaveBeenCalled();
+      expect(weatherService.getOrCreateSnapshot).toHaveBeenCalledWith(
+        undefined,
+        undefined,
+      );
     });
 
     it('빈 파일 거부', async () => {
@@ -121,6 +132,15 @@ describe('DiagnosisService', () => {
         front: { buffer: Buffer.from('x'), mimetype: 'image/gif', size: 10 },
       };
       await expect(service.submit(1, bad)).rejects.toThrow(BadRequestException);
+    });
+
+    it('MIME 헤더와 실제 파일 시그니처가 다르면 거부', async () => {
+      const bad = {
+        ...validImages,
+        front: { buffer: Buffer.from('not-a-jpeg'), mimetype: 'image/jpeg', size: 10 },
+      };
+      await expect(service.submit(1, bad)).rejects.toThrow(BadRequestException);
+      expect(inferenceProvider.infer).not.toHaveBeenCalled();
     });
 
     it('파일 크기 초과 거부 (10MB)', async () => {
@@ -190,11 +210,13 @@ describe('DiagnosisService', () => {
         };
         const tx = {
           diagnosis: {
+            findFirst: jest.fn().mockResolvedValue(null),
             create: jest.fn().mockImplementation((args: any) => {
               captured = args;
               return Promise.resolve(created);
             }),
           },
+          $executeRaw: jest.fn().mockResolvedValue(1),
           skinMetric: { createMany: jest.fn().mockResolvedValue({ count: 6 }) },
         };
         return cb(tx);

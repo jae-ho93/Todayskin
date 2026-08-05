@@ -4,7 +4,7 @@ import { PatternService } from './pattern.service';
 import { PatternSummaryDto } from './dto/pattern-summary.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { JwtPayload } from '../../common/strategies/jwt.strategy';
+import type { JwtPayload } from '../../common/strategies/jwt.strategy';
 
 /**
  * PatternController — 개인 패턴 분석 API (T10).

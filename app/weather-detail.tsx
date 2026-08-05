@@ -27,9 +27,9 @@ function MetricCard({
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
-  value: number | undefined;
+  value: number | null | undefined;
   unit: string;
-  status: AirStatus | undefined;
+  status: AirStatus | null | undefined;
   description: string;
   extra?: string;
 }) {
@@ -52,7 +52,7 @@ function MetricCard({
           </View>
         )}
       </View>
-      {value !== undefined ? (
+      {typeof value === 'number' ? (
         <View style={styles.metricValueRow}>
           <Text style={styles.metricValue}>{value}</Text>
           <Text style={styles.metricUnit}>{unit}</Text>
@@ -131,7 +131,11 @@ export default function WeatherDetailScreen() {
         value={weather.uvIndexPeak ?? weather.uvIndex}
         unit="지수"
         status={weather.uvStatusPeak ?? weather.uvStatus}
-        extra={weather.uvIndexPeakHour !== undefined ? `${weather.uvIndexPeakHour}시경 예상` : undefined}
+        extra={
+          typeof weather.uvIndexPeakHour === 'number'
+            ? `${weather.uvIndexPeakHour}시경 예상`
+            : undefined
+        }
         description="자외선은 피부 세포 신호전달체계에 영향을 줘서 광노화·색소침착을 유발할 수 있어요. 지수가 높을수록 자외선 차단제를 자주 덧발라주세요."
       />
 
@@ -162,7 +166,7 @@ export default function WeatherDetailScreen() {
         description="입자가 작아 모공 깊숙이 침투해 활성산소를 만들고 콜라겐 분해를 촉진할 수 있다는 관찰 연구가 있어요."
       />
 
-      {weather.caiValue !== undefined && weather.caiStatus && (
+      {typeof weather.caiValue === 'number' && weather.caiStatus && (
         <MetricCard
           icon="stats-chart-outline"
           label="통합대기환경지수"
@@ -173,23 +177,25 @@ export default function WeatherDetailScreen() {
         />
       )}
 
-      {(weather.no2Value !== undefined || weather.so2Value !== undefined || weather.coValue !== undefined) && (
+      {(typeof weather.no2Value === 'number' ||
+        typeof weather.so2Value === 'number' ||
+        typeof weather.coValue === 'number') && (
         <Card>
           <Text style={styles.extraTitle}>추가 대기질 정보</Text>
           <View style={styles.extraList}>
-            {weather.no2Value !== undefined && (
+            {typeof weather.no2Value === 'number' && (
               <View style={styles.extraRow}>
                 <Text style={styles.extraLabel}>이산화질소(NO2)</Text>
                 <Text style={styles.extraValue}>{weather.no2Value} ppm</Text>
               </View>
             )}
-            {weather.so2Value !== undefined && (
+            {typeof weather.so2Value === 'number' && (
               <View style={styles.extraRow}>
                 <Text style={styles.extraLabel}>아황산가스(SO2)</Text>
                 <Text style={styles.extraValue}>{weather.so2Value} ppm</Text>
               </View>
             )}
-            {weather.coValue !== undefined && (
+            {typeof weather.coValue === 'number' && (
               <View style={styles.extraRow}>
                 <Text style={styles.extraLabel}>일산화탄소(CO)</Text>
                 <Text style={styles.extraValue}>{weather.coValue} ppm</Text>

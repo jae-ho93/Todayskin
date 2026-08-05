@@ -317,47 +317,56 @@ export class WeatherService {
     const observedAt = this.resolveObservedAt(c);
     const observedAtTrunc = truncateToMinute(observedAt);
 
-    const existing = await this.prisma.weatherSnapshot.findFirst({
-      where: {
-        regionName: c.regionName,
-        kmaAreaNo: c.kmaAreaNo,
-        airkoreaStation: c.airkoreaStation,
-        observedAt: observedAtTrunc,
-      },
-      orderBy: { collectedAt: 'desc' },
-    });
-    if (existing) {
-      this.logger.debug(`WeatherSnapshot reused: ${existing.id}`);
-      return existing;
-    }
+    return this.prisma.$transaction(async (tx) => {
+      // find-then-create만으로는 동시 요청이 같은 발표 자료를 중복 저장할
+      // 수 있다. 지역/관측분 단위 advisory lock으로 이 짧은 구간을 직렬화한다.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`todayskin:weather:${c.regionName}:${c.kmaAreaNo}:${c.airkoreaStation}:${observedAtTrunc.toISOString()}`}))`;
 
-    return this.prisma.weatherSnapshot.create({
-      data: {
-        observedAt,
-        regionName: c.regionName,
-        cityName: c.cityName,
-        latitude: c.lat,
-        longitude: c.lon,
-        kmaAreaNo: c.kmaAreaNo,
-        airkoreaStation: c.airkoreaStation,
-        uvIndex: c.uv.current,
-        uvStatus: this.policy.uvStatus(c.uv.current) ?? undefined,
-        uvIndexPeak: c.uv.peak,
-        uvStatusPeak: this.policy.uvStatus(c.uv.peak) ?? undefined,
-        uvIndexPeakHour: c.uv.peakHour,
-        ozonePpm: c.air.ozone,
-        ozoneStatus: this.policy.ozoneStatus(c.air.ozone) ?? undefined,
-        pm25: c.air.pm25,
-        pm25Status: this.policy.pm25Status(c.air.pm25) ?? undefined,
-        pm10: c.air.pm10,
-        pm10Status: this.policy.pm10Status(c.air.pm10) ?? undefined,
-        caiValue: c.air.cai,
-        caiStatus: this.policy.caiStatus(c.air.cai) ?? undefined,
-        no2Value: c.air.no2,
-        so2Value: c.air.so2,
-        coValue: c.air.co,
-        source,
-      },
+      // 초 단위 오차가 있는 외부 시각도 같은 관측 분으로 dedup하되, 저장되는
+      // observedAt은 원본 시각을 보존한다.
+      const nextMinute = new Date(observedAtTrunc.getTime() + 60_000);
+      const existing = await tx.weatherSnapshot.findFirst({
+        where: {
+          regionName: c.regionName,
+          kmaAreaNo: c.kmaAreaNo,
+          airkoreaStation: c.airkoreaStation,
+          observedAt: { gte: observedAtTrunc, lt: nextMinute },
+        },
+        orderBy: { collectedAt: 'desc' },
+      });
+      if (existing) {
+        this.logger.debug(`WeatherSnapshot reused: ${existing.id}`);
+        return existing;
+      }
+
+      return tx.weatherSnapshot.create({
+        data: {
+          observedAt,
+          regionName: c.regionName,
+          cityName: c.cityName,
+          latitude: c.lat,
+          longitude: c.lon,
+          kmaAreaNo: c.kmaAreaNo,
+          airkoreaStation: c.airkoreaStation,
+          uvIndex: c.uv.current,
+          uvStatus: this.policy.uvStatus(c.uv.current) ?? undefined,
+          uvIndexPeak: c.uv.peak,
+          uvStatusPeak: this.policy.uvStatus(c.uv.peak) ?? undefined,
+          uvIndexPeakHour: c.uv.peakHour,
+          ozonePpm: c.air.ozone,
+          ozoneStatus: this.policy.ozoneStatus(c.air.ozone) ?? undefined,
+          pm25: c.air.pm25,
+          pm25Status: this.policy.pm25Status(c.air.pm25) ?? undefined,
+          pm10: c.air.pm10,
+          pm10Status: this.policy.pm10Status(c.air.pm10) ?? undefined,
+          caiValue: c.air.cai,
+          caiStatus: this.policy.caiStatus(c.air.cai) ?? undefined,
+          no2Value: c.air.no2,
+          so2Value: c.air.so2,
+          coValue: c.air.co,
+          source,
+        },
+      });
     });
   }
 }

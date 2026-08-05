@@ -15,7 +15,7 @@ import { RecommendationQueryDto } from './dto/recommendation-query.dto';
 import { GenerateRecommendationDto } from './dto/generate-recommendation.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { JwtPayload } from '../../common/strategies/jwt.strategy';
+import type { JwtPayload } from '../../common/strategies/jwt.strategy';
 
 /**
  * RecommendationController — 기존 FastAPI /recommendations 이식.

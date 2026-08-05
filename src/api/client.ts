@@ -12,14 +12,14 @@ import type {
 } from '../types';
 import { getToken } from '../lib/session';
 
-// 로컬 개발 시 FastAPI 스텁(backend/) 을 http://localhost:8000 에서 구동
+// 로컬 개발 시 NestJS 백엔드(backend/)를 http://localhost:3000 에서 구동
 //
 // 실기기(Expo Go)로 테스트할 때는 localhost가 폰 자신을 가리키므로 동작하지 않는다.
-// 이 경우 .env 에 EXPO_PUBLIC_API_BASE_URL=http://<PC의 LAN IP>:8000 을 설정할 것 (.env.example 참고)
+// 이 경우 .env 에 EXPO_PUBLIC_API_BASE_URL=http://<PC의 LAN IP>:3000 을 설정할 것 (.env.example 참고)
 const API_BASE_URL: string =
   process.env.EXPO_PUBLIC_API_BASE_URL ??
   (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined) ??
-  'http://localhost:8000';
+  'http://localhost:3000';
 
 // RN의 Hermes 엔진 버전에 따라 AbortSignal.timeout()이 없을 수 있어(SDK 버전별로 갈림) 직접 구현
 function timeoutSignal(ms: number): AbortSignal {
@@ -135,7 +135,9 @@ export const api = {
       method: 'POST',
       headers: await authHeaders(),
       body: formData,
-      signal: timeoutSignal(15000),
+      // 진단 추론 뒤 KMA/AirKorea 스냅샷을 연결한다. 외부 API의 최악 대기
+      // 예산(각 8초)보다 짧게 끊으면 서버 저장은 성공하고 앱만 실패로 보일 수 있다.
+      signal: timeoutSignal(45000),
     });
     const data = await res.json().catch(() => null);
     if (!res.ok) throw new Error(extractErrorMessage(data, res.status));
@@ -143,10 +145,13 @@ export const api = {
   },
   getRecommendations: (grade?: EvidenceGrade) =>
     safeFetch<Recommendation[]>(grade ? `/recommendations?grade=${grade}` : '/recommendations'),
-  getRecommendationById: (id: string) => safeFetch<Recommendation>(`/recommendations/${id}`),
+  getRecommendationById: (id: string) =>
+    authFetch<Recommendation>(`/recommendations/${id}`).then((result) =>
+      result.status === 'ok' ? result.data : null,
+    ),
   // B등급(사진+날씨 매칭): Gemini에게 오늘 피부 측정값 + 날씨를 함께 전달해 추천 생성
-  generateRecommendations: (skinScore: SkinScoreSnapshot, weather: WeatherSnapshot) =>
-    safePostJson<Recommendation[]>('/recommendations/generate', { skinScore, weather }),
+  generateRecommendations: (diagnosisId: string) =>
+    safePostJson<Recommendation[]>('/recommendations/generate', { diagnosisId }),
   getProducts: (category?: Product['category']) =>
     safeFetch<Product[]>(category ? `/products?category=${category}` : '/products'),
   // 날씨 기반(A등급) 제품 추천: 오늘 날씨/대기질만으로 상황(세안 후/외출 전/외출 후)별 화장품을 Gemini에게 하나씩 추천받는다

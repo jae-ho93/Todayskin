@@ -9,8 +9,8 @@ import {
  * MockInferenceProvider — 개발/통합 테스트용 고정 추론값.
  *
  * 실제 Python AI 서버 추론은 모델 학습 완료 후 PythonInferenceProvider로 교체한다.
- * 이 Provider는 환경 변수(MOCK_INFERENCE=true)가 설정된 경우에만 활성화되며,
- * 운영 환경에서는 사용하지 않는다(운영 mock fallback 비활성화 테스트로 검증).
+ * 이 Provider는 환경 변수(MOCK_INFERENCE=true)가 설정된 개발/테스트 환경에서만
+ * 활성화된다. 설정이 없거나 false이면 Unavailable provider가 사용된다.
  *
  * 기존 FastAPI mock_data.MOCK_SKIN_SCORE와 동일한 6개 부위 값을 반환해
  * 기존 프론트 API 계약을 유지한다.

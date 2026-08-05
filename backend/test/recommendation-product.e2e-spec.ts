@@ -4,6 +4,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
+import { GeminiClient } from '../src/modules/gemini/gemini.client';
 
 /**
  * Recommendation/Product e2e 테스트.
@@ -25,12 +26,52 @@ describe('Recommendation & Product (e2e)', () => {
     process.env.JWT_ACCESS_SECRET = 'e2e_access_secret_at_least_32_characters_long';
     process.env.JWT_REFRESH_SECRET = 'e2e_refresh_secret_at_least_32_characters_long';
     process.env.ALLOWED_ORIGINS = '';
-    // Gemini 실제 호출 없이 mock 응답 사용
-    process.env.MOCK_GEMINI = 'true';
+    // Gemini는 아래 provider override로 고정한다. process.env를 공유하는
+    // Jest worker에 mock 플래그를 남기지 않아 다른 e2e suite와 격리한다.
 
     const moduleRef: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      // 다른 e2e suite가 먼저 AppModule을 초기화해도 환경변수 상태에
+      // 의존하지 않도록 Gemini 경계를 명시적으로 mock한다.
+      .overrideProvider(GeminiClient)
+      .useValue({
+        generateRecommendations: jest.fn().mockResolvedValue([
+          {
+            title: '이중 세안 권장',
+            explanation: '오늘 환경에 맞춘 관리가 도움될 수 있어요.',
+            ingredientTags: ['세라마이드'],
+            timing: '외출 후',
+          },
+        ]),
+        generateWeatherProducts: jest.fn().mockResolvedValue([
+          {
+            timing: '세안 후',
+            category: 'barrier',
+            name: '보습 토너',
+            brand: 'TestLab',
+            explanation: '세안 후 수분 보충에 도움될 수 있어요.',
+            ingredientTags: ['판테놀'],
+          },
+          {
+            timing: '외출 전',
+            category: 'barrier',
+            name: '데일리 선크림',
+            brand: 'TestLab',
+            explanation: '외출 전 보호에 도움될 수 있어요.',
+            ingredientTags: ['징크옥사이드'],
+          },
+          {
+            timing: '외출 후',
+            category: 'moisture',
+            name: '휴대용 미스트',
+            brand: 'TestLab',
+            explanation: '외출 후 수분 보충에 도움될 수 있어요.',
+            ingredientTags: ['히알루론산'],
+          },
+        ]),
+      })
+      .compile();
 
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(

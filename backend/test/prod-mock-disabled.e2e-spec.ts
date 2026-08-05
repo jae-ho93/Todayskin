@@ -42,11 +42,11 @@ describe('운영 환경 mock fallback 비활성화 (e2e)', () => {
       expect(client.isMockEnabled()).toBe(false);
     });
 
-    it('production에서 MOCK_GEMINI=true 시 mock 활성화 (개발만, 운영 금지)', () => {
-      // 이 경우는 명시적으로 설정하지 않는 한 발생하지 않아야 한다.
+    it('production에서 MOCK_GEMINI=true 시에도 mock 비활성화(fail-closed)', () => {
+      // 잘못된 운영 설정이 들어와도 가짜 추천을 반환하지 않아야 한다.
       const config = makeConfig({ MOCK_GEMINI: 'true' });
       const client = new GeminiClient(config, policy);
-      expect(client.isMockEnabled()).toBe(true);
+      expect(client.isMockEnabled()).toBe(false);
     });
 
     it('mock 비활성화 + API 키 없음 시 GeminiUnavailable (가짜 데이터 폴백 금지)', async () => {

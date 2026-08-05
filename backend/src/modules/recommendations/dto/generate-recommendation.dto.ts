@@ -1,5 +1,14 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsDefined,
+  IsNotEmpty,
+  IsObject,
+  IsString,
+  ValidateIf,
+  ValidateNested,
+} from 'class-validator';
+import { WeatherInputDto } from '../../weather/dto/weather-snapshot.dto';
 
 /**
  * POST /recommendations/generate 요청.
@@ -15,7 +24,7 @@ import { IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator';
  */
 export class GenerateRecommendationDto {
   @ApiPropertyOptional({ description: '진단 ID (최종 계약 — 서버가 소유권 확인 후 DB에서 조회)' })
-  @IsOptional()
+  @ValidateIf((dto: GenerateRecommendationDto) => dto.diagnosisId !== undefined)
   @IsString()
   @IsNotEmpty()
   diagnosisId?: string;
@@ -23,14 +32,23 @@ export class GenerateRecommendationDto {
   @ApiPropertyOptional({
     description: '피부 측정값 스냅샷 (기존 프론트 호환 — diagnosisId 있으면 무시)',
   })
-  @IsOptional()
+  @ValidateIf(
+    (dto: GenerateRecommendationDto) =>
+      dto.diagnosisId === undefined || dto.skinScore !== undefined,
+  )
+  @IsDefined({ message: 'diagnosisId가 없으면 skinScore가 필요합니다' })
   @IsObject()
   skinScore?: Record<string, unknown>;
 
   @ApiPropertyOptional({
     description: '날씨 스냅샷 (기존 프론트 호환 — diagnosisId 있으면 서버가 DB에서 조회)',
   })
-  @IsOptional()
-  @IsObject()
-  weather?: Record<string, unknown>;
+  @ValidateIf(
+    (dto: GenerateRecommendationDto) =>
+      dto.diagnosisId === undefined || dto.weather !== undefined,
+  )
+  @IsDefined({ message: 'diagnosisId가 없으면 weather가 필요합니다' })
+  @ValidateNested()
+  @Type(() => WeatherInputDto)
+  weather?: WeatherInputDto;
 }

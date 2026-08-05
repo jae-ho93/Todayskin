@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  BadRequestException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -68,14 +69,25 @@ export class AuthService {
       throw new ConflictException('이미 가입된 휴대폰 번호입니다');
     }
 
-    const user = await this.prisma.user.create({
-      data: {
-        phoneNumber,
-        name: dto.name.trim(),
-        birthDate: new Date(dto.birthDate),
-        gender: dto.gender ?? null,
-      },
-    });
+    const birthDate = parseBirthDate(dto.birthDate);
+    let user;
+    try {
+      user = await this.prisma.user.create({
+        data: {
+          phoneNumber,
+          name: dto.name.trim(),
+          birthDate,
+          gender: dto.gender ?? null,
+        },
+      });
+    } catch (e) {
+      // 사전 findUnique는 사용자 경험을 위한 빠른 오류이고, 실제 중복
+      // 보장은 DB unique 제약과 race-safe P2002 처리로 한다.
+      if (prismaErrorCode(e) === 'P2002') {
+        throw new ConflictException('이미 가입된 휴대폰 번호입니다');
+      }
+      throw e;
+    }
 
     const tokens = await this.issueTokens(user.id, user.role);
 
@@ -142,7 +154,13 @@ export class AuthService {
       where: { tokenHash },
     });
 
-    if (!session || session.revokedAt || session.expiresAt < new Date()) {
+    const now = new Date();
+    if (
+      !session ||
+      session.userId !== payload.sub ||
+      session.revokedAt ||
+      session.expiresAt <= now
+    ) {
       throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다');
     }
 
@@ -153,11 +171,19 @@ export class AuthService {
       throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다');
     }
 
-    // 세션 회전 — 기존 토큰 폐기 후 새 토큰 발급
-    await this.prisma.refreshSession.update({
-      where: { id: session.id },
-      data: { revokedAt: new Date() },
+    // 조건부 update로 토큰을 원자적으로 소비한다. 같은 refresh token으로
+    // 동시에 두 요청이 들어오면 정확히 하나만 count=1이 되고, 나머지는 401이다.
+    const consumed = await this.prisma.refreshSession.updateMany({
+      where: {
+        id: session.id,
+        revokedAt: null,
+        expiresAt: { gt: now },
+      },
+      data: { revokedAt: now },
     });
+    if (consumed.count !== 1) {
+      throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다');
+    }
 
     return this.issueTokens(user.id, user.role, userAgent, ipAddress);
   }
@@ -288,4 +314,40 @@ export class AuthService {
     }
     return res;
   }
+}
+
+function prismaErrorCode(exception: unknown): string | undefined {
+  if (!exception || typeof exception !== 'object') return undefined;
+  const code = (exception as { code?: unknown }).code;
+  return typeof code === 'string' ? code : undefined;
+}
+
+/** 생년월일의 실제 달력 날짜·미래 날짜·비현실적인 연령을 함께 검증한다. */
+function parseBirthDate(value: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const date = match ? new Date(`${value}T00:00:00.000Z`) : new Date('invalid');
+  const normalized = Number.isNaN(date.getTime())
+    ? ''
+    : date.toISOString().slice(0, 10);
+
+  if (!match || normalized !== value) {
+    throw new BadRequestException('생년월일 형식이 올바르지 않습니다 (예: 2000-01-01)');
+  }
+
+  const today = new Date();
+  const todayUtc = new Date(
+    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()),
+  );
+  const oldestAllowed = new Date(
+    Date.UTC(todayUtc.getUTCFullYear() - 120, todayUtc.getUTCMonth(), todayUtc.getUTCDate()),
+  );
+
+  if (date > todayUtc) {
+    throw new BadRequestException('생년월일은 미래 날짜일 수 없습니다');
+  }
+  if (date < oldestAllowed) {
+    throw new BadRequestException('생년월일은 최근 120년 이내여야 합니다');
+  }
+
+  return date;
 }

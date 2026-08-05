@@ -61,11 +61,11 @@ export default function HomeDashboard() {
       setHasCaptured(true);
       setSkinScore(skinResult.data);
 
-      // A등급(공인 가이드라인)은 날씨만으로 즉시 판단, B등급은 어젯밤 촬영한 피부 상태 +
-      // 오늘 날씨를 함께 Gemini에 보내 근거 기반으로 생성 (날씨를 못 불러왔으면 B등급은 건너뜀)
+      // A등급(공인 가이드라인)은 날씨만으로 즉시 판단, B등급은 진단 ID만 서버에
+      // 전달해 서버가 소유권을 확인한 뒤 저장된 피부·날씨 데이터를 사용한다.
       const [aGrade, bGrade] = await Promise.all([
         api.getRecommendations('A'),
-        weatherSnapshot ? api.generateRecommendations(skinResult.data, weatherSnapshot) : Promise.resolve(null),
+        api.generateRecommendations(skinResult.data.id),
       ]);
       if (cancelled) return;
       if (aGrade === null && bGrade === null) {

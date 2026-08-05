@@ -5,12 +5,14 @@
 # ── deps: package-lock 기반 의존성 설치 ───────────────
 FROM node:22-slim AS deps
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json* ./
 RUN npm ci
 
 # ── builder: TS 컴파일 + Prisma client 생성 ───────────
 FROM node:22-slim AS builder
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # prisma generate는 DB 연결 없이 동작 (prisma.config.ts 참조).
@@ -20,6 +22,7 @@ RUN npm run build
 # ── prod-deps: 운영 의존성만 재설치 ──────────────────
 FROM node:22-slim AS prod-deps
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev
 
@@ -27,7 +30,7 @@ RUN npm ci --omit=dev
 FROM node:22-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-RUN apt-get update && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends openssl wget && rm -rf /var/lib/apt/lists/*
 
 # 운영 의존성 + 빌드 결과물 + Prisma client(migration 실행에 필요)
 COPY --from=prod-deps /app/node_modules ./node_modules
