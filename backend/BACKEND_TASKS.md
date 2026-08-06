@@ -27,7 +27,7 @@ NestJS와 FastAPI의 역할 분리는 완료되었다.
   추론만 담당하며 비즈니스 로직·인증·DB 접근을 갖지 않고 추론 결과만 NestJS로 전달한다.
 - NestJS 진단 서비스는 InferenceProvider interface로 추론 호출을 추상화한다.
   INFERENCE_SERVICE_URL 설정 시 PythonInferenceProvider, 미설정 시 MockInferenceProvider가 동작한다.
-- 기존 Python DB 코드(backend/app/)는 참조·이식 검증용으로만 남아 있으며 운영 트래픽을 받지 않는다.
+- 레거시 FastAPI 비즈니스 코드(`backend/app/`)는 N7에서 제거되었다. Python은 inference-service/ 추론 서버만 유지한다.
 
 ## 최신 origin/main 동기화 반영
 
@@ -707,15 +707,16 @@ Jest coverageThreshold를 반영했다.
 
 ### N7. 레거시 FastAPI 정리
 
-브랜치: 
+브랜치: `chore/legacy-fastapi-cleanup`
 
-- [ ] `backend/app/` (옛날 FastAPI 라우터 15개 .py) 삭제 — NestJS가 운영 기준, 미사용
-- [ ] `backend/requirements.txt` 삭제 (옛날 Python 의존성)
-- [ ] CI `backend-python-syntax` job 제거 (`backend/app` compileall 검사 불필요)
-- [ ] `backend/weatherskin.db` 등 SQLite 파일 정리 (git 추적 여부 확인 후)
-- [ ] inference-service/는 유지 (독립 AI 추론 서버, 운영 대상)
-- [ ] inference-service/requirements.txt는 유지 (FastAPI 추론 서버 의존성)
-- [ ] README/DEPLOYMENT에서 옛날 app/ 참조 문구 제거
+- [x] `backend/app/` (옛날 FastAPI 라우터 15개 .py) 삭제 — NestJS가 운영 기준, 미사용
+- [x] `backend/requirements.txt` 삭제 (옛날 Python 의존성)
+- [x] CI `backend-python-syntax` job 제거 (`backend/app` compileall 검사 불필요)
+- [x] `backend/weatherskin.db` 등 SQLite 파일 정리 (git 추적 여부 확인 후)
+  - git 미추적, `.gitignore`에 `backend/*.db` 이미 포함
+- [x] inference-service/는 유지 (독립 AI 추론 서버, 운영 대상)
+- [x] inference-service/requirements.txt는 유지 (FastAPI 추론 서버 의존성)
+- [x] README/DEPLOYMENT에서 옛날 app/ 참조 문구 제거
 
 완료 기준: 옛날 FastAPI 코드가 저장소에서 제거되고 CI가 NestJS + inference-service만 검증한다.
 

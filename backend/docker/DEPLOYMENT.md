@@ -200,5 +200,6 @@ docker build -t todayskin-inference:$(git rev-parse HEAD) \
 ## 후속 작업
 
 - N6: health live/ready 분리, Soft Delete, pagination, env registry (완료)
-- N7: 레거시 `backend/app/` FastAPI 정리
+- N7: 레거시 `backend/app/` FastAPI 정리 (완료) — CI는 NestJS + inference-service만 검증
+- N8: 히스토리 캘린더 기능
 - 실제 AWS 계정에 ECR/ECS/RDS/Secrets/OIDC role 프로비저닝 (인프라 최초 1회)

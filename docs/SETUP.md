@@ -88,7 +88,7 @@ Todayskin/
 | 백엔드 | NestJS 11, TypeScript, Prisma 7, PostgreSQL 16, Redis 7 |
 | 인프라 | Docker, docker-compose, GitHub Actions CI |
 | 외부 API | 기상청(KMA), 에어코리아, Google Gemini |
-| 레거시 | Python FastAPI (`backend/app/`, 참조용 보존, 실행에 사용 안 함) |
+| AI 추론 | FastAPI (`backend/inference-service/`, 피부 이미지 추론만) |
 
 ---
 
