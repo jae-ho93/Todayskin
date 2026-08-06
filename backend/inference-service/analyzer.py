@@ -111,4 +111,14 @@ class SkinAnalyzer:
         scores = compute_scores(results)
         for part_name, score in scores["parts"].items():
             results[part_name]["score"] = score
-        return {"parts": results, "overall_score": scores["overall"]}
+
+        # N8: 정규화 캔버스 좌표의 얼굴 랜드마크(478점). NestJS Diagnosis.landmarks에 저장.
+        landmarks_points = res.landmarks_norm.astype(float).tolist()
+        return {
+            "parts": results,
+            "overall_score": scores["overall"],
+            "landmarks": {
+                "version": "mediapipe-face-landmarker-v1",
+                "points": landmarks_points,
+            },
+        }

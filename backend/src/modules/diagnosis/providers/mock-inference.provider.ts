@@ -34,6 +34,17 @@ export class MockInferenceProvider implements InferenceProvider {
         { part: 'lips', label: '입술', grade: '건조', moisture: 40, elasticity: null, note: null },
         { part: 'jaw', label: '턱', grade: '양호', moisture: 66, elasticity: 71, note: null },
       ],
+      // N8: 테스트용 축소 랜드마크(실제는 478점). 저장 동의 시 Diagnosis.landmarks에 기록.
+      landmarks: {
+        version: 'mediapipe-face-landmarker-v1',
+        points: [
+          [0.4, 0.3],
+          [0.6, 0.3],
+          [0.5, 0.55],
+          [0.45, 0.7],
+          [0.55, 0.7],
+        ],
+      },
     };
   }
 }

@@ -186,4 +186,5 @@ def map_to_app_schema(analysis: dict, model_version: str) -> dict:
         "overallScore": round(analysis["overall_score"]),
         "modelVersion": model_version,
         "parts": app_parts,
+        "landmarks": analysis.get("landmarks"),
     }

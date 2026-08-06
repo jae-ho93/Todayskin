@@ -724,16 +724,16 @@ Jest coverageThreshold를 반영했다.
 
 브랜치: `feature/calendar-history`
 
-- [ ] `GET /diagnosis/history/:date` — 특정 날짜의 통합 히스토리 조회
+- [x] `GET /diagnosis/history/:date` — 특정 날짜의 통합 히스토리 조회
   - 해당 날짜의 날씨·대기질 (WeatherSnapshot 조인)
   - 피부 분석 결과 + 점수 (Diagnosis + SkinMetric)
   - 추천 제품 (Recommendation + RecommendationProduct → Product)
   - 동의한 경우: 당시 촬영 이미지(S3) + 랜드마크 데이터
-- [ ] 점수 변화 시계열 (기간별 overallScore 추이)
-- [ ] 동의한 이미지 조회 시 S3 presigned URL 발급
-- [ ] 랜드마크 데이터 저장/조회 스키마 확정 (Diagnosis에 landmarks 필드 추가 여부)
-- [ ] 날짜 범위 쿼리 인덱스 (Diagnosis.capturedAt)
-- [ ] 미동의 진단은 이미지/랜드마크 노출 제외
+- [x] 점수 변화 시계열 (기간별 overallScore 추이)
+- [x] 동의한 이미지 조회 시 S3 presigned URL 발급
+- [x] 랜드마크 데이터 저장/조회 스키마 확정 (Diagnosis에 landmarks 필드 추가 여부)
+- [x] 날짜 범위 쿼리 인덱스 (Diagnosis.capturedAt)
+- [x] 미동의 진단은 이미지/랜드마크 노출 제외
 
 완료 기준: 날짜 선택 시 날씨·대기질·분석·점수·추천 제품이 한 번에 조회되고, 동의한 경우 이미지와 랜드마크까지 확인할 수 있다.
 
