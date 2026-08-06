@@ -34,8 +34,17 @@ cd backend/inference-service
 python3 -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
+Docker (N5):
+
+```bash
+cd backend
+docker compose --profile inference up -d --build
+# 또는 NestJS와 함께: docker compose --profile backend up -d --build
+```
+
 NestJS 쪽은 `backend/.env`의 `INFERENCE_SERVICE_URL=http://127.0.0.1:8000`,
-`MOCK_INFERENCE=false`로 이 서버를 가리키도록 설정되어 있다.
+`MOCK_INFERENCE=false`로 이 서버를 가리키도록 설정한다.
+compose 통합 시 URL은 `http://inference:8000`이다.
 
 ## 확인
 

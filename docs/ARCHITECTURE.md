@@ -46,14 +46,15 @@
 
 ### 개발
 - Docker Compose로 NestJS, FastAPI, PostgreSQL, Redis를 함께 운영.
-- 현재 compose: backend/docker-compose.yml (postgres + redis + backend).
-- inference-service도 동일 compose에 통합하는 것을 권장.
+- compose: `backend/docker-compose.yml` — postgres + redis (기본),
+  `--profile inference`로 FastAPI, `--profile backend`로 NestJS+inference.
+- 운영 CD: `.github/workflows/deploy-ecs.yml` (ECR → 승인 → migrate → Fargate).
 
 ### 운영 (CI/CD)
 - GitHub Actions 기반.
-- Docker 이미지를 AWS ECR에 빌드.
+- Docker 이미지를 AWS ECR에 빌드 (tag = commit SHA).
 - NestJS / FastAPI 각각 ECS Fargate에 배포.
-- 연동: AWS RDS PostgreSQL, S3, CloudWatch.
+- 연동: AWS RDS PostgreSQL, S3, CloudWatch, Secrets Manager.
 
 ## 5. 운영/보안 공통 요소
 

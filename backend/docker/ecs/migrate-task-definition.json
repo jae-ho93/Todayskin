@@ -1,0 +1,43 @@
+{
+  "family": "todayskin-migrate",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/todayskin-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/todayskin-migrate-task-role",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "containerDefinitions": [
+    {
+      "name": "migrate",
+      "image": "ACCOUNT_ID.dkr.ecr.ap-northeast-2.amazonaws.com/todayskin-backend:IMAGE_TAG",
+      "essential": true,
+      "command": [
+        "sh",
+        "-c",
+        "npx prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code && npx prisma migrate deploy"
+      ],
+      "environment": [
+        { "name": "NODE_ENV", "value": "production" },
+        { "name": "RUN_MIGRATIONS_ON_START", "value": "false" }
+      ],
+      "secrets": [
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:ACCOUNT_ID:secret:todayskin/prod/DATABASE_URL"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/todayskin-migrate",
+          "awslogs-region": "ap-northeast-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
