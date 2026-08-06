@@ -1,141 +1,159 @@
 # Todayskin Backend Tasks
 
-이 문서는 Todayskin 백엔드 전환과 GitHub 협업의 기준 문서입니다.
+이 문서는 Todayskin 백엔드 구조와 운영·협업의 기준 문서다. 아키텍처 원칙은 docs/ARCHITECTURE.md,
+결정 사항은 backend/decision.md를 따른다.
 
 ## 목표
 
-현재 FastAPI 기능과 프론트 API 계약을 기준으로 다음 구조로 단계적으로 전환합니다.
+NestJS를 메인 백엔드(BFF + 비즈니스 로직)로, FastAPI(inference-service)를 독립 AI 추론 서버로
+역할 분리한 운영 가능한 백엔드를 목표로 한다. NestJS는 Modular Monolith 구조로 auth, diagnosis,
+recommendations, products, pattern, notifications, weather, gemini 모듈로 책임을 분리하고
+모든 비즈니스 로직을 담당한다. FastAPI는 AI 모델 서빙과 피부 이미지 추론만 담당하며
+추론 결과만 NestJS로 전달한다.
 
-```text
-NestJS + TypeScript
-PostgreSQL + Prisma
-JWT + Refresh Token
-USER / ADMIN 권한
-Redis: 날씨 캐시, 향후 AI 작업 큐
-```
+데이터는 PostgreSQL + Prisma(운영: AWS RDS), Redis(날씨 캐시·Refresh Token·Rate Limit),
+BullMQ(추천·패턴·알림 비동기)를 사용한다. 이미지는 동의한 경우만 암호화해 S3에 저장하고
+미동의 시 추론 후 즉시 삭제한다. 운영은 GitHub Actions → ECR → ECS Fargate 배포,
+RDS·S3·CloudWatch 연동, Pino·Sentry·Helmet·JWT·Swagger·Jest를 적용한다.
 
-목표는 기능을 무작정 새로 만드는 것이 아닙니다.
+> 현재 구현된 기능을 실제 서비스에서도 사용할 수 있는 구조로 개선하는 것이 목표다.
 
-> 현재 구현된 기능을 실제 서비스에서도 사용할 수 있는 구조로 개선하는 것이 목표입니다.
+## 역할 분리 (완료)
+
+NestJS와 FastAPI의 역할 분리는 완료되었다.
+
+- NestJS(src/)가 메인 백엔드(BFF + 비즈니스 로직)로 동작한다.
+- FastAPI(inference-service/)가 독립 AI 추론 서버로 동작한다. AI 모델 서빙과 피부 이미지
+  추론만 담당하며 비즈니스 로직·인증·DB 접근을 갖지 않고 추론 결과만 NestJS로 전달한다.
+- NestJS 진단 서비스는 InferenceProvider interface로 추론 호출을 추상화한다.
+  INFERENCE_SERVICE_URL 설정 시 PythonInferenceProvider, 미설정 시 MockInferenceProvider가 동작한다.
+- 기존 Python DB 코드(backend/app/)는 참조·이식 검증용으로만 남아 있으며 운영 트래픽을 받지 않는다.
 
 ## 최신 origin/main 동기화 반영
 
-2026-08-04에 원격 `origin/main`의 최신 15개 커밋을 pull한 뒤 확인한 변경사항입니다.
+2026-08-04에 원격 origin/main의 최신 15개 커밋을 pull한 뒤 확인한 변경사항이다.
 
-- 날씨 API는 `MOCK_WEATHER`로 값을 채우지 않습니다. 정부 API 실패 시 각 지표가 `None`/`undefined`가 되고 프론트가 `측정 불가`를 표시합니다.
-- UV API가 V4에서 V5로 변경되었고 `uvIndexPeak`, `uvStatusPeak`, `uvIndexPeakHour`가 추가되었습니다.
-- `POST /products/weather-based`가 추가되었습니다. 피부 측정값 없이 Gemini가 `세안 후`, `외출 전`, `외출 후` 제품을 생성합니다.
-- 날씨 기반 제품 응답에 `reason`, `timing`이 추가되었습니다.
-- 회원가입과 User 응답에 선택 필드 `gender`가 추가되었습니다.
-- 개인 패턴 차트와 프론트 mock 데이터는 제거되었고, 현재 개인 패턴 화면은 `준비 중` 상태입니다.
-- 프론트 API client도 실패 시 목업 대신 `null`, `error`, `not_found` 상태를 사용합니다.
+- 날씨 API는 MOCK_WEATHER로 값을 채우지 않는다. 정부 API 실패 시 각 지표가 None/undefined가 되고 프론트가 측정 불가를 표시한다.
+- UV API가 V4에서 V5로 변경되었고 uvIndexPeak, uvStatusPeak, uvIndexPeakHour가 추가되었다.
+- POST /products/weather-based가 추가되었다. 피부 측정값 없이 Gemini가 세안 후, 외출 전, 외출 후 제품을 생성한다.
+- 날씨 기반 제품 응답에 reason, timing이 추가되었다.
+- 회원가입과 User 응답에 선택 필드 gender가 추가되었다.
+- 개인 패턴 차트와 프론트 mock 데이터는 제거되었고, 현재 개인 패턴 화면은 준비 중 상태다.
+- 프론트 API client도 실패 시 목업 대신 null, error, not_found 상태를 사용한다.
 
-따라서 이후 이식 작업은 과거의 목업 fallback을 기준으로 하지 않고, 최신의 명시적 unavailable/error 계약을 기준으로 진행합니다.
-
-## 보류 범위: Python AI 서버
-
-피부 이미지 분석 모델 학습과 Python AI 서버 구축은 이번 범위에서 보류합니다.
-
-- 모델 학습이 완료될 때까지 실제 추론 서버를 구현하지 않습니다.
-- NestJS 진단 서비스는 `InferenceProvider`와 `MockInferenceProvider`를 기준으로 설계합니다.
-- Python AI 서버가 준비되면 `PythonInferenceProvider`를 추가해 교체합니다.
-- NestJS의 진단 저장, 권한, 상태 관리, API 계약은 Python 서버 없이 먼저 완성합니다.
-- 현재 고정 진단값은 개발/통합 테스트용으로만 사용합니다.
+이후 작업은 과거의 목업 fallback을 기준으로 하지 않고, 최신의 명시적 unavailable/error 계약을 기준으로 진행한다.
 
 ## 최종 구조
 
 ```text
 backend/
-├─ src/
+├─ src/                        # NestJS 메인 백엔드 (BFF + 비즈니스 로직)
 │  ├─ main.ts
 │  ├─ app.module.ts
 │  ├─ common/                 # Guard, decorator, exception, pipe
 │  ├─ prisma/                 # PrismaModule, PrismaService
+│  ├─ redis/                  # RedisModule (날씨 캐시)
 │  └─ modules/
-│     ├─ auth/ users/ weather/
-│     ├─ diagnosis/ recommendations/ products/
-│     ├─ pattern/ notifications/ health/
+│     ├─ auth/                 # 회원가입·로그인·JWT·Refresh
+│     ├─ weather/              # 날씨·대기질 API + 캐시
+│     ├─ diagnosis/            # 진단 도메인 + InferenceProvider
+│     ├─ recommendations/      # 맞춤 추천 생성
+│     ├─ products/             # 제품 목록 + 날씨 기반 제품
+│     ├─ pattern/              # 개인 피부 패턴 분석
+│     ├─ notifications/        # 알림 설정 저장
+│     ├─ gemini/               # Gemini LLM 클라이언트
+│     └─ health/               # 헬스 체크
+├─ inference-service/          # FastAPI 독립 AI 추론 서버
+│  ├─ main.py                  # POST /infer, GET /health
+│  ├─ analyzer.py              # SkinAnalyzer (MobileNetV3)
+│  └─ *.py                     # 전처리·모델·랜드마크·스코어링
 ├─ prisma/
 │  ├─ schema.prisma
 │  ├─ migrations/
 │  └─ seed.ts
+├─ docker-compose.yml           # 개발: postgres + redis + (backend)
+├─ Dockerfile                   # NestJS 운영 이미지
 └─ package.json
 ```
 
-## 파일 매핑
+## 파일 매핑 (전환 완료)
 
-| 현재 | NestJS 변경 후 |
+| 기존 FastAPI | NestJS |
 |---|---|
-| `main.py` | `main.ts`, `app.module.ts` |
-| `database.py` | `PrismaModule`, `PrismaService` |
-| `models.py` | `prisma/schema.prisma` |
-| `schemas.py` | 모듈별 `dto/`, `enum/` |
-| `deps.py` | `JwtStrategy`, `JwtAuthGuard`, `RolesGuard` |
-| `seed.py` | `prisma/seed.ts` |
-| `regions.py` | `RegionResolver` |
-| `mock_data.py` | seed, fixture, `MockInferenceProvider` |
-| `gemini_client.py` | `GeminiClient`, `EvidencePolicy` |
-| `routers/auth.py` | `AuthController`, `AuthService` |
-| `routers/weather.py` | `WeatherController`, `WeatherService`, API Clients |
-| `routers/diagnosis.py` | `DiagnosisController`, `DiagnosisService` |
-| `routers/recommendations.py` | Recommendation/Product modules |
-| `trend.tsx` mock | `PatternController`, `PatternService` |
-| settings 로컬 상태 | `NotificationController`, `NotificationService` |
+| main.py | main.ts, app.module.ts |
+| database.py | PrismaModule, PrismaService |
+| models.py | prisma/schema.prisma |
+| schemas.py | 모듈별 dto/, enum/ |
+| deps.py | JwtStrategy, JwtAuthGuard, RolesGuard |
+| seed.py | prisma/seed.ts |
+| regions.py | RegionResolver (region.registry) |
+| mock_data.py | seed, fixture, MockInferenceProvider |
+| gemini_client.py | GeminiClient, EvidencePolicy |
+| routers/auth.py | AuthController, AuthService |
+| routers/weather.py | WeatherController, WeatherService, API Clients |
+| routers/diagnosis.py | DiagnosisController, DiagnosisService |
+| routers/recommendations.py | Recommendation/Product modules |
+| trend.tsx mock | PatternController, PatternService |
+| settings 로컬 상태 | NotificationController, NotificationService |
 
-Controller는 HTTP 처리만 담당하고, 비즈니스 로직은 Service에 둡니다. 외부 API는 Client, 정책은 Policy로 분리합니다. 단순 CRUD마다 Repository를 무조건 만들지는 않습니다.
+Controller는 HTTP 처리만 담당하고, 비즈니스 로직은 Service에 둔다. 외부 API는 Client,
+정책은 Policy로 분리한다. 단순 CRUD마다 Repository를 무조건 만들지는 않는다.
 
 ## 최신 코드와의 충돌 및 수정 필요 사항
 
 ### 1. Weather 지표 nullable 계약
 
-최신 백엔드는 API 실패 시 목업값을 반환하지 않고 지표를 `None`으로 응답합니다. NestJS DTO와 Prisma 모델은 다음을 반영해야 합니다.
+최신 백엔드는 API 실패 시 목업값을 반환하지 않고 지표를 None으로 응답한다. NestJS DTO와 Prisma 모델은 다음을 반영한다.
 
-- UV, 오존, PM2.5, PM10, CAI, NO2, SO2, CO는 nullable입니다.
-- `uvIndexPeak`, `uvStatusPeak`, `uvIndexPeakHour`를 포함합니다.
-- 데이터 출처는 `LIVE`, `CACHED`, `UNAVAILABLE`처럼 명시합니다.
-- Redis와 DB에 정상 데이터가 없으면 임의 수치를 만들지 않고 unavailable 상태를 반환합니다.
+- UV, 오존, PM2.5, PM10, CAI, NO2, SO2, CO는 nullable이다.
+- uvIndexPeak, uvStatusPeak, uvIndexPeakHour를 포함한다.
+- 데이터 출처는 LIVE, CACHED, UNAVAILABLE처럼 명시한다.
+- Redis와 DB에 정상 데이터가 없으면 임의 수치를 만들지 않고 unavailable 상태를 반환한다.
 
 ### 2. Weather API 설정 변경
 
-- 기상청 UV endpoint는 최신 V5 기준으로 이식합니다.
-- `GEMINI_MODEL` 기본값은 현재 `gemini-flash-latest` 기준으로 관리합니다.
-- 기존 `KMA_AREA_NO`, `AIRKOREA_STATION_NAME`은 위치 조회 실패 시 기본 지역 fallback에 필요하므로 환경변수와 코드 중 어느 쪽을 기준으로 할지 결정해야 합니다. 지역 테이블을 기준으로 할 경우 환경변수는 기본 region id로 단순화합니다.
+- 기상청 UV endpoint는 최신 V5 기준으로 이식한다.
+- GEMINI_MODEL 기본값은 현재 gemini-flash-latest 기준으로 관리한다.
+- 기존 KMA_AREA_NO, AIRKOREA_STATION_NAME은 위치 조회 실패 시 기본 지역 fallback에 필요하므로
+  환경변수와 코드 중 어느 쪽을 기준으로 할지 결정해야 한다. 지역 registry를 기준으로 할 경우
+  환경변수는 기본 region id로 단순화한다.
 
 ### 3. 날씨 기반 제품 추천 API 추가
 
-최신 프론트는 다음 API를 사용합니다.
+최신 프론트는 다음 API를 사용한다.
 
 ```text
 POST /products/weather-based
 ```
 
-- 피부 측정값 없이 날씨 데이터만으로 제품을 생성합니다.
-- 응답에는 `reason`, `timing`이 포함됩니다.
-- `timing`은 `세안 후`, `외출 전`, `외출 후` 중 하나입니다.
-- Gemini 실패 시 503을 반환하고 가짜 제품으로 대체하지 않습니다.
-- 현재는 사용자별 영구 추천이 아니라 요청 시 생성하는 결과이므로, 캐시 여부와 저장 여부를 별도 결정합니다.
-- 클라이언트가 보낸 날씨를 그대로 신뢰하지 않고, 최종 구조에서는 서버가 지역·Redis·WeatherSnapshot에서 입력값을 조회합니다.
+- 피부 측정값 없이 날씨 데이터만으로 제품을 생성한다.
+- 응답에는 reason, timing이 포함된다.
+- timing은 세안 후, 외출 전, 외출 후 중 하나다.
+- Gemini 실패 시 503을 반환하고 가짜 제품으로 대체하지 않는다.
+- 현재는 사용자별 영구 추천이 아니라 요청 시 생성하는 결과이므로, 캐시 여부와 저장 여부를 별도 결정한다.
+- 클라이언트가 보낸 날씨를 그대로 신뢰하지 않고, 최종 구조에서는 서버가 지역·Redis·WeatherSnapshot에서 입력값을 조회한다.
 
 ### 4. 회원가입 gender 추가
 
-최신 API 계약에 선택 필드 `gender: male | female`가 추가되었습니다.
+최신 API 계약에 선택 필드 gender: male | female가 추가되었다.
 
-- Prisma `User.gender`는 nullable enum으로 정의합니다.
-- 회원가입 DTO와 User 응답에 포함합니다.
-- 모델 학습 전에는 추천 로직에 임의로 사용하지 않습니다.
-- 민감정보 취급 여부와 수집 목적·보관 필요성을 문서화합니다.
+- Prisma User.gender는 nullable enum으로 정의한다.
+- 회원가입 DTO와 User 응답에 포함한다.
+- 모델 학습 전에는 추천 로직에 임의로 사용하지 않는다.
+- 민감정보 취급 여부와 수집 목적·보관 필요성을 문서화한다.
 
 ### 5. 개인 패턴 화면 계약
 
-최신 프론트는 개인 패턴 mock 차트를 제거하고 현재 `준비 중`만 표시합니다.
+최신 프론트는 개인 패턴 mock 차트를 제거하고 현재 준비 중만 표시한다.
 
-- 백엔드 `GET /diagnosis/pattern`은 먼저 구현할 수 있습니다.
-- 프론트 연결은 API 응답 계약과 통계 정책이 확정된 뒤 별도 PR로 진행합니다.
-- 데이터 부족 상태는 `404`가 아니라 `200 + LOCKED`로 유지합니다.
+- 백엔드 GET /diagnosis/pattern은 구현 완료다.
+- 프론트 연결은 API 응답 계약과 통계 정책이 확정된 뒤 별도 PR로 진행한다.
+- 데이터 부족 상태는 404가 아니라 200 + LOCKED로 유지한다.
 
 ### 6. 현재 프론트 호출과 최종 보안 계약의 차이
 
-현재 프론트는 `POST /recommendations/generate`에 `skinScore`와 `weather` 전체를 보내고 있습니다. 최종 NestJS API는 `diagnosisId`만 받아야 합니다.
+현재 프론트는 POST /recommendations/generate에 skinScore와 weather 전체를 보내고 있다.
+최종 NestJS API는 diagnosisId만 받아야 한다.
 
 ```json
 {
@@ -143,17 +161,19 @@ POST /products/weather-based
 }
 ```
 
-서버는 diagnosis의 사용자 소유권을 확인한 후 DB에서 피부 측정값과 연결된 날씨 snapshot을 조회합니다. 이 변경은 NestJS 이식 PR에서 프론트와 함께 contract migration으로 처리합니다.
+서버는 diagnosis의 사용자 소유권을 확인한 후 DB에서 피부 측정값과 연결된 날씨 snapshot을 조회한다.
+이 변경은 NestJS 이식 PR에서 프론트와 함께 contract migration으로 처리한다.
 
 ### 7. 기존 Python DB와 최신 코드의 migration 주의점
 
-현재 SQLite에는 기존 5개 테이블과 과거 생성 추천 데이터가 있습니다. 최신 코드에는 `gender`가 추가되었으므로 단순 데이터 복사가 아니라 다음 순서로 처리합니다.
+현재 SQLite에는 기존 5개 테이블과 과거 생성 추천 데이터가 있다. 최신 코드에는 gender가 추가되었으므로
+단순 데이터 복사가 아니라 다음 순서로 처리한다.
 
-1. 새 Prisma schema에 nullable `gender`를 포함합니다.
-2. 기존 사용자의 gender는 null로 import합니다.
-3. 기존 전역 추천과 개인 생성 추천을 구분합니다.
-4. 동일 진단에 중복 생성된 추천은 하나의 기준으로 정리합니다.
-5. Access Token은 import하지 않고 사용자를 재로그인시킵니다.
+1. 새 Prisma schema에 nullable gender를 포함한다.
+2. 기존 사용자의 gender는 null로 import한다.
+3. 기존 전역 추천과 개인 생성 추천을 구분한다.
+4. 동일 진단에 중복 생성된 추천은 하나의 기준으로 정리한다.
+5. Access Token은 import하지 않고 사용자를 재로그인시킨다.
 
 ## Task 목록
 
@@ -198,7 +218,7 @@ GitHub branch protection/ruleset은 현재 비공개 저장소 플랜에서 지�
 - [x] 기존 SQLite 데이터 보존 및 중복 데이터 처리 정책 결정
 - [x] `User.gender` nullable enum(`male`, `female`) 반영
 - [x] `WeatherSnapshot`에 UV peak와 측정 불가 상태 반영
-- [ ] 날씨 기반 생성 제품의 `reason`, `timing` 저장 여부 결정
+- [x] 날씨 기반 생성 제품의 `reason`, `timing` 저장 여부 결정 (DB 비저장, 응답만. 카탈로그 Product에는 reason/timing 컬럼 존재)
 
 초기 모델:
 
@@ -230,8 +250,8 @@ Recommendation(userId, diagnosisId, createdAt)
 - [x] `JwtStrategy`, `JwtAuthGuard` 구현
 - [x] `USER`, `ADMIN` enum과 `RolesGuard` 구현
 - [x] 현재 사용자 decorator 구현
-- [ ] ADMIN 전용 운영 API 보호
-- [ ] 진단·추천 조회 시 사용자 소유권 검사
+- [ ] ADMIN 전용 운영 API 보호 (아직 ADMIN endpoint 없음 → N2로 이동)
+- [x] 진단·추천 조회 시 사용자 소유권 검사 (Diagnosis/Recommendation Service userId 검사 + ForbiddenException)
 - [x] 인증 실패와 권한 부족 상태 코드 구분
 
 전화번호만으로 로그인하는 현재 방식은 개발용 MVP로 취급합니다. 실제 서비스에는 OTP 또는 별도 본인확인이 필요합니다. Access Token은 `User` 테이블에 저장하지 않습니다.
@@ -240,11 +260,11 @@ Recommendation(userId, diagnosisId, createdAt)
 
 브랜치: `feature/migrate-auth-user-api`
 
-- [ ] `/auth/signup`, `/auth/login`, `/auth/logout` 이식
-- [ ] 전화번호·이름·생년월일 검증 규칙 유지
-- [ ] `Authorization: Bearer ...` 계약 유지
-- [ ] 에러 응답 형식 통일
-- [ ] Expo 로그인/회원가입 통합 테스트
+- [x] `/auth/signup`, `/auth/login`, `/auth/logout` 이식 (auth.controller.ts, refresh/me 포함)
+- [x] 전화번호·이름·생년월일 검증 규칙 유지 (signup.dto.ts Validation)
+- [x] `Authorization: Bearer ...` 계약 유지 (JwtAuthGuard + Swagger addBearerAuth)
+- [x] 에러 응답 형식 통일 (HttpExceptionFilter)
+- [x] Expo 로그인/회원가입 통합 테스트 (auth.e2e-spec.ts, api-contract.e2e-spec.ts)
 
 ### T5. Weather 모듈
 
@@ -355,7 +375,7 @@ Recommendation(userId, diagnosisId, createdAt)
 - [x] hit/miss 처리
 - [x] Redis 장애 시 외부 API 또는 최근 DB fallback
 - [x] live/cached 출처 구분
-- [ ] 무효화·로그·metric 정책 결정
+- [ ] 무효화·로그·metric 정책 결정 (→ N1 관측성, N6 정책 마무리로 이동)
 
 초기 Redis 범위는 날씨 캐시입니다. AI 작업 큐는 Python AI 서버와 실제 비동기 추론이 필요해질 때 별도 작업으로 추가합니다.
 
@@ -568,6 +588,113 @@ Refresh Token
 - [ ] WebSocket/SSE
 - [ ] Docker 배포 환경
 - [ ] GitHub Actions 배포 자동화
+
+## 다음 과정 (Next)
+
+> T0~T14 핵심 구현은 완료. 아래는 코드에 아직 반영되지 않은 후속 작업.
+> 4개 핵심 결정(T2-03/T3-04/T3-05/T9-03)은 decision.md에서 2026-08-07 확정.
+
+### N0. 운영 보안·HTTP 보호
+
+브랜치: `feature/runtime-security-http`
+
+- [ ] Helmet 적용
+- [ ] @nestjs/throttler Rate Limit 적용 (저장소: Redis, limit/window는 구현 시 확정)
+- [ ] CORS/Validation 현재 유지
+- [ ] 운영 환경에서 `NODE_ENV=production` 시 보안 헤더·throttle 강제
+
+완료 기준: 운영 환경에서 Helmet 보안 헤더와 Rate Limit가 적용되고, 개발 환경은 기존 동작을 유지한다.
+
+### N1. 구조화 로깅·관측성
+
+브랜치: `feature/structured-logging-observability`
+
+- [ ] nestjs-pino JSON 로거 도입
+- [ ] request correlation ID middleware
+- [ ] 민감정보 마스킹(전화번호·생년월일·좌표·token)
+- [ ] Sentry 에러 트래킹 연동 (민감정보 전송 금지)
+- [ ] HttpExceptionFilter를 pino 로거로 통합
+
+완료 기준: 모든 요청에 correlation ID가 부여되고 JSON 로그로 남으며, 에러가 Sentry에 민감정보 없이 전송된다.
+
+### N2. 인증 강화·ADMIN 운영 API
+
+브랜치: `feature/otp-auth-admin`
+
+- [ ] OTP provider interface 설계 (`OtpProvider`, `MockOtpProvider`, `SmsOtpProvider`)
+- [ ] 가입·새 디바이스 로그인에 OTP 필수 (운영 공개 전)
+  - 개발: allowlisted test phone / mock OTP
+  - 운영: 실제 OTP + 시도 횟수·만료·재전송 제한
+- [ ] OTP 발송 채널은 구현 시 SMS/알림톡 중 선택
+- [ ] JWT key rotation(kid) — 현재 단일 secret
+- [ ] 첫 ADMIN 운영 API + @Roles(Role.ADMIN) + 감사 로그
+  - Role 기반 유지 (Permission은 3개+ 독립 action 시 도입)
+- [ ] USER 403·ADMIN 200·미인증 401 e2e 테스트
+
+완료 기준: 전화번호 단독 로그인이 OTP 검증으로 대체되고, 첫 ADMIN API가 Role 가드와 감사 로그로 보호된다.
+
+### N3. S3 이미지 저장·Consent 실제 연동
+
+브랜치: `feature/s3-consent-image`
+
+- [ ] 동의 목적 enum/registry 설계 (`diagnosis_image_processing`, `ai_recommendation_data_transfer`)
+- [ ] ConsentRecord 동의 흐름 코드 연동 (diagnosis upload, Gemini 전송, 이미지 저장)
+- [ ] 필수 동의 version 없으면 해당 기능 거부 (기능 진입 조건)
+- [ ] 동의 version registry 구조 설계
+- [ ] 동의한 경우 S3 암호화 저장 + DB 메타데이터/위치
+- [ ] 미동의 시 추론 후 즉시 삭제 (현재 memoryStorage 비저장 유지)
+- [ ] 동의 철회 후 신규 처리/보존 데이터 정책 구현
+- [ ] 동의 audit log 연동 (N1 로깅과 연계)
+
+완료 기준: 동의 상태가 진단·추천 기능의 진입 조건으로 동작하고, 동의한 이미지만 S3에 암호화 저장된다.
+
+### N4. 비동기 처리(BullMQ)
+
+브랜치: `feature/bullmq-async-jobs`
+
+- [ ] BullMQ 도입 — 현재 Redis는 날씨 캐시만
+- [ ] 추천 생성·패턴 분석·알림 발송을 비동기 job으로 전환
+- [ ] job 상태 모델: PENDING → COMPLETED/FAILED
+- [ ] job 우선순위·재시도·DLQ 정책 구현
+- [ ] API는 즉시 jobId를 반환하고 결과는 polling/SSE로 조회
+
+완료 기준: 시간이 오래 걸리는 작업이 비동기 job으로 분리되어 API 응답 속도가 개선된다.
+
+### N5. 운영 배포(ECS Fargate)
+
+브랜치: `chore/ecs-fargate-cicd`
+
+- [ ] GitHub Actions → ECR 이미지 빌드/푸시 (tag = commit SHA)
+- [ ] NestJS / FastAPI 각각 ECS Fargate task definition
+- [ ] RDS PostgreSQL·S3·CloudWatch 연동
+- [ ] docker-compose에 inference-service 통합(개발 환경)
+- [ ] 운영 migration: 단일 release job이 backup·diff·migrate deploy 후 app rollout
+  - destructive는 expand/contract, local/test만 container startup migration 허용
+- [ ] production deploy: 승인 게이트 + 이전 image rollback 절차
+- [ ] secret: Secret Manager 주입
+
+완료 기준: CI 통과 후 ECR에 이미지가 push되고, 승인 후 NestJS와 FastAPI가 각각 Fargate에 배포된다.
+
+### N6. 운영 DB·확장성·정책 마무리
+
+브랜치: `feature/db-soft-delete-scalability`
+
+- [ ] User/Diagnosis에 Soft Delete 필드 + 보존 기간 도입
+- [ ] 공통 repository/query 정책(삭제 조건) + 최종 purge job
+- [ ] 개인정보/원본 이미지: 물리 삭제 기본
+- [ ] 법적 보존 진단 결과: 익명화 후 보존
+- [ ] FK Cascade/SetNull/Restrict 정책 모델별 표 확정 (schema.prisma)
+- [ ] health /health/live · /health/ready 분리
+  - live: process event loop, ready: DB·필수 config·migration 상태
+  - Redis/외부 API는 선택적/요청별 dependency (readiness 무조건 실패 X)
+- [ ] 커서 pagination(진단·추천·제품 목록)
+- [ ] 환경변수 registry(owner·description·required env·safe default·secret 여부)
+  - mock flag는 test/dev 전용, owner/expiry 없는 flag merge 거부
+  - production unknown key 엄격 처리
+- [ ] 의존성 audit(npm audit) CI 게이트 — critical/high SLA
+- [ ] coverage threshold: Auth·Diagnosis·Weather·Recommendation·Exception branch/function 우선
+
+완료 기준: 탈퇴 시 Soft Delete로 보존 기간이 유지되고, purge job이 최종 삭제를 수행하며, health probe가 의존성 중요도별로 분리된다.
 
 ## 완료 정의
 
