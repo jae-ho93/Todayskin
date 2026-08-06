@@ -1,15 +1,13 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { PatternController } from './pattern.controller';
 import { PatternService } from './pattern.service';
+import { JobsModule } from '../jobs/jobs.module';
 
 /**
- * PatternModule — T10 개인 패턴 분석 API.
- *
- * Diagnosis+WeatherSnapshot 조인 시계열 상관 분석을 담당한다.
- * PrismaService(PrismaModule 전역)만 주입받는다.
- * 별도 외부 API/Gemini 호출은 없다.
+ * PatternModule — T10 개인 패턴 + N4 비동기 enqueue.
  */
 @Module({
+  imports: [forwardRef(() => JobsModule)],
   controllers: [PatternController],
   providers: [PatternService],
   exports: [PatternService],

@@ -651,11 +651,11 @@ S3_BUCKET 미설정 시 개발/테스트는 Memory store. 단위 138, 관련 e2e
 
 브랜치: `feature/bullmq-async-jobs`
 
-- [ ] BullMQ 도입 — 현재 Redis는 날씨 캐시만
-- [ ] 추천 생성·패턴 분석·알림 발송을 비동기 job으로 전환
-- [ ] job 상태 모델: PENDING → COMPLETED/FAILED
-- [ ] job 우선순위·재시도·DLQ 정책 구현
-- [ ] API는 즉시 jobId를 반환하고 결과는 polling/SSE로 조회
+- [x] BullMQ 도입 — 현재 Redis는 날씨 캐시만
+- [x] 추천 생성·패턴 분석·알림 발송을 비동기 job으로 전환
+- [x] job 상태 모델: PENDING → COMPLETED/FAILED
+- [x] job 우선순위·재시도·DLQ 정책 구현
+- [x] API는 즉시 jobId를 반환하고 결과는 polling/SSE로 조회
 
 완료 기준: 시간이 오래 걸리는 작업이 비동기 job으로 분리되어 API 응답 속도가 개선된다.
 
