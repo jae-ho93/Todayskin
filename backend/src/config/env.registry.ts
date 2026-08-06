@@ -1,0 +1,151 @@
+/**
+ * 환경변수 registry (N6).
+ * owner · description · requiredEnv · safeDefault · secret 여부를 한곳에서 관리한다.
+ *
+ * 규칙:
+ * - mock flag는 test/dev 전용. owner/expiry 없는 mock flag는 production merge 거부.
+ * - production에서 registry에 없는 unknown key는 엄격 처리(경고 후 거부 옵션).
+ */
+
+export type EnvOwner =
+  | 'platform'
+  | 'auth'
+  | 'weather'
+  | 'diagnosis'
+  | 'ai'
+  | 'security'
+  | 'observability'
+  | 'storage'
+  | 'jobs'
+  | 'deploy';
+
+export interface EnvVarDefinition {
+  key: string;
+  owner: EnvOwner;
+  description: string;
+  /** NODE_ENV별 required. true면 해당 env에서 필수. */
+  requiredIn: Array<'development' | 'test' | 'production' | '*'> | 'never';
+  safeDefault?: string | number | boolean | null;
+  secret: boolean;
+  /** mock/feature flag — production에서는 false 강제 또는 금지 */
+  mockFlag?: boolean;
+  /** mock flag 만료일(ISO). owner+expiry 없으면 production merge 거부. */
+  expiry?: string;
+}
+
+export const ENV_REGISTRY: EnvVarDefinition[] = [
+  { key: 'NODE_ENV', owner: 'platform', description: 'runtime environment', requiredIn: ['*'], safeDefault: 'development', secret: false },
+  { key: 'PORT', owner: 'platform', description: 'HTTP listen port', requiredIn: 'never', safeDefault: 3000, secret: false },
+  { key: 'ALLOWED_ORIGINS', owner: 'security', description: 'CORS allowlist (comma-separated)', requiredIn: 'never', safeDefault: '', secret: false },
+
+  { key: 'DATABASE_URL', owner: 'platform', description: 'PostgreSQL connection string', requiredIn: ['development', 'production'], secret: true },
+  { key: 'SHADOW_DATABASE_URL', owner: 'platform', description: 'Prisma migrate diff shadow DB', requiredIn: 'never', secret: true },
+  { key: 'REDIS_URL', owner: 'platform', description: 'Redis connection URL (optional cache/jobs)', requiredIn: 'never', safeDefault: '', secret: true },
+  { key: 'WEATHER_CACHE_TTL_SECONDS', owner: 'weather', description: 'Weather cache TTL seconds', requiredIn: 'never', safeDefault: 300, secret: false },
+  { key: 'JOB_DISPATCHER', owner: 'jobs', description: 'Job dispatcher mode auto|inline|bullmq', requiredIn: 'never', safeDefault: 'auto', secret: false },
+
+  { key: 'JWT_ACCESS_SECRET', owner: 'auth', description: 'Access JWT HMAC secret', requiredIn: ['development', 'production'], secret: true },
+  { key: 'JWT_REFRESH_SECRET', owner: 'auth', description: 'Refresh JWT HMAC secret', requiredIn: ['development', 'production'], secret: true },
+  { key: 'ACCESS_TOKEN_EXPIRES_IN', owner: 'auth', description: 'Access token lifetime', requiredIn: 'never', safeDefault: '15m', secret: false },
+  { key: 'REFRESH_TOKEN_EXPIRES_IN', owner: 'auth', description: 'Refresh token lifetime', requiredIn: 'never', safeDefault: '14d', secret: false },
+
+  { key: 'OTP_TTL_SECONDS', owner: 'auth', description: 'OTP code TTL seconds', requiredIn: 'never', safeDefault: 180, secret: false },
+  { key: 'OTP_MAX_ATTEMPTS', owner: 'auth', description: 'OTP max verify attempts', requiredIn: 'never', safeDefault: 5, secret: false },
+  { key: 'OTP_RESEND_COOLDOWN_SECONDS', owner: 'auth', description: 'OTP resend cooldown', requiredIn: 'never', safeDefault: 60, secret: false },
+  { key: 'OTP_MAX_PENDING_PER_PHONE', owner: 'auth', description: 'Max pending OTP per phone', requiredIn: 'never', safeDefault: 3, secret: false },
+  { key: 'OTP_ALLOWLIST_PHONES', owner: 'auth', description: 'Dev allowlisted phones for mock OTP', requiredIn: 'never', safeDefault: '', secret: false, mockFlag: true, expiry: '2027-01-01' },
+
+  { key: 'SMS_API_KEY', owner: 'auth', description: 'SMS gateway API key', requiredIn: 'never', secret: true },
+  { key: 'SMS_SENDER', owner: 'auth', description: 'SMS sender id', requiredIn: 'never', secret: false },
+  { key: 'SMS_ENDPOINT', owner: 'auth', description: 'SMS gateway endpoint', requiredIn: 'never', secret: false },
+
+  { key: 'KMA_API_KEY', owner: 'weather', description: 'KMA API key', requiredIn: 'never', secret: true },
+  { key: 'AIRKOREA_API_KEY', owner: 'weather', description: 'AirKorea API key', requiredIn: 'never', secret: true },
+  { key: 'KMA_AREA_NO', owner: 'weather', description: 'Default KMA area number fallback', requiredIn: 'never', secret: false },
+  { key: 'AIRKOREA_STATION_NAME', owner: 'weather', description: 'Default AirKorea station fallback', requiredIn: 'never', secret: false },
+
+  { key: 'GEMINI_API_KEY', owner: 'ai', description: 'Gemini API key', requiredIn: 'never', secret: true },
+  { key: 'GEMINI_MODEL', owner: 'ai', description: 'Gemini model id', requiredIn: 'never', safeDefault: 'gemini-flash-latest', secret: false },
+  { key: 'MOCK_GEMINI', owner: 'ai', description: 'Use Gemini mock responses (dev/test only)', requiredIn: 'never', safeDefault: 'false', secret: false, mockFlag: true, expiry: '2027-01-01' },
+  { key: 'MOCK_INFERENCE', owner: 'diagnosis', description: 'Use mock diagnosis inference (dev/test only)', requiredIn: 'never', safeDefault: 'false', secret: false, mockFlag: true, expiry: '2027-01-01' },
+  { key: 'INFERENCE_SERVICE_URL', owner: 'diagnosis', description: 'Python inference service base URL', requiredIn: 'never', secret: false },
+
+  { key: 'THROTTLE_LIMIT', owner: 'security', description: 'Rate limit max requests per window', requiredIn: 'never', safeDefault: 60, secret: false },
+  { key: 'THROTTLE_TTL_MS', owner: 'security', description: 'Rate limit window ms', requiredIn: 'never', safeDefault: 60_000, secret: false },
+
+  { key: 'LOG_LEVEL', owner: 'observability', description: 'Pino log level', requiredIn: 'never', safeDefault: 'info', secret: false },
+  { key: 'SENTRY_DSN', owner: 'observability', description: 'Sentry DSN', requiredIn: 'never', secret: true },
+  { key: 'SENTRY_TRACES_SAMPLE_RATE', owner: 'observability', description: 'Sentry traces sample rate', requiredIn: 'never', safeDefault: 0.1, secret: false },
+
+  { key: 'S3_BUCKET', owner: 'storage', description: 'Diagnosis image S3 bucket', requiredIn: 'never', secret: false },
+  { key: 'AWS_REGION', owner: 'storage', description: 'AWS region', requiredIn: 'never', safeDefault: 'ap-northeast-2', secret: false },
+  { key: 'S3_KMS_KEY_ID', owner: 'storage', description: 'Optional SSE-KMS key id', requiredIn: 'never', secret: true },
+  { key: 'AWS_ACCESS_KEY_ID', owner: 'storage', description: 'AWS access key (local only; prefer IAM role)', requiredIn: 'never', secret: true },
+  { key: 'AWS_SECRET_ACCESS_KEY', owner: 'storage', description: 'AWS secret key (local only; prefer IAM role)', requiredIn: 'never', secret: true },
+
+  { key: 'RUN_MIGRATIONS_ON_START', owner: 'deploy', description: 'Run prisma migrate on container start (local only)', requiredIn: 'never', safeDefault: 'false', secret: false, mockFlag: true, expiry: '2027-01-01' },
+
+  { key: 'SOFT_DELETE_RETENTION_DAYS', owner: 'platform', description: 'Soft-delete retention days before purge', requiredIn: 'never', safeDefault: 30, secret: false },
+  { key: 'SOFT_DELETE_PURGE_INTERVAL_MS', owner: 'platform', description: 'Purge scheduler interval ms (0=disabled)', requiredIn: 'never', safeDefault: 3_600_000, secret: false },
+];
+
+const REGISTRY_BY_KEY = new Map(ENV_REGISTRY.map((d) => [d.key, d]));
+
+export function getEnvDefinition(key: string): EnvVarDefinition | undefined {
+  return REGISTRY_BY_KEY.get(key);
+}
+
+export function getRequiredEnvKeys(nodeEnv: string): string[] {
+  return ENV_REGISTRY.filter((d) => {
+    if (d.requiredIn === 'never') return false;
+    return d.requiredIn.includes('*') || d.requiredIn.includes(nodeEnv as never);
+  }).map((d) => d.key);
+}
+
+export function listKnownEnvKeys(): Set<string> {
+  return new Set(ENV_REGISTRY.map((d) => d.key));
+}
+
+/**
+ * production unknown key / mock flag 검증.
+ * unknown key가 있으면 에러 메시지 배열 반환.
+ */
+export function validateProductionEnv(
+  env: NodeJS.ProcessEnv | Record<string, unknown>,
+): string[] {
+  const errors: string[] = [];
+  const known = listKnownEnvKeys();
+  // process.env에는 PATH 등 시스템 키가 많으므로, 앱이 명시적으로 읽는 키만 검사하기보다
+  // registry mock flag와 "앱 prefix" 없는 키는 스킵하고, registry에 등록된 mock만 강제한다.
+  for (const def of ENV_REGISTRY) {
+    if (!def.mockFlag) continue;
+    const raw = env[def.key];
+    if (raw === undefined || raw === null || String(raw).trim() === '' || String(raw) === 'false') {
+      continue;
+    }
+    if (!def.owner || !def.expiry) {
+      errors.push(`${def.key}: mock flag requires owner+expiry in registry`);
+      continue;
+    }
+    if (new Date(def.expiry).getTime() < Date.now()) {
+      errors.push(`${def.key}: mock flag expired (${def.expiry})`);
+    }
+    // production에서 mock flag truthy 금지
+    if (String(env.NODE_ENV) === 'production') {
+      errors.push(`${def.key}: mock flag must be false/empty in production`);
+    }
+  }
+
+  // production unknown app keys: only keys that look like app config (UPPER_SNAKE) and
+  // are present in a provided allowlist snapshot via APP_ENV_KEYS if set.
+  const declared = env.APP_ENV_KEYS;
+  if (typeof declared === 'string' && declared.trim()) {
+    for (const key of declared.split(',').map((s) => s.trim()).filter(Boolean)) {
+      if (!known.has(key)) {
+        errors.push(`${key}: unknown env key (not in registry)`);
+      }
+    }
+  }
+
+  return errors;
+}

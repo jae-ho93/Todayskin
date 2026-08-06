@@ -2,7 +2,8 @@ import { Test } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import helmet from 'helmet';
 import request from 'supertest';
-import { HealthModule } from '../src/health/health.module';
+import { HealthController } from '../src/health/health.controller';
+import { HealthService } from '../src/health/health.service';
 
 /**
  * N0: Helmet 보안 헤더 e2e.
@@ -12,7 +13,26 @@ import { HealthModule } from '../src/health/health.module';
 describe('Helmet 보안 헤더 (e2e)', () => {
   function buildApp(production: boolean): Promise<INestApplication> {
     return Test.createTestingModule({
-      imports: [HealthModule],
+      controllers: [HealthController],
+      providers: [
+        {
+          provide: HealthService,
+          useValue: {
+            check: () => ({ status: 'ok', timestamp: new Date().toISOString() }),
+            live: () => ({
+              status: 'ok',
+              probe: 'live',
+              timestamp: new Date().toISOString(),
+            }),
+            ready: async () => ({
+              status: 'ok',
+              probe: 'ready',
+              timestamp: new Date().toISOString(),
+              dependencies: [],
+            }),
+          },
+        },
+      ],
     })
       .compile()
       .then(async (moduleRef) => {
@@ -48,7 +68,6 @@ describe('Helmet 보안 헤더 (e2e)', () => {
       .expect(200)
       .expect('x-content-type-options', 'nosniff')
       .expect((res: request.Response) => {
-        // 개발 모드는 CSP를 비활성화하므로 헤더가 없어야 한다.
         expect(res.headers['content-security-policy']).toBeUndefined();
       });
     await app.close();

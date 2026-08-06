@@ -12,6 +12,7 @@ import {
   AdminUserListResponseDto,
 } from './dto/admin-user-list.dto';
 import { ChangeRoleDto } from './dto/change-role.dto';
+import { SoftDeleteService } from '../../common/soft-delete/soft-delete.service';
 
 /**
  * ADMIN 운영 서비스.
@@ -27,10 +28,12 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditLog: AuditLogService,
+    private readonly softDelete: SoftDeleteService,
   ) {}
 
   async listUsers(): Promise<AdminUserListResponseDto> {
     const users = await this.prisma.user.findMany({
+      where: { deletedAt: null },
       orderBy: { id: 'asc' },
     });
 
@@ -99,5 +102,21 @@ export class AdminService {
       role: updated.role as Role,
       createdAt: updated.createdAt.toISOString(),
     };
+  }
+
+  async softDeleteUser(userId: number, actorId: number) {
+    return this.softDelete.withdrawUser(userId, actorId);
+  }
+
+  async runPurge(actorId: number) {
+    const result = await this.softDelete.purgeExpired();
+    await this.auditLog.log({
+      actorId,
+      action: 'user.purge_triggered',
+      targetType: 'User',
+      result: 'success',
+      metadata: { ...result },
+    });
+    return result;
   }
 }

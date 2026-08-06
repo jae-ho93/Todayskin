@@ -71,5 +71,8 @@ jobs:
       - run: npx prisma db seed
       - run: npm run build
       - run: npm test
+      - run: npm run test:cov -- --coverageReporters=text-summary
       - run: npm run test:e2e
       - run: npm run lint
+      # N6: critical/high 취약점은 CI 실패 (SLA: high 이상 차단)
+      - run: npm run audit:ci

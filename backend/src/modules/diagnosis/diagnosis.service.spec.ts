@@ -280,12 +280,12 @@ describe('DiagnosisService', () => {
 
   describe('getDiagnosisWithMetrics', () => {
     it('진단이 없으면 404', async () => {
-      prisma.diagnosis.findUnique.mockResolvedValue(null);
+      prisma.diagnosis.findFirst.mockResolvedValue(null);
       await expect(service.getDiagnosisWithMetrics(1, 'snap-x')).rejects.toThrow(NotFoundException);
     });
 
     it('다른 사용자 진단 접근 시 403', async () => {
-      prisma.diagnosis.findUnique.mockResolvedValue({
+      prisma.diagnosis.findFirst.mockResolvedValue({
         id: 'snap-x',
         userId: 2,
         capturedAt: new Date(),
@@ -296,7 +296,7 @@ describe('DiagnosisService', () => {
     });
 
     it('본인 진단이면 정상 반환', async () => {
-      prisma.diagnosis.findUnique.mockResolvedValue({
+      prisma.diagnosis.findFirst.mockResolvedValue({
         id: 'snap-x',
         userId: 1,
         capturedAt: new Date(),

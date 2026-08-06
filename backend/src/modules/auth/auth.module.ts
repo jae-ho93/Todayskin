@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { AuthService } from './auth.service';
@@ -7,11 +7,13 @@ import { JwtStrategy } from '../../common/strategies/jwt.strategy';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { OtpModule } from '../otp/otp.module';
 import { JwtKeyService } from './jwt-key.service';
+import { SoftDeleteModule } from '../../common/soft-delete/soft-delete.module';
 
 @Module({
   imports: [
     PassportModule,
     OtpModule,
+    forwardRef(() => SoftDeleteModule),
     JwtModule.registerAsync({
       useFactory: () => ({
         // secret/expiresIn은 AuthService에서 ConfigService로 직접 관리.

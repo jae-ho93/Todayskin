@@ -1,4 +1,5 @@
 import * as Joi from 'joi';
+import { validateProductionEnv } from './env.registry';
 
 /**
  * 환경변수 검증 스키마.
@@ -98,4 +99,36 @@ export const envValidationSchema = Joi.object({
   AWS_REGION: Joi.string().default('ap-northeast-2'),
   // SSE-KMS 사용 시. 비우면 SSE-S3 AES256.
   S3_KMS_KEY_ID: Joi.string().allow('').optional(),
+
+  // N6 Soft Delete
+  SOFT_DELETE_RETENTION_DAYS: Joi.number().integer().min(1).default(30),
+  SOFT_DELETE_PURGE_INTERVAL_MS: Joi.number().integer().min(0).default(3_600_000),
+
+  // N6: production unknown key 검사에 사용하는 선언 목록(선택)
+  APP_ENV_KEYS: Joi.string().allow('').optional(),
 });
+
+
+/**
+ * Nest ConfigModule validation 전/후 보조.
+ * production에서 mock flag·unknown key(APP_ENV_KEYS)를 엄격 검사한다.
+ */
+export function validateEnvWithRegistry(
+  config: Record<string, unknown>,
+): Record<string, unknown> {
+  const { error, value } = envValidationSchema.validate(config, {
+    abortEarly: false,
+    allowUnknown: true,
+  });
+  if (error) {
+    throw new Error(`Config validation error: ${error.message}`);
+  }
+  const nodeEnv = String(value.NODE_ENV ?? config.NODE_ENV ?? 'development');
+  if (nodeEnv === 'production') {
+    const regErrors = validateProductionEnv({ ...config, ...value });
+    if (regErrors.length) {
+      throw new Error(`Config registry error: ${regErrors.join('; ')}`);
+    }
+  }
+  return value as Record<string, unknown>;
+}

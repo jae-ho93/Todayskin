@@ -26,8 +26,11 @@ export class ProductController {
     summary: '제품 카탈로그 목록',
     description: '제품 카탈로그. category(moisture/elasticity/brightening/barrier) 필터 가능.',
   })
-  async list(@Query() query: ProductQueryDto): Promise<ProductDto[]> {
-    return this.productService.list(query.category);
+  async list(@Query() query: ProductQueryDto) {
+    return this.productService.list(query.category, {
+      limit: query.limit,
+      cursor: query.cursor,
+    });
   }
 
   @Post('weather-based')

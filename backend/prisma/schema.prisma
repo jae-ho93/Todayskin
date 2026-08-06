@@ -10,6 +10,26 @@ datasource db {
   provider = "postgresql"
 }
 
+
+// ── N6 FK onDelete 정책 표 ─────────────────────────
+// Model                         | Parent        | onDelete | 근거
+// ------------------------------+---------------+----------+------------------------------
+// RefreshSession.user           | User          | Cascade  | 세션은 사용자와 함께 폐기
+// ConsentRecord.user            | User          | Cascade  | 동의 기록은 사용자 종속
+// NotificationPreference.user   | User          | Cascade  | 설정은 사용자 종속
+// AsyncJob.user                 | User          | Cascade  | job은 사용자 종속
+// AuditLog.actor                | User          | SetNull  | 감사 이력은 행위자 삭제 후에도 보존
+// Diagnosis.user                | User          | SetNull  | 익명화 후 법적 보존
+// Diagnosis.weatherSnapshot     | WeatherSnap.  | SetNull  | 스냅샷 삭제 시 진단은 유지
+// DiagnosisImage.diagnosis      | Diagnosis     | Cascade  | 이미지 메타는 진단 종속
+// DiagnosisImage.user           | User          | Cascade  | 사용자 삭제 시 메타 정리(객체는 선삭제)
+// SkinMetric.diagnosis          | Diagnosis     | Cascade  | 부위 측정은 진단 종속
+// Recommendation.user           | User          | Cascade  | 개인 추천은 사용자 종속
+// Recommendation.diagnosis      | Diagnosis     | SetNull  | 진단 삭제 후에도 추천 문구 보존 가능
+// Recommendation.template       | Template      | Restrict | 전역 템플릿 삭제 방지(기본 Restrict)
+// RecommendationProduct.*       | Rec/Product   | Cascade  | 중간 테이블
+// ───────────────────────────────────────────────────
+
 // ── 권한 ──────────────────────────────────────────
 enum Role {
   USER
@@ -27,6 +47,10 @@ model User {
   // T3에서 access token은 User 테이블에 저장하지 않고 RefreshSession으로 분리한다.
   role        Role     @default(USER)
   createdAt   DateTime @default(now()) @map("created_at")
+  // N6 Soft Delete: 탈퇴 시 즉시 PII 스크럽 + deletedAt 설정.
+  // purgeAfter 경과 후 purge job이 User를 물리 삭제한다.
+  deletedAt   DateTime? @map("deleted_at")
+  purgeAfter  DateTime? @map("purge_after")
 
   refreshSessions        RefreshSession[]
   diagnoses              Diagnosis[]
@@ -38,6 +62,7 @@ model User {
 
   auditLogs              AuditLog[]
 
+  @@index([deletedAt, purgeAfter])
   @@map("users")
 }
 
@@ -168,9 +193,14 @@ enum FacePart {
   jaw
 }
 
+// N6 Soft Delete / 법적 보존:
+// - 탈퇴·삭제 시 deletedAt + purgeAfter 설정, 원본 이미지는 즉시 물리 삭제.
+// - 진단 점수·부위 결과는 anonymizedAt 이후 익명 보존(userId SetNull 가능).
+// - User 물리 삭제(purge) 시 Diagnosis.userId는 SetNull로 남아 법적 보존한다.
 model Diagnosis {
   id                 String          @id
-  userId             Int             @map("user_id")
+  // User 탈퇴 purge 후 익명 보존을 위해 nullable + SetNull.
+  userId             Int?            @map("user_id")
   capturedAt         DateTime        @map("captured_at")
   overallScore       Float           @map("overall_score")
   // 원본 이미지는 diagnosis_image_storage 동의 시에만 S3 저장. 미동의면 null.
@@ -179,15 +209,19 @@ model Diagnosis {
   modelVersion       String?         @map("model_version")
   weatherSnapshotId  String?         @map("weather_snapshot_id")
   createdAt          DateTime        @default(now()) @map("created_at")
+  deletedAt          DateTime?       @map("deleted_at")
+  purgeAfter         DateTime?       @map("purge_after")
+  anonymizedAt       DateTime?       @map("anonymized_at")
 
-  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
   skinMetrics     SkinMetric[]
-  weatherSnapshot WeatherSnapshot? @relation(fields: [weatherSnapshotId], references: [id])
+  weatherSnapshot WeatherSnapshot? @relation(fields: [weatherSnapshotId], references: [id], onDelete: SetNull)
   recommendations Recommendation[]
   // N3: 동의 기반 S3 이미지 메타데이터 (원본 바이너리는 S3에만).
   image           DiagnosisImage?
 
   @@index([userId, capturedAt])
+  @@index([deletedAt, purgeAfter])
   @@map("diagnoses")
 }
 
@@ -326,7 +360,7 @@ model Recommendation {
 
   user      User?                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   diagnosis Diagnosis?             @relation(fields: [diagnosisId], references: [id], onDelete: SetNull)
-  template  RecommendationTemplate? @relation(fields: [templateId], references: [id])
+  template  RecommendationTemplate? @relation(fields: [templateId], references: [id], onDelete: Restrict)
   products  RecommendationProduct[]
 
   @@index([userId, diagnosisId, createdAt])

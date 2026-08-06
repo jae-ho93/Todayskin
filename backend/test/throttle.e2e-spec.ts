@@ -9,6 +9,7 @@ import {
 } from '@nestjs/throttler';
 import request from 'supertest';
 import { HealthModule } from '../src/health/health.module';
+import { HealthService } from '../src/health/health.service';
 
 /**
  * N0: Rate Limit e2e.
@@ -47,6 +48,17 @@ describe('Throttler Rate Limit (e2e)', () => {
       ],
       providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
     })
+      .overrideProvider(HealthService)
+      .useValue({
+        check: () => ({ status: 'ok', timestamp: new Date().toISOString() }),
+        live: () => ({ status: 'ok', probe: 'live', timestamp: new Date().toISOString() }),
+        ready: async () => ({
+          status: 'ok',
+          probe: 'ready',
+          timestamp: new Date().toISOString(),
+          dependencies: [],
+        }),
+      })
       .compile()
       .then(async (moduleRef) => {
         const app = moduleRef.createNestApplication();

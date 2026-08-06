@@ -6,7 +6,8 @@ import {
   ThrottlerGuard,
   ThrottlerStorageService,
 } from '@nestjs/throttler';
-import { envValidationSchema } from './config/env.validation';
+import { validateEnvWithRegistry } from './config/env.validation';
+import { SoftDeleteModule } from './common/soft-delete/soft-delete.module';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
@@ -34,11 +35,7 @@ import { JobsModule } from './modules/jobs/jobs.module';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env', '.env.local'],
-      validationSchema: envValidationSchema,
-      validationOptions: {
-        abortEarly: false,
-        allowUnknown: true,
-      },
+      validate: validateEnvWithRegistry,
     }),
     // N1: 구조화 로깅 — nestjs-pino JSON 로거, correlation ID, 민감정보 마스킹.
     LoggerModule,
@@ -63,6 +60,7 @@ import { JobsModule } from './modules/jobs/jobs.module';
     PrismaModule,
     RedisModule,
     HealthModule,
+    SoftDeleteModule,
     AuthModule,
     OtpModule,
     AdminModule,

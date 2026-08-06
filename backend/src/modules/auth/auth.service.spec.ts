@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConflictException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthService } from './auth.service';
+import { SoftDeleteService } from '../../common/soft-delete/soft-delete.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { OtpService } from '../otp/otp.service';
@@ -28,6 +29,8 @@ describe('AuthService', () => {
 
     moduleRef = await Test.createTestingModule({
       providers: [
+        { provide: SoftDeleteService, useValue: { withdrawUser: jest.fn(), assertActiveUser: jest.fn(), purgeExpired: jest.fn() } },
+        
         AuthService,
         {
           provide: PrismaService,

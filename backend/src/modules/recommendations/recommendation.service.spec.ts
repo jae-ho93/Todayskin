@@ -37,6 +37,7 @@ describe('RecommendationService', () => {
       },
       diagnosis: {
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
       },
       $transaction: jest.fn(),
     };
@@ -89,7 +90,8 @@ describe('RecommendationService', () => {
       await service.listGlobal(EvidenceGrade.B);
       expect(prisma.recommendationTemplate.findMany).toHaveBeenCalledWith({
         where: { grade: EvidenceGrade.B },
-        orderBy: { createdAt: 'asc' },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        take: undefined,
       });
     });
   });
@@ -128,7 +130,7 @@ describe('RecommendationService', () => {
 
   describe('generate (diagnosisId 모드 — 최종 계약)', () => {
     it('소유권 검사 후 DB에서 측정값/날씨 조회', async () => {
-      prisma.diagnosis.findUnique.mockResolvedValue({
+      prisma.diagnosis.findFirst.mockResolvedValue({
         id: 'diag-1',
         userId: 1,
         capturedAt: new Date(),
@@ -153,13 +155,15 @@ describe('RecommendationService', () => {
 
       const result = await service.generate(1, { diagnosisId: 'diag-1' });
       expect(result).toHaveLength(1);
-      expect(prisma.diagnosis.findUnique).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: 'diag-1' } }),
+      expect(prisma.diagnosis.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: 'diag-1', deletedAt: null }),
+        }),
       );
     });
 
     it('타 사용자 진단 접근 시 403 Forbidden', async () => {
-      prisma.diagnosis.findUnique.mockResolvedValue({
+      prisma.diagnosis.findFirst.mockResolvedValue({
         id: 'diag-1', userId: 999,
         capturedAt: new Date(), overallScore: 70, thumbnailUri: null,
         skinMetrics: [], weatherSnapshot: null,
@@ -170,14 +174,14 @@ describe('RecommendationService', () => {
     });
 
     it('존재하지 않는 진단 시 404 NotFound', async () => {
-      prisma.diagnosis.findUnique.mockResolvedValue(null);
+      prisma.diagnosis.findFirst.mockResolvedValue(null);
       await expect(service.generate(1, { diagnosisId: 'nope' })).rejects.toThrow(
         NotFoundException,
       );
     });
 
     it('동일 진단 중복 생성 방지 — 기존 추천 반환', async () => {
-      prisma.diagnosis.findUnique.mockResolvedValue({
+      prisma.diagnosis.findFirst.mockResolvedValue({
         id: 'diag-1', userId: 1,
         capturedAt: new Date(), overallScore: 70, thumbnailUri: null,
         skinMetrics: [], weatherSnapshot: null,

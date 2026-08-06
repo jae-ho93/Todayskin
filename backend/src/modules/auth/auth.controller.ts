@@ -63,4 +63,19 @@ export class AuthController {
   async me(@CurrentUser() user: JwtPayload): Promise<UserResponseDto> {
     return this.authService.getMe(user.sub);
   }
+
+  @Post('withdraw')
+  @ApiOperation({
+    summary: '회원 탈퇴 Soft Delete (N6)',
+    description:
+      'PII 즉시 스크럽, 원본 이미지 물리 삭제, 진단 결과 익명 보존. purgeAfter 이후 최종 물리 삭제.',
+  })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(200)
+  async withdraw(
+    @CurrentUser() user: JwtPayload,
+  ): Promise<{ deletedAt: string; purgeAfter: string }> {
+    return this.authService.withdraw(user.sub);
+  }
 }

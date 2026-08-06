@@ -17,6 +17,12 @@ import {
   Recommendation as RecommendationModel,
 } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
+import {
+  buildCursorPage,
+  CursorPageDto,
+  decodeCursor,
+} from '../../common/pagination/cursor-pagination';
+import { notDeletedWhere } from '../../common/soft-delete/soft-delete.policy';
 
 /**
  * LLM이 만들어내지 않는, 서버가 통제하는 정직한 출처 표기 (허위 인용 방지).
@@ -51,15 +57,35 @@ export class RecommendationService {
    * 기존 FastAPI /recommendations — user_id가 null인 레코드만.
    * grade 필터 적용 가능.
    */
-  async listGlobal(grade?: EvidenceGrade): Promise<RecommendationDto[]> {
+  async listGlobal(
+    grade?: EvidenceGrade,
+    opts?: { limit?: number; cursor?: string },
+  ): Promise<RecommendationDto[] | CursorPageDto<RecommendationDto>> {
     // RecommendationTemplate은 전역(user 비종속) 테이블이라 userId 필드가 없다.
-    // grade 필터만 적용한다.
-    const where = grade ? { grade } : undefined;
+    const decoded = decodeCursor(opts?.cursor);
+    const where: Record<string, unknown> = {};
+    if (grade) where.grade = grade;
+    if (decoded) {
+      const at = decoded.at ? new Date(decoded.at) : null;
+      where.OR = at
+        ? [
+            { createdAt: { gt: at } },
+            { createdAt: at, id: { gt: decoded.id } },
+          ]
+        : [{ id: { gt: decoded.id } }];
+    }
+    const take = opts?.limit;
     const templates = await this.prisma.recommendationTemplate.findMany({
       where,
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: take ? take + 1 : undefined,
     });
-    return templates.map((t) => this.templateToDto(t));
+    const items = templates.map((row) => this.templateToDto(row));
+    if (!take) return items;
+    return buildCursorPage(items, take, (row) => {
+      const raw = templates.find((x) => x.id === row.id);
+      return raw?.createdAt;
+    });
   }
 
   /**
@@ -96,8 +122,8 @@ export class RecommendationService {
 
     if (diagnosisId) {
       // 최종 계약 — 서버가 diagnosis 소유권 확인 후 DB에서 측정값/날씨를 조회한다.
-      const diagnosis = await this.prisma.diagnosis.findUnique({
-        where: { id: diagnosisId },
+      const diagnosis = await this.prisma.diagnosis.findFirst({
+        where: notDeletedWhere({ id: diagnosisId }),
         include: {
           skinMetrics: true,
           weatherSnapshot: true,

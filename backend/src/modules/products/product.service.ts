@@ -11,6 +11,11 @@ import { ProductDto, ProductTiming } from './dto/product.dto';
 import { Product } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { WeatherInputDto } from '../weather/dto/weather-snapshot.dto';
+import {
+  buildCursorPage,
+  CursorPageDto,
+  decodeCursor,
+} from '../../common/pagination/cursor-pagination';
 
 /**
  * ProductService — 제품 카탈로그 목록과 날씨 기반 제품 생성.
@@ -36,13 +41,34 @@ export class ProductService {
    * 기존 FastAPI /products — category 필터 적용 가능.
    * DB의 Product 테이블(seed 카탈로그)에서 조회한다.
    */
-  async list(category?: ProductCategory): Promise<ProductDto[]> {
-    const where = category ? { category } : undefined;
+  async list(
+    category?: ProductCategory,
+    opts?: { limit?: number; cursor?: string },
+  ): Promise<ProductDto[] | CursorPageDto<ProductDto>> {
+    const decoded = decodeCursor(opts?.cursor);
+    const where: Record<string, unknown> = {};
+    if (category) where.category = category;
+    if (decoded) {
+      const at = decoded.at ? new Date(decoded.at) : null;
+      where.OR = at
+        ? [
+            { createdAt: { gt: at } },
+            { createdAt: at, id: { gt: decoded.id } },
+          ]
+        : [{ id: { gt: decoded.id } }];
+    }
+    const take = opts?.limit;
     const products = await this.prisma.product.findMany({
       where,
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: take ? take + 1 : undefined,
     });
-    return products.map((p) => this.catalogToDto(p));
+    const items = products.map((p) => this.catalogToDto(p));
+    if (!take) return items;
+    return buildCursorPage(items, take, (row) => {
+      const raw = products.find((p) => p.id === row.id);
+      return raw?.createdAt;
+    });
   }
 
   /**

@@ -18,7 +18,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "audit:ci": "npm audit --audit-level=high"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
@@ -95,9 +96,53 @@
       "^.+\\.(t|j)s$": "ts-jest"
     },
     "collectCoverageFrom": [
-      "**/*.(t|j)s"
+      "**/*.(t|j)s",
+      "!**/*.module.ts",
+      "!**/main.ts",
+      "!**/index.ts",
+      "!**/*.dto.ts",
+      "!**/enums/**",
+      "!**/clients/**"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "coverageThreshold": {
+      "global": {
+        "branches": 25,
+        "functions": 35,
+        "lines": 35,
+        "statements": 35
+      },
+      "./src/modules/auth/auth.service.ts": {
+        "branches": 50,
+        "functions": 55,
+        "lines": 60,
+        "statements": 60
+      },
+      "./src/modules/diagnosis/diagnosis.service.ts": {
+        "branches": 45,
+        "functions": 50,
+        "lines": 55,
+        "statements": 55
+      },
+      "./src/modules/weather/weather.service.ts": {
+        "branches": 45,
+        "functions": 50,
+        "lines": 55,
+        "statements": 55
+      },
+      "./src/modules/recommendations/recommendation.service.ts": {
+        "branches": 45,
+        "functions": 50,
+        "lines": 55,
+        "statements": 55
+      },
+      "./src/common/filters/http-exception.filter.ts": {
+        "branches": 40,
+        "functions": 50,
+        "lines": 50,
+        "statements": 50
+      }
+    }
   }
 }
