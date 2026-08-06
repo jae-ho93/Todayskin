@@ -1,0 +1,114 @@
+"""Production inference: in-memory photo bytes -> same normalize+crop pipeline
+used in training -> trained SkinModel -> per-facepart classification grades +
+regression (equipment) values, in original units.
+
+Adapted from the training pipeline's src/infer.py: takes raw image bytes
+(never written to disk) instead of a file path, since the NestJS backend
+forwards the uploaded photo straight from memory and must not persist it.
+"""
+import json
+from pathlib import Path
+
+import cv2
+import numpy as np
+import torch
+from PIL import Image
+from torchvision import transforms
+
+from crop import crop_facepart, load_templates
+from landmarks import FaceLandmarkDetector
+from model import SkinModel
+from normalize import compute_normalization, warp_image
+from regions import FACEPART_NAMES, LABEL_SCHEMA
+from scoring import compute_scores
+
+ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+CROP_MARGIN = 0.15
+
+IMAGENET_MEAN = [0.485, 0.456, 0.406]
+IMAGENET_STD = [0.229, 0.224, 0.225]
+EVAL_TRANSFORM = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+])
+
+# face_whole(0)은 분류 라벨이 없어 앱 스키마에서 쓰지 않는다 -- 추론도 건너뛴다.
+SCORED_PART_IDS = [pid for pid in LABEL_SCHEMA if pid != 0]
+
+
+class NoFaceDetected(Exception):
+    pass
+
+
+class SkinAnalyzer:
+    def __init__(self, assets_dir: Path = ASSETS_DIR, device: str | None = None):
+        self.device = torch.device(
+            device or ("mps" if torch.backends.mps.is_available() else "cpu"))
+
+        with open(assets_dir / "reg_stats.json", encoding="utf-8") as f:
+            raw_stats = json.load(f)
+        self.reg_stats = {int(pid): {k: tuple(v) for k, v in stats.items()}
+                           for pid, stats in raw_stats.items()}
+
+        with open(assets_dir / "args.json", encoding="utf-8") as f:
+            run_args = json.load(f)
+        backbone_name = run_args.get("backbone_name", "mobilenet_v3_small")
+        dropout = run_args.get("dropout", 0.2)
+        self.model_version = f"{backbone_name}-todayskin-v1"
+
+        self.model = SkinModel(backbone_name=backbone_name, pretrained=False,
+                                dropout=dropout).to(self.device)
+        ckpt = torch.load(assets_dir / "best.pt", map_location=self.device)
+        self.model.load_state_dict(ckpt["model_state"])
+        self.model.eval()
+
+        self.templates = load_templates()
+        self.detector = FaceLandmarkDetector()
+
+    def close(self):
+        self.detector.close()
+
+    def analyze(self, image_bytes: bytes) -> dict:
+        """image_bytes: raw JPEG/PNG/WEBP bytes, decoded in-memory only --
+        never written to disk, matching the app's no-raw-image-storage rule."""
+        buf = np.frombuffer(image_bytes, dtype=np.uint8)
+        img = cv2.imdecode(buf, cv2.IMREAD_COLOR)
+        if img is None:
+            raise ValueError("could not decode image")
+
+        pts = self.detector.detect(img)
+        if pts is None:
+            raise NoFaceDetected("no face detected in image")
+
+        res = compute_normalization(pts)
+        norm_img = warp_image(img, res.matrix)
+
+        results = {}
+        with torch.no_grad():
+            for part_id in SCORED_PART_IDS:
+                schema = LABEL_SCHEMA[part_id]
+                crop = crop_facepart(norm_img, self.templates[part_id], margin=CROP_MARGIN)
+                pil_img = Image.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB))
+                tensor = EVAL_TRANSFORM(pil_img).unsqueeze(0).to(self.device)
+
+                cls_logits, reg_out = self.model(tensor, part_id)
+                classification = {name: int(logits.argmax(dim=1).item())
+                                   for name, logits in cls_logits.items()}
+
+                regression = {}
+                if reg_out is not None:
+                    reg_out = reg_out.cpu().squeeze(0)
+                    for i, name in enumerate(schema["regression"]):
+                        mean, std = self.reg_stats[part_id][name]
+                        regression[name] = float(reg_out[i].item() * std + mean)
+
+                results[FACEPART_NAMES[part_id]] = {
+                    "classification": classification,
+                    "regression": regression,
+                }
+
+        scores = compute_scores(results)
+        for part_name, score in scores["parts"].items():
+            results[part_name]["score"] = score
+        return {"parts": results, "overall_score": scores["overall"]}

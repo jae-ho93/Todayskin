@@ -75,13 +75,11 @@ async def get_diagnosis_history(
 @router.post("", response_model=SkinScoreSnapshot)
 async def submit_diagnosis(
     front: UploadFile,
-    left: UploadFile,
-    right: UploadFile,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> SkinScoreSnapshot:
     """
-    정면/좌/우 3장의 안면 이미지를 받아 11개 부위별 ResNet 앙상블 추론 결과를 반환.
+    정면 1장의 안면 이미지를 받아 11개 부위별 ResNet 앙상블 추론 결과를 반환.
     현재는 모델 서빙 파이프라인(ONNX Runtime) 연동 전이므로 목업 값을 사용하며,
     원본 이미지는 저장하지 않고 요청 처리 후 즉시 폐기한다(개인정보보호법 원칙 준수).
     측정값 자체는 히스토리/추천 연동을 위해 유저별로 DB에 저장한다.

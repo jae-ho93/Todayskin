@@ -7,11 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../src/api/client';
 import { colors, radius, shadow, spacing, typography } from '../src/theme';
 
-const STEPS = [
-  { key: 'front', title: '정면을 맞춰주세요' },
-  { key: 'left', title: '왼쪽으로 살짝 돌려주세요' },
-  { key: 'right', title: '오른쪽으로 살짝 돌려주세요' },
-] as const;
+const GUIDE_TEXT = '정면을 맞춰주세요';
 
 const TIPS = [
   { icon: 'sunny-outline' as const, text: '밝은 곳에서 촬영해주세요' },
@@ -24,31 +20,19 @@ const TIPS = [
 export default function CameraGuideScreen() {
   const [phase, setPhase] = useState<'intro' | 'capture'>('intro');
   const [permission, requestPermission] = useCameraPermissions();
-  const [stepIndex, setStepIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cameraRef = useRef<CameraView>(null);
-  const photosRef = useRef<{ front?: string; left?: string; right?: string }>({});
-  const step = STEPS[stepIndex];
 
   const handleCapture = async () => {
     if (submitting) return;
     const photo = await cameraRef.current?.takePictureAsync({ quality: 0.5 });
     if (!photo) return;
-    photosRef.current[step.key] = photo.uri;
-
-    if (stepIndex < STEPS.length - 1) {
-      setStepIndex((i) => i + 1);
-      return;
-    }
-
-    const { front, left, right } = photosRef.current;
-    if (!front || !left || !right) return;
 
     setSubmitting(true);
     setError(null);
     try {
-      await api.submitDiagnosis({ front, left, right });
+      await api.submitDiagnosis({ front: photo.uri });
       router.replace('/diagnosis-result');
     } catch (e) {
       setError(e instanceof Error ? e.message : '진단 저장에 실패했습니다. 다시 시도해주세요.');
@@ -119,20 +103,13 @@ export default function CameraGuideScreen() {
 
       <SafeAreaView style={styles.topBar} edges={['top']}>
         <View style={styles.topBarCenter}>
-          <Text style={styles.guideText}>{step.title}</Text>
+          <Text style={styles.guideText}>{GUIDE_TEXT}</Text>
         </View>
       </SafeAreaView>
 
       <SafeAreaView style={styles.bottomBar}>
-        {stepIndex === 0 && (
-          <Text style={styles.timingHint}>외출 후·자기 전, 세안을 마친 뒤 촬영하면 더 정확해요</Text>
-        )}
+        <Text style={styles.timingHint}>외출 후·자기 전, 세안을 마친 뒤 촬영하면 더 정확해요</Text>
         {error && <Text style={styles.errorText}>{error}</Text>}
-        <View style={styles.stepRow}>
-          {STEPS.map((s, i) => (
-            <View key={s.key} style={[styles.stepDot, i <= stepIndex && styles.stepDotActive]} />
-          ))}
-        </View>
         {/* 좌측에 X 버튼과 같은 너비의 빈 공간을 둬서 셔터 버튼이 화면 중앙에 오도록 맞춘다 */}
         <View style={styles.shutterRow}>
           <View style={styles.closeButtonSpacer} />
@@ -267,9 +244,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     textAlign: 'center',
   },
-  stepRow: { flexDirection: 'row', gap: spacing.sm },
-  stepDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.4)' },
-  stepDotActive: { backgroundColor: colors.coral },
   // 셔터 버튼이 화면 중앙에 오도록, X 버튼과 동일한 너비의 빈 스페이서를 반대쪽에 둔 3분할 행
   shutterRow: {
     flexDirection: 'row',

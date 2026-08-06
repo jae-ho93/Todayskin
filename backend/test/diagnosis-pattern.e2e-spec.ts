@@ -92,17 +92,11 @@ describe('Diagnosis & Pattern (e2e)', () => {
     '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrq6tba2t7i5usLFxsfIycrO0NHS09TV1tfY2drq6+vsLTz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhCRJFiGQYHR8VjQoLxaKyEjOTFS8pHj4xQlRJU1VWV1hZWmNkZWZnaGlqc3R1dnd4eXqCg4SFhoeIiYqLjI2Oj5KSk5SVlpeYmZqYm5ydXp6cnqcoqSlpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drq6+vr/9sAQwA',
     'base64',
   );
-  const PNG_1x1 = Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-    'base64',
-  );
-
   describe('진단 multipart 파일 검증', () => {
-    it('필드 누락(front만) → 400', async () => {
+    it('필드 누락(front 없음) → 400', async () => {
       await request(app.getHttpServer())
         .post('/diagnosis')
         .set('Authorization', `Bearer ${accessToken}`)
-        .attach('front', JPEG_1x1, 'front.jpg')
         .expect(400);
     });
 
@@ -111,8 +105,6 @@ describe('Diagnosis & Pattern (e2e)', () => {
         .post('/diagnosis')
         .set('Authorization', `Bearer ${accessToken}`)
         .attach('front', Buffer.alloc(0), 'front.jpg')
-        .attach('left', Buffer.alloc(0), 'left.jpg')
-        .attach('right', Buffer.alloc(0), 'right.jpg')
         .expect(400);
     });
 
@@ -121,20 +113,16 @@ describe('Diagnosis & Pattern (e2e)', () => {
         .post('/diagnosis')
         .set('Authorization', `Bearer ${accessToken}`)
         .attach('front', Buffer.from('notimage'), { filename: 'front.txt', contentType: 'text/plain' })
-        .attach('left', JPEG_1x1, 'left.jpg')
-        .attach('right', JPEG_1x1, 'right.jpg')
         .expect(400);
     });
 
-    it('정상 3장 제출 → 201 (MockInferenceProvider 고정값)', async () => {
+    it('정상 제출 → 201 (MockInferenceProvider 고정값)', async () => {
       // 중복 요청 방지(60초) 회피를 위해 이전 진단이 없도록 정리는 afterAll에서.
       // 첫 제출은 정상 201이어야 한다.
       const res = await request(app.getHttpServer())
         .post('/diagnosis')
         .set('Authorization', `Bearer ${accessToken}`)
         .attach('front', JPEG_1x1, 'front.jpg')
-        .attach('left', PNG_1x1, 'left.png')
-        .attach('right', JPEG_1x1, 'right.jpg')
         .expect(201);
 
       expect(res.body.id).toBeDefined();
@@ -147,8 +135,6 @@ describe('Diagnosis & Pattern (e2e)', () => {
         .post('/diagnosis')
         .set('Authorization', `Bearer ${accessToken}`)
         .attach('front', JPEG_1x1, 'front.jpg')
-        .attach('left', PNG_1x1, 'left.png')
-        .attach('right', JPEG_1x1, 'right.jpg')
         .expect(400);
     });
 
@@ -156,8 +142,6 @@ describe('Diagnosis & Pattern (e2e)', () => {
       await request(app.getHttpServer())
         .post('/diagnosis')
         .attach('front', JPEG_1x1, 'front.jpg')
-        .attach('left', PNG_1x1, 'left.png')
-        .attach('right', JPEG_1x1, 'right.jpg')
         .expect(401);
     });
   });

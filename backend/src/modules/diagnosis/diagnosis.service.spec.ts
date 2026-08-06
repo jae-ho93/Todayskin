@@ -27,12 +27,8 @@ describe('DiagnosisService', () => {
   let prisma: Record<string, any>;
 
   const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0x00]);
-  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-  const webp = Buffer.from('RIFF0000WEBP', 'ascii');
   const validImages: InferenceImages = {
     front: { buffer: jpeg, mimetype: 'image/jpeg', size: jpeg.length },
-    left: { buffer: png, mimetype: 'image/png', size: png.length },
-    right: { buffer: webp, mimetype: 'image/webp', size: webp.length },
   };
 
   const validInference: InferenceResult = {

@@ -22,14 +22,10 @@ import { InferenceImage } from './providers/inference-provider.interface';
 import { memoryStorage } from 'multer';
 
 /**
- * 진단 multipart 필드 정의: 정면/좌/우 3장.
+ * 진단 multipart 필드 정의: 정면 1장.
  * 파일은 메모리에만 올리고 디스크에 저장하지 않는다(원본 이미지 비저장 원칙).
  */
-const DIAGNOSIS_FILE_FIELDS = [
-  { name: 'front', maxCount: 1 },
-  { name: 'left', maxCount: 1 },
-  { name: 'right', maxCount: 1 },
-];
+const DIAGNOSIS_FILE_FIELDS = [{ name: 'front', maxCount: 1 }];
 
 @ApiTags('diagnosis')
 @Controller('diagnosis')
@@ -53,7 +49,7 @@ export class DiagnosisController {
   }
 
   @Post()
-  @ApiOperation({ summary: '진단 제출 — 정면/좌/우 3장 이미지 업로드' })
+  @ApiOperation({ summary: '진단 제출 — 정면 1장 이미지 업로드' })
   @ApiBearerAuth()
   @ApiConsumes('multipart/form-data')
   @UseGuards(JwtAuthGuard)
@@ -61,22 +57,20 @@ export class DiagnosisController {
     FileFieldsInterceptor(DIAGNOSIS_FILE_FIELDS, {
       storage: memoryStorage(),
       // 파일 크기 상한은 서비스에서도 재검증하지만, multer 단에서도 막아 과도한 메모리 사용을 방지한다.
-      limits: { fileSize: 10 * 1024 * 1024, files: 3, parts: 6 },
+      limits: { fileSize: 10 * 1024 * 1024, files: 1, parts: 2 },
     }),
   )
   @HttpCode(201)
   async submit(
     @CurrentUser() user: JwtPayload,
     @UploadedFiles()
-    files: { front?: Express.Multer.File[]; left?: Express.Multer.File[]; right?: Express.Multer.File[] },
+    files: { front?: Express.Multer.File[] },
     @Query() query: SubmitDiagnosisQueryDto,
   ): Promise<SkinScoreSnapshotDto> {
     // 필드 존재 검증 — 누락된 필드는 400.
     const front = files?.front?.[0];
-    const left = files?.left?.[0];
-    const right = files?.right?.[0];
-    if (!front || !left || !right) {
-      throw new BadRequestException('정면(front), 좌(left), 우(right) 이미지 3장이 모두 필요합니다');
+    if (!front) {
+      throw new BadRequestException('정면(front) 이미지가 필요합니다');
     }
     if ((query.lat === undefined) !== (query.lon === undefined)) {
       throw new BadRequestException('lat과 lon은 함께 보내야 합니다');
@@ -84,8 +78,6 @@ export class DiagnosisController {
 
     const images = {
       front: toInferenceImage(front),
-      left: toInferenceImage(left),
-      right: toInferenceImage(right),
     };
 
     return this.diagnosisService.submit(user.sub, images, {
