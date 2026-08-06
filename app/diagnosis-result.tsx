@@ -1,28 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../src/api/client';
-import { FaceIllustration } from '../src/components/FaceIllustration';
-import { MetricBar } from '../src/components/MetricBar';
 import { colors, radius, shadow, spacing, typography } from '../src/theme';
-import type { FacePart, SkinPartMetric, SkinScoreSnapshot } from '../src/types';
+import type { SkinScoreSnapshot } from '../src/types';
 
-// FaceIllustration의 실제 이목구비 좌표(viewBox 150x200, 얼굴 타원 cx=75 cy=100 rx=48 ry=62)를
-// 기준으로 계산한 퍼센트다. FaceIllustration의 좌표를 바꾸면 이 값도 같이 맞춰야 한다.
-const PIN_POSITION: Record<FacePart, { top: `${number}%`; left: `${number}%` }> = {
-  forehead: { top: '26%', left: '50%' },
-  glabella: { top: '42%', left: '50%' },
-  eyeArea: { top: '42%', left: '37%' },
-  cheek: { top: '60%', left: '66%' },
-  lips: { top: '65%', left: '50%' },
-  jaw: { top: '78%', left: '50%' },
-};
-
-// 화면 4: 진단 결과 — 얼굴 부위별 요약
+// 화면 4: 진단 결과 — 얼굴 부위별 요약 (임시: 얼굴 일러스트 대신 텍스트 목록으로 표시)
 export default function DiagnosisResultScreen() {
-  const [selected, setSelected] = useState<SkinPartMetric | null>(null);
   const [skinScore, setSkinScore] = useState<SkinScoreSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -68,43 +54,32 @@ export default function DiagnosisResultScreen() {
         <View style={{ width: 22 }} />
       </SafeAreaView>
 
-      <View style={styles.photoWrap}>
-        <View style={styles.photoPlaceholder}>
-          <FaceIllustration />
-        </View>
-        {skinScore.parts.map((p) => (
-          <Pressable
-            key={p.part}
-            style={[styles.pin, PIN_POSITION[p.part], selected?.part === p.part && styles.pinActive]}
-            onPress={() => setSelected(p)}
-          >
-            <View style={styles.pinDot} />
-          </Pressable>
-        ))}
-      </View>
-
       <View style={styles.summaryRow}>
         <Text style={styles.overallLabel}>종합 점수</Text>
         <Text style={styles.overallScore}>{skinScore.overallScore}</Text>
       </View>
 
-      {selected ? (
-        <View style={styles.sheet}>
-          <View style={styles.sheetHandle} />
-          <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>{selected.label}</Text>
-            <Text style={styles.sheetGrade}>{selected.grade}</Text>
-          </View>
-          <View style={styles.sheetMetrics}>
-            {typeof selected.moisture === 'number' && <MetricBar label="수분" value={selected.moisture} />}
-            {typeof selected.elasticity === 'number' && (
-              <MetricBar label="탄력" value={selected.elasticity} />
+      <ScrollView style={styles.partsList} contentContainerStyle={styles.partsListContent}>
+        {skinScore.parts.map((p) => (
+          <View key={p.part} style={styles.partRow}>
+            <View style={styles.partHeader}>
+              <Text style={styles.partLabel}>{p.label}</Text>
+              <Text style={styles.partGrade}>{p.grade}</Text>
+            </View>
+            {p.note && <Text style={styles.partDetail}>{p.note}</Text>}
+            {(typeof p.moisture === 'number' || typeof p.elasticity === 'number') && (
+              <Text style={styles.partDetail}>
+                {[
+                  typeof p.moisture === 'number' ? `수분 ${p.moisture}` : null,
+                  typeof p.elasticity === 'number' ? `탄력 ${p.elasticity}` : null,
+                ]
+                  .filter(Boolean)
+                  .join('  ·  ')}
+              </Text>
             )}
           </View>
-        </View>
-      ) : (
-        <Text style={styles.hint}>부위별 핀을 눌러 자세한 측정값을 확인하세요</Text>
-      )}
+        ))}
+      </ScrollView>
 
       <Text style={styles.disclaimer}>측정·추정값입니다. 의학적 진단이 아닙니다.</Text>
     </View>
@@ -131,28 +106,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
   },
   headerTitle: { ...typography.subtitle, color: colors.textPrimary },
-  photoWrap: {
-    marginHorizontal: spacing.lg,
-    aspectRatio: 3 / 4,
-    borderRadius: radius.lg,
-    backgroundColor: colors.gray100,
-    overflow: 'hidden',
-  },
-  photoPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  pin: {
-    position: 'absolute',
-    width: 28,
-    height: 28,
-    marginLeft: -14,
-    marginTop: -14,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadow.card,
-  },
-  pinActive: { backgroundColor: colors.sage },
-  pinDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.coral },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -162,32 +115,19 @@ const styles = StyleSheet.create({
   },
   overallLabel: { ...typography.bodySm, color: colors.textSecondary },
   overallScore: { ...typography.displaySm, color: colors.textPrimary },
-  hint: {
-    ...typography.bodySm,
-    color: colors.textTertiary,
-    textAlign: 'center',
-    marginTop: spacing.lg,
-  },
-  sheet: {
-    marginTop: spacing.lg,
-    marginHorizontal: spacing.lg,
+  partsList: { flex: 1, marginTop: spacing.lg },
+  partsListContent: { paddingHorizontal: spacing.lg, gap: spacing.md, paddingBottom: spacing.lg },
+  partRow: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: spacing.lg,
-    gap: spacing.md,
+    gap: spacing.xs,
     ...shadow.card,
   },
-  sheetHandle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.gray200,
-    alignSelf: 'center',
-  },
-  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  sheetTitle: { ...typography.headline, color: colors.textPrimary },
-  sheetGrade: { ...typography.subtitle, color: colors.sageDark },
-  sheetMetrics: { gap: spacing.sm },
+  partHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  partLabel: { ...typography.headline, color: colors.textPrimary },
+  partGrade: { ...typography.subtitle, color: colors.sageDark },
+  partDetail: { ...typography.bodySm, color: colors.textSecondary },
   disclaimer: {
     ...typography.caption,
     color: colors.textTertiary,

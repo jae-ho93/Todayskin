@@ -32,7 +32,7 @@ export interface InferenceResult {
  * NestJS 진단 서비스는 이 인터페이스에만 의존하므로, Provider 교체 시 진단 서비스 본문은
  * 변경하지 않는다.
  *
- * 입력: 정면/좌/우 이미지 버퍼(MIME 포함). 원본 이미지는 저장하지 않고 처리 후 폐기한다.
+ * 입력: 정면 이미지 버퍼(MIME 포함). 원본 이미지는 저장하지 않고 처리 후 폐기한다.
  * 출력: 추론 결과(overallScore, modelVersion, parts).
  *
  * 실제 추론은 보류 상태이며, MockInferenceProvider는 개발/통합 테스트용 고정값을 반환한다.
@@ -50,8 +50,6 @@ export interface InferenceImage {
 
 export interface InferenceImages {
   front: InferenceImage;
-  left: InferenceImage;
-  right: InferenceImage;
 }
 
 /**

@@ -8,6 +8,7 @@ import {
   InferenceUnavailable,
 } from './providers/inference-provider.interface';
 import { MockInferenceProvider } from './providers/mock-inference.provider';
+import { PythonInferenceProvider } from './providers/python-inference.provider';
 import { WeatherModule } from '../weather/weather.module';
 
 /**
@@ -15,9 +16,10 @@ import { WeatherModule } from '../weather/weather.module';
  *
  * InferenceProvider는 환경 변수로 선택한다:
  *   - MOCK_INFERENCE=true (개발/통합 테스트용) → MockInferenceProvider
+ *   - INFERENCE_SERVICE_URL이 설정됨 → PythonInferenceProvider
+ *     (backend/inference-service — 학습된 MobileNetV3 모델을 감싼 FastAPI 서버)
  *   - 그 외 → 실제 provider가 준비되지 않았음을 나타내는 fail-closed provider
  *     (진단 API는 503을 반환한다.)
- *   Python AI 서버가 준비되면 useFactory에 PythonInferenceProvider 분기를 추가한다.
  *
  * DiagnosisService는 PrismaService(PrismaModule 전역), WeatherService(WeatherModule),
  * InferenceProvider(토큰)를 주입받는다.
@@ -44,11 +46,17 @@ import { WeatherModule } from '../weather/weather.module';
           logger.error(
             'production 환경에서는 MOCK_INFERENCE를 사용할 수 없습니다. 진단 API는 실제 provider가 연결될 때까지 503을 반환합니다.',
           );
-        } else {
-          logger.warn(
-            '실제 InferenceProvider가 아직 연결되지 않았습니다. 진단 API는 provider가 준비될 때까지 503을 반환합니다.',
-          );
         }
+
+        const inferenceServiceUrl = config.get<string>('INFERENCE_SERVICE_URL');
+        if (inferenceServiceUrl) {
+          logger.log(`PythonInferenceProvider 연결: ${inferenceServiceUrl}`);
+          return new PythonInferenceProvider(inferenceServiceUrl);
+        }
+
+        logger.warn(
+          '실제 InferenceProvider가 아직 연결되지 않았습니다(INFERENCE_SERVICE_URL 미설정). 진단 API는 provider가 준비될 때까지 503을 반환합니다.',
+        );
         return {
           infer: async () => {
             throw new InferenceUnavailable();

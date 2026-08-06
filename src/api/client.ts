@@ -122,15 +122,13 @@ export const api = {
     if (result.status === 'not_found') return [];
     return null;
   },
-  // 촬영 3장을 서버로 전송해 진단을 생성·저장한다. 쓰기 요청이므로 실패 시 에러를 던진다.
-  submitDiagnosis: async (photos: { front: string; left: string; right: string }) => {
+  // 정면 촬영 1장을 서버로 전송해 진단을 생성·저장한다. 쓰기 요청이므로 실패 시 에러를 던진다.
+  submitDiagnosis: async (photos: { front: string }) => {
     const formData = new FormData();
-    (['front', 'left', 'right'] as const).forEach((key) => {
-      formData.append(
-        key,
-        { uri: photos[key], name: `${key}.jpg`, type: 'image/jpeg' } as unknown as Blob,
-      );
-    });
+    formData.append(
+      'front',
+      { uri: photos.front, name: 'front.jpg', type: 'image/jpeg' } as unknown as Blob,
+    );
     const res = await fetch(`${API_BASE_URL}/diagnosis`, {
       method: 'POST',
       headers: await authHeaders(),

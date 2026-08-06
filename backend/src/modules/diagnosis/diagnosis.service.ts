@@ -54,7 +54,7 @@ const ALLOWED_PARTS = new Set([
  * DiagnosisService — 진단 도메인 비즈니스 로직.
  *
  * T9 완료 기준:
- * - multipart 3개 필드(front/left/right) 검증: 필드 존재, MIME, 크기, 빈 파일.
+ * - multipart 필드(front) 검증: 필드 존재, MIME, 크기, 빈 파일.
  * - InferenceProvider 인터페이스를 통해 추론(Mock 구현체, 실제 AI는 보류).
  * - 추론 결과 범위 검증(overallScore 0~100, 부위 6개 일치).
  * - Diagnosis + SkinMetric을 하나의 transaction으로 저장(부분 저장 방지).
@@ -80,7 +80,7 @@ export class DiagnosisService {
   ) {}
 
   /**
-   * 진단 제출: 3장 이미지 검증 → 추론 → 날씨 스냅샷 확보 → transaction 저장.
+   * 진단 제출: 정면 이미지 검증 → 추론 → 날씨 스냅샷 확보 → transaction 저장.
    *
    * 좌표가 없으면 WeatherService가 기본 지역을 사용한다. getOrCreateSnapshot 실패
    * 또는 UNAVAILABLE(null)이면 weatherSnapshotId를 null로 두고 진단을 완료한다
@@ -94,8 +94,6 @@ export class DiagnosisService {
   ): Promise<SkinScoreSnapshotDto> {
     // 1. 업로드 파일 검증 (MIME, 크기, 빈 파일).
     this.validateImage('front', images.front);
-    this.validateImage('left', images.left);
-    this.validateImage('right', images.right);
 
     // 2. 중복 요청 방지 — 동일 사용자의 최근 PENDING/COMPLETED 진단이 DEDUP_WINDOW 이내면 거부.
     await this.guardDuplicate(userId);
