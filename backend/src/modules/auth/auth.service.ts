@@ -17,6 +17,9 @@ import { TokenResponseDto } from './dto/token-response.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { Gender } from './enums/gender.enum';
 import { JwtPayload } from '../../common/strategies/jwt.strategy';
+import { OtpService } from '../otp/otp.service';
+import { OtpPurpose } from '../otp/enums/otp-purpose.enum';
+import { JwtKeyService } from './jwt-key.service';
 
 /**
  * 토큰 만료 문자열(ex: "15m", "14d")을 초 단위로 변환.
@@ -57,10 +60,21 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly otpService: OtpService,
+    private readonly jwtKeyService: JwtKeyService,
   ) {}
 
   async signup(dto: SignupDto): Promise<UserResponseDto> {
     const phoneNumber = this.normalizePhone(dto.phoneNumber);
+
+    // N2: 가입 시 OTP 본인확인 필수. OTP 검증 완료 내역이 있어야 가입 진행.
+    const verified = await this.otpService.isVerified(
+      phoneNumber,
+      OtpPurpose.SIGNUP,
+    );
+    if (!verified) {
+      throw new UnauthorizedException('전화번호 본인확인(OTP)이 필요합니다');
+    }
 
     const existing = await this.prisma.user.findUnique({
       where: { phoneNumber },
@@ -93,6 +107,8 @@ export class AuthService {
 
     // signup 시에도 refresh token을 발급해 login과 동일한 세션 수명을 제공한다.
     // 기존 프론트는 accessToken만 사용하므로 refreshToken/expiresIn은 무시된다.
+    // N2: 가입 완료 후 OTP 검증 내역 소비(재사용 방지).
+    await this.otpService.consumeVerification(phoneNumber, OtpPurpose.SIGNUP);
     return this.toUserResponse(
       user,
       tokens.accessToken,
@@ -103,6 +119,15 @@ export class AuthService {
 
   async login(dto: LoginDto): Promise<UserResponseDto> {
     const phoneNumber = this.normalizePhone(dto.phoneNumber);
+
+    // N2: 로그인 시 OTP 본인확인 필수. 새 디바이스 로그인 보안.
+    const verified = await this.otpService.isVerified(
+      phoneNumber,
+      OtpPurpose.LOGIN,
+    );
+    if (!verified) {
+      throw new UnauthorizedException('전화번호 본인확인(OTP)이 필요합니다');
+    }
 
     const user = await this.prisma.user.findUnique({
       where: { phoneNumber },
@@ -115,6 +140,8 @@ export class AuthService {
     // 프론트는 login 응답을 User 객체로 취급해 id/name/phoneNumber/... 와 accessToken을
     // AsyncStorage에 세션으로 저장한다. 토큰만 반환하면 프론트 호환이 깨지므로
     // User 필드 + 토큰을 함께 반환한다.
+    // N2: 로그인 완료 후 OTP 검증 내역 소비(재사용 방지).
+    await this.otpService.consumeVerification(phoneNumber, OtpPurpose.LOGIN);
     const tokens = await this.issueTokens(user.id, user.role);
     return this.toUserResponse(
       user,
@@ -200,77 +227,92 @@ export class AuthService {
 
   // ── 내부 헬퍼 ──────────────────────────────────
 
-  private async issueTokens(
-    userId: number,
-    role: string,
-    userAgent?: string,
-    ipAddress?: string,
-  ): Promise<TokenResponseDto> {
-    // jti를 포함해 동일 사용자·동일 초에 발급해도 토큰이 중복되지 않도록 한다.
-    const payload: JwtPayload & { jti: string } = {
-      sub: userId,
-      role,
-      jti: randomUUID(),
-    };
+ private async issueTokens(
+   userId: number,
+   role: string,
+   userAgent?: string,
+   ipAddress?: string,
+ ): Promise<TokenResponseDto> {
+   // jti를 포함해 동일 사용자·동일 초에 발급해도 토큰이 중복되지 않도록 한다.
+   const payload: JwtPayload & { jti: string } = {
+     sub: userId,
+     role,
+     jti: randomUUID(),
+   };
 
-    const accessSecret = this.configService.get<string>('JWT_ACCESS_SECRET');
-    const refreshSecret = this.configService.get<string>('JWT_REFRESH_SECRET');
-    const accessExpiresIn = this.configService.get<string>(
-      'ACCESS_TOKEN_EXPIRES_IN',
-      '15m',
-    );
-    const refreshExpiresIn = this.configService.get<string>(
-      'REFRESH_TOKEN_EXPIRES_IN',
-      '14d',
-    );
+    // N2: JWT key rotation(kid). 서명 키를 JwtKeyService에서 조회한다.
+    // DB에 active 키가 없으면 환경변수 기반 v1 키가 자동 등록된다.
+    const accessKey = await this.jwtKeyService.getSigningKey('access');
+    const refreshKey = await this.jwtKeyService.getSigningKey('refresh');
 
-    if (!accessSecret || !refreshSecret) {
-      this.logger.error('JWT secret이 설정되지 않았습니다');
-      throw new UnauthorizedException('서버 인증 설정 오류입니다');
+   const accessExpiresIn = this.configService.get<string>(
+     'ACCESS_TOKEN_EXPIRES_IN',
+     '15m',
+   );
+   const refreshExpiresIn = this.configService.get<string>(
+     'REFRESH_TOKEN_EXPIRES_IN',
+     '14d',
+   );
+
+   const accessToken = await this.jwtService.signAsync(payload, {
+      secret: accessKey.secret,
+      keyid: accessKey.kid,
+     expiresIn: accessExpiresIn as `${number}${'s' | 'm' | 'h' | 'd'}`,
+   });
+
+   const refreshToken = await this.jwtService.signAsync(payload, {
+      secret: refreshKey.secret,
+      keyid: refreshKey.kid,
+     expiresIn: refreshExpiresIn as `${number}${'s' | 'm' | 'h' | 'd'}`,
+   });
+
+   // Refresh Token 해시 저장
+   const tokenHash = hashRefreshToken(refreshToken);
+   const refreshExpiresInSeconds = expiresInToSeconds(refreshExpiresIn);
+   const expiresAt = new Date(Date.now() + refreshExpiresInSeconds * 1000);
+
+   await this.prisma.refreshSession.create({
+     data: {
+       userId,
+       tokenHash,
+       userAgent: userAgent ?? null,
+       ipAddress: ipAddress ?? null,
+       expiresAt,
+     },
+   });
+
+   return {
+     accessToken,
+     refreshToken,
+     expiresIn: expiresInToSeconds(accessExpiresIn),
+   };
+ }
+
+ private async verifyRefreshToken(token: string): Promise<JwtPayload> {
+    // N2: kid 헤더에서 secret을 찾아 검증. kid가 없거나 미등록이면
+    // 기존 환경변수 fallback으로 검증 시도해 호환성을 유지한다.
+    const decoded = this.jwtService.decode(token, { complete: true }) as
+      | { header?: { kid?: string }; payload?: unknown }
+      | null
+      | string;
+    const kid =
+      decoded && typeof decoded === 'object' ? decoded.header?.kid : undefined;
+    let refreshSecret: string | undefined;
+    if (kid) {
+      refreshSecret =
+        (await this.jwtKeyService.getVerifyKey(kid, 'refresh')) ?? undefined;
     }
-
-    const accessToken = await this.jwtService.signAsync(payload, {
-      secret: accessSecret,
-      expiresIn: accessExpiresIn as `${number}${'s' | 'm' | 'h' | 'd'}`,
-    });
-
-    const refreshToken = await this.jwtService.signAsync(payload, {
-      secret: refreshSecret,
-      expiresIn: refreshExpiresIn as `${number}${'s' | 'm' | 'h' | 'd'}`,
-    });
-
-    // Refresh Token 해시 저장
-    const tokenHash = hashRefreshToken(refreshToken);
-    const refreshExpiresInSeconds = expiresInToSeconds(refreshExpiresIn);
-    const expiresAt = new Date(Date.now() + refreshExpiresInSeconds * 1000);
-
-    await this.prisma.refreshSession.create({
-      data: {
-        userId,
-        tokenHash,
-        userAgent: userAgent ?? null,
-        ipAddress: ipAddress ?? null,
-        expiresAt,
-      },
-    });
-
-    return {
-      accessToken,
-      refreshToken,
-      expiresIn: expiresInToSeconds(accessExpiresIn),
-    };
-  }
-
-  private async verifyRefreshToken(token: string): Promise<JwtPayload> {
-    const refreshSecret = this.configService.get<string>('JWT_REFRESH_SECRET');
+    if (!refreshSecret) {
+      refreshSecret = this.configService.get<string>('JWT_REFRESH_SECRET');
+    }
     if (!refreshSecret) {
       throw new UnauthorizedException('서버 인증 설정 오류입니다');
     }
-    try {
-      return await this.jwtService.verifyAsync<JwtPayload & { jti?: string }>(
-        token,
-        {
-        secret: refreshSecret,
+   try {
+     return await this.jwtService.verifyAsync<JwtPayload & { jti?: string }>(
+       token,
+       {
+       secret: refreshSecret,
       });
     } catch {
       throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다');

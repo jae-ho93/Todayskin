@@ -250,7 +250,7 @@ Recommendation(userId, diagnosisId, createdAt)
 - [x] `JwtStrategy`, `JwtAuthGuard` 구현
 - [x] `USER`, `ADMIN` enum과 `RolesGuard` 구현
 - [x] 현재 사용자 decorator 구현
-- [ ] ADMIN 전용 운영 API 보호 (아직 ADMIN endpoint 없음 → N2로 이동)
+- [x] ADMIN 전용 운영 API 보호 (N2 AdminModule로 구현)
 - [x] 진단·추천 조회 시 사용자 소유권 검사 (Diagnosis/Recommendation Service userId 검사 + ForbiddenException)
 - [x] 인증 실패와 권한 부족 상태 코드 구분
 
@@ -616,15 +616,15 @@ Refresh Token
 
 브랜치: `feature/otp-auth-admin`
 
-- [ ] OTP provider interface 설계 (`OtpProvider`, `MockOtpProvider`, `SmsOtpProvider`)
-- [ ] 가입·새 디바이스 로그인에 OTP 필수 (운영 공개 전)
+- [x] OTP provider interface 설계 (`OtpProvider`, `MockOtpProvider`, `SmsOtpProvider`)
+- [x] 가입·새 디바이스 로그인에 OTP 필수 (운영 공개 전)
   - 개발: allowlisted test phone / mock OTP
   - 운영: 실제 OTP + 시도 횟수·만료·재전송 제한
-- [ ] OTP 발송 채널은 구현 시 SMS/알림톡 중 선택
-- [ ] JWT key rotation(kid) — 현재 단일 secret
-- [ ] 첫 ADMIN 운영 API + @Roles(Role.ADMIN) + 감사 로그
+- [x] OTP 발송 채널은 구현 시 SMS/알림톡 중 선택
+- [x] JWT key rotation(kid) — 현재 단일 secret
+- [x] 첫 ADMIN 운영 API + @Roles(Role.ADMIN) + 감사 로그
   - Role 기반 유지 (Permission은 3개+ 독립 action 시 도입)
-- [ ] USER 403·ADMIN 200·미인증 401 e2e 테스트
+- [x] USER 403·ADMIN 200·미인증 401 e2e 테스트
 
 완료 기준: 전화번호 단독 로그인이 OTP 검증으로 대체되고, 첫 ADMIN API가 Role 가드와 감사 로그로 보호된다.
 

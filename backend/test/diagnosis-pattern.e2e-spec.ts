@@ -8,6 +8,7 @@ import { KmaClient } from '../src/modules/weather/clients/kma.client';
 import { AirKoreaClient } from '../src/modules/weather/clients/airkorea.client';
 import { StationClient } from '../src/modules/weather/clients/station.client';
 import { RedisService } from '../src/redis/redis.service';
+import { signupWithOtp } from './helpers/auth-flow';
 
 /**
  * 진단 파일 검증 + 개인 패턴 locked/ready e2e (T13).
@@ -25,7 +26,7 @@ describe('Diagnosis & Pattern (e2e)', () => {
   let accessToken: string;
   let userId: number;
 
-  const testPhone = '01033333333';
+  const testPhone = '01088888888';
 
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
@@ -36,6 +37,8 @@ describe('Diagnosis & Pattern (e2e)', () => {
     process.env.ALLOWED_ORIGINS = '';
     process.env.MOCK_GEMINI = 'true';
     process.env.MOCK_INFERENCE = 'true';
+    // N2: OTP allowlist로 고정 OTP(123456) 사용.
+    process.env.OTP_ALLOWLIST_PHONES = '01088888888';
 
     const moduleRef: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -67,10 +70,11 @@ describe('Diagnosis & Pattern (e2e)', () => {
     await app.init();
     await prisma.$connect();
 
-    const signupRes = await request(app.getHttpServer())
-      .post('/auth/signup')
-      .send({ phoneNumber: testPhone, name: '진단테스터', birthDate: '1990-01-01' })
-      .expect(201);
+    const signupRes = await signupWithOtp(app, testPhone, {
+      name: '진단테스터',
+      birthDate: '1990-01-01',
+    });
+    expect(signupRes.status).toBe(201);
     accessToken = signupRes.body.accessToken;
     userId = signupRes.body.id;
   });
@@ -82,6 +86,7 @@ describe('Diagnosis & Pattern (e2e)', () => {
     // 이 테스트에서 생성한 weatherSnapshot을 명시적으로 정리 (regionName=서울).
     await prisma.weatherSnapshot.deleteMany({ where: { regionName: '서울' } });
     await prisma.recommendation.deleteMany({ where: { userId } });
+    await prisma.otpCode.deleteMany({ where: { phoneNumber: testPhone } });
     await prisma.refreshSession.deleteMany({ where: { userId } });
     await prisma.user.deleteMany({ where: { phoneNumber: testPhone } });
     await app.close();

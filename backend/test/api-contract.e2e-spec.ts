@@ -8,6 +8,7 @@ import { KmaClient } from '../src/modules/weather/clients/kma.client';
 import { AirKoreaClient } from '../src/modules/weather/clients/airkorea.client';
 import { StationClient } from '../src/modules/weather/clients/station.client';
 import { RedisService } from '../src/redis/redis.service';
+import { signupWithOtp, loginWithOtp } from './helpers/auth-flow';
 
 /**
  * 프론트 API response contract 통합 테스트 (T13).
@@ -40,6 +41,8 @@ describe('API Response Contract (e2e)', () => {
     // recommendation-product의 MOCK_GEMINI=true가 이 suite로 누수된다.
     process.env.MOCK_GEMINI = 'false';
     delete process.env.GEMINI_API_KEY;
+    // N2: OTP allowlist로 고정 OTP(123456) 사용.
+    process.env.OTP_ALLOWLIST_PHONES = '01044444444,01000000001';
 
     const moduleRef: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -159,10 +162,11 @@ describe('API Response Contract (e2e)', () => {
     let accessToken: string;
 
     beforeAll(async () => {
-      const signupRes = await request(app.getHttpServer())
-        .post('/auth/signup')
-        .send({ phoneNumber: testPhone, name: '컨트랙트', birthDate: '2000-01-01' })
-        .expect(201);
+      const signupRes = await signupWithOtp(app, testPhone, {
+        name: '컨트랙트',
+        birthDate: '2000-01-01',
+      });
+      expect(signupRes.status).toBe(201);
       accessToken = signupRes.body.accessToken;
     });
 
@@ -201,6 +205,15 @@ describe('API Response Contract (e2e)', () => {
     });
 
     it('에러 응답은 detail 필드 포함 (FastAPI 호환)', async () => {
+      // N2: login은 OTP 검증 선행. 미가입 번호라도 OTP 발송은 성공.
+      await request(app.getHttpServer())
+        .post('/otp/send')
+        .send({ phoneNumber: '01000000001', purpose: 'login' })
+        .expect(200);
+      await request(app.getHttpServer())
+        .post('/otp/verify')
+        .send({ phoneNumber: '01000000001', purpose: 'login', code: '123456' })
+        .expect(200);
       const res = await request(app.getHttpServer())
         .post('/auth/login')
         .send({ phoneNumber: '01000000001' })

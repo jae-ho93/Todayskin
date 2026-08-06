@@ -5,6 +5,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
 import { GeminiClient } from '../src/modules/gemini/gemini.client';
+import { signupWithOtp, loginWithOtp } from './helpers/auth-flow';
 
 /**
  * Recommendation/Product e2e 테스트.
@@ -26,6 +27,8 @@ describe('Recommendation & Product (e2e)', () => {
     process.env.JWT_ACCESS_SECRET = 'e2e_access_secret_at_least_32_characters_long';
     process.env.JWT_REFRESH_SECRET = 'e2e_refresh_secret_at_least_32_characters_long';
     process.env.ALLOWED_ORIGINS = '';
+    // N2: OTP allowlist로 고정 OTP(123456) 사용.
+    process.env.OTP_ALLOWLIST_PHONES = '01066666666,01055555554';
     // Gemini는 아래 provider override로 고정한다. process.env를 공유하는
     // Jest worker에 mock 플래그를 남기지 않아 다른 e2e suite와 격리한다.
 
@@ -87,16 +90,21 @@ describe('Recommendation & Product (e2e)', () => {
     await prisma.$connect();
 
     // 테스트용 사용자 가입 후 accessToken 획득
-    const signupRes = await request(app.getHttpServer())
-      .post('/auth/signup')
-      .send({ phoneNumber: testPhone, name: '테스터', birthDate: '2000-01-01' });
+    const signupRes = await signupWithOtp(app, testPhone, {
+      name: '테스터',
+      birthDate: '2000-01-01',
+    });
     accessToken = signupRes.body.accessToken;
     userId = signupRes.body.id;
   });
 
   afterAll(async () => {
     await prisma.recommendation.deleteMany({ where: { userId } });
+    await prisma.otpCode.deleteMany({
+      where: { phoneNumber: { in: [testPhone, '01055555554'] } },
+    });
     await prisma.refreshSession.deleteMany({ where: { userId } });
+    await prisma.user.deleteMany({ where: { phoneNumber: '01055555554' } });
     await prisma.user.deleteMany({ where: { phoneNumber: testPhone } });
     await app.close();
   });
@@ -250,25 +258,18 @@ describe('Recommendation & Product (e2e)', () => {
     it('타 사용자 추천 조회 시 403', async () => {
       // 두 번째 사용자 가입 — 고유 전화번호 사용
       const otherPhone = '01055555554';
-      const otherSignup = await request(app.getHttpServer())
-        .post('/auth/signup')
-        .send({ phoneNumber: otherPhone, name: '다른사람', birthDate: '1990-01-01' })
-        // 이전 실행 잔류 데이터가 있을 수 있으므로 409도 허용 후 로그인
-        .expect((res) => {
-          if (res.status !== 201 && res.status !== 409) {
-            throw new Error(`expected 201 or 409, got ${res.status}`);
-          }
-        });
       let otherToken: string;
       let otherUserId: number;
+      // N2: OTP 흐름으로 가입(409면 기존 사용자이므로 로그인).
+      const otherSignup = await signupWithOtp(app, otherPhone, {
+        name: '다른사람',
+        birthDate: '1990-01-01',
+      });
       if (otherSignup.status === 201) {
         otherToken = otherSignup.body.accessToken;
         otherUserId = otherSignup.body.id;
       } else {
-        const loginRes = await request(app.getHttpServer())
-          .post('/auth/login')
-          .send({ phoneNumber: otherPhone })
-          .expect(200);
+        const loginRes = await loginWithOtp(app, otherPhone);
         otherToken = loginRes.body.accessToken;
         otherUserId = loginRes.body.id;
       }

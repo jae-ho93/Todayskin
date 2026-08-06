@@ -4,6 +4,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { KmaClient } from '../src/modules/weather/clients/kma.client';
 import { AirKoreaClient } from '../src/modules/weather/clients/airkorea.client';
+import { StationClient } from '../src/modules/weather/clients/station.client';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 /**
@@ -18,6 +19,7 @@ describe('WeatherSnapshot 영구 저장 (e2e)', () => {
   let prisma: PrismaService;
   let kmaClient: { fetchUvIndex: jest.Mock };
   let airKoreaClient: { fetchAirQuality: jest.Mock };
+  let stationClient: { fetchNearestStation: jest.Mock };
 
   const hasDb = !!process.env.DATABASE_URL;
   const itOrSkip = hasDb ? it : it.skip;
@@ -27,6 +29,13 @@ describe('WeatherSnapshot 영구 저장 (e2e)', () => {
 
     kmaClient = { fetchUvIndex: jest.fn() };
     airKoreaClient = { fetchAirQuality: jest.fn() };
+    stationClient = {
+      fetchNearestStation: jest.fn().mockResolvedValue({
+        stationName: '중구',
+        cityName: '서울특별시',
+        addr: '서울 중구',
+      }),
+    };
 
     const moduleRef: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -35,6 +44,8 @@ describe('WeatherSnapshot 영구 저장 (e2e)', () => {
       .useValue(kmaClient)
       .overrideProvider(AirKoreaClient)
       .useValue(airKoreaClient)
+      .overrideProvider(StationClient)
+      .useValue(stationClient)
       .compile();
 
     app = moduleRef.createNestApplication();

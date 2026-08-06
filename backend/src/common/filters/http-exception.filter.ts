@@ -25,7 +25,9 @@ import { maskSensitiveData } from '../logging/redact.logger';
 export class HttpExceptionFilter implements ExceptionFilter {
   constructor(
     @InjectPinoLogger(HttpExceptionFilter.name)
-    private readonly logger: PinoLogger,
+    // 수동 new HttpExceptionFilter() 호출(e2e)에서 주입되지 않을 수 있어
+    // optional로 두고 안전 호출(logger?.warn)한다. DI 환경에서는 정상 주입된다.
+    private readonly logger?: PinoLogger,
   ) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
@@ -45,7 +47,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     };
 
     if (status >= 500) {
-      this.logger.error(
+      this.logger?.error(
         {
           ...logContext,
           err: exception instanceof Error ? exception.stack : String(exception),
@@ -57,7 +59,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     } else {
       const safeMsg =
         typeof message === 'string' ? maskSensitiveData(message) : message;
-      this.logger.warn(
+      this.logger?.warn(
         logContext,
         `${request.method} ${request.url} -> ${status} ${JSON.stringify(safeMsg)}`,
       );

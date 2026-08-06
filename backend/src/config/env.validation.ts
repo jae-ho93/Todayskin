@@ -42,6 +42,24 @@ export const envValidationSchema = Joi.object({
   ACCESS_TOKEN_EXPIRES_IN: Joi.string().default('15m'),
   REFRESH_TOKEN_EXPIRES_IN: Joi.string().default('14d'),
 
+  // N2: OTP 인증 — 가입·새 디바이스 로그인에 OTP 필수 (운영 공개 전)
+  // OTP_TTL_SECONDS: 코드 유효 시간. 기본 180초(3분).
+  OTP_TTL_SECONDS: Joi.number().integer().min(10).default(180),
+  // OTP_MAX_ATTEMPTS: 최대 검증 시도 횟수. 기본 5.
+  OTP_MAX_ATTEMPTS: Joi.number().integer().min(1).default(5),
+  // OTP_RESEND_COOLDOWN_SECONDS: 재전송 대기 시간. 기본 60초.
+  OTP_RESEND_COOLDOWN_SECONDS: Joi.number().integer().min(0).default(60),
+  // OTP_MAX_PENDING_PER_PHONE: 번호별 미검증 코드 최대 개수. 기본 3.
+  OTP_MAX_PENDING_PER_PHONE: Joi.number().integer().min(1).default(3),
+  // 개발용 고정 OTP를 허용할 테스트 전화번호 (쉼표 구분, 하이픈 제거).
+  // 운영에서는 비활성화. 예: 01012345678,01099999999
+  OTP_ALLOWLIST_PHONES: Joi.string().allow('').default(''),
+
+  // N2: SMS 게이트웨이 (운영용 SmsOtpProvider). 운영 공개 전 구현.
+  SMS_API_KEY: Joi.string().allow('').optional(),
+  SMS_SENDER: Joi.string().allow('').optional(),
+  SMS_ENDPOINT: Joi.string().uri().allow('').optional(),
+
   // 외부 API 키 — T5+에서 사용
   KMA_API_KEY: Joi.string().allow('').optional(),
   AIRKOREA_API_KEY: Joi.string().allow('').optional(),
