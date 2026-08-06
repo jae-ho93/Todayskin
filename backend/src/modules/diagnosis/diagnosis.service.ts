@@ -28,8 +28,45 @@ import { ImageStorageService } from '../storage/image-storage.service';
 import { SkinScoreSnapshotDto } from './dto/skin-score-snapshot.dto';
 import { HistoryEntryDto } from './dto/history-entry.dto';
 import { SkinPartMetricDto } from './dto/skin-part-metric.dto';
-import { Diagnosis, SkinMetric } from '@prisma/client';
+import {
+  CalendarDayHistoryDto,
+  CalendarDiagnosisDto,
+  CalendarImageDto,
+  CalendarProductDto,
+  CalendarRecommendationDto,
+  CalendarWeatherDto,
+  LandmarksDto,
+  ScoreSeriesDto,
+  ScoreSeriesPointDto,
+} from './dto/calendar-history.dto';
+import {
+  formatKstDate,
+  isValidDateParam,
+  kstDayRange,
+  kstDaysAgo,
+  kstInclusiveRange,
+  todayKst,
+} from './calendar-date.util';
+import { Diagnosis, DiagnosisStatus, Prisma, SkinMetric, WeatherSnapshot } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
+import { DEFAULT_PRESIGN_EXPIRES_SECONDS } from '../storage/image-storage.service';
+
+type CalendarDiagnosisRow = Prisma.DiagnosisGetPayload<{
+  include: {
+    skinMetrics: true;
+    weatherSnapshot: true;
+    recommendations: {
+      include: {
+        products: {
+          include: { product: true };
+          orderBy: { displayOrder: 'asc' };
+        };
+      };
+      orderBy: { createdAt: 'desc' };
+    };
+    image: true;
+  };
+}>;
 
 /**
  * 허용 MIME 집합. 이미지 파일이 아닌 업로드를 거부한다.
@@ -184,6 +221,11 @@ export class DiagnosisService {
           status: 'COMPLETED',
           modelVersion: inference.modelVersion,
           weatherSnapshotId,
+          // N8: 저장 동의 시에만 랜드마크 보존(얼굴 기하 정보).
+          landmarks:
+            storeImage && inference.landmarks
+              ? (inference.landmarks as unknown as Prisma.InputJsonValue)
+              : undefined,
         },
       });
 
@@ -300,6 +342,105 @@ export class DiagnosisService {
       throw new ForbiddenException('해당 진단에 대한 접근 권한이 없습니다');
     }
     return { diagnosis, metrics: diagnosis.skinMetrics };
+  }
+
+  /**
+   * N8: 특정 날짜(Asia/Seoul)의 통합 히스토리.
+   * 날씨·부위 점수·추천 제품 + (저장 동의 시) 이미지 presigned URL·랜드마크.
+   */
+  async getHistoryByDate(
+    userId: number,
+    date: string,
+  ): Promise<CalendarDayHistoryDto> {
+    if (!isValidDateParam(date)) {
+      throw new BadRequestException('date는 YYYY-MM-DD 형식이어야 합니다');
+    }
+
+    const { start, endExclusive } = kstDayRange(date);
+    const canViewMedia = await this.consentService.hasActive(
+      userId,
+      ConsentPurpose.DIAGNOSIS_IMAGE_STORAGE,
+    );
+
+    const diagnoses = await this.prisma.diagnosis.findMany({
+      where: notDeletedWhere({
+        userId,
+        capturedAt: { gte: start, lt: endExclusive },
+        status: DiagnosisStatus.COMPLETED,
+      }),
+      orderBy: [{ capturedAt: 'asc' }, { id: 'asc' }],
+      include: {
+        skinMetrics: true,
+        weatherSnapshot: true,
+        recommendations: {
+          include: {
+            products: {
+              include: { product: true },
+              orderBy: { displayOrder: 'asc' },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        image: true,
+      },
+    });
+
+    const items: CalendarDiagnosisDto[] = [];
+    for (const d of diagnoses) {
+      items.push(await this.toCalendarDiagnosisDto(d, canViewMedia));
+    }
+
+    const dto = new CalendarDayHistoryDto();
+    dto.date = date;
+    dto.diagnoses = items;
+    return dto;
+  }
+
+  /**
+   * N8: overallScore 시계열 (기간별 추이).
+   * 기본 기간: 최근 90일(Asia/Seoul).
+   */
+  async getScoreSeries(
+    userId: number,
+    opts?: { from?: string; to?: string },
+  ): Promise<ScoreSeriesDto> {
+    const to = opts?.to ?? todayKst();
+    const from = opts?.from ?? kstDaysAgo(90, to);
+
+    if (!isValidDateParam(from) || !isValidDateParam(to)) {
+      throw new BadRequestException('from/to는 YYYY-MM-DD 형식이어야 합니다');
+    }
+    if (from > to) {
+      throw new BadRequestException('from은 to보다 이후일 수 없습니다');
+    }
+
+    const { start, endExclusive } = kstInclusiveRange(from, to);
+    const rows = await this.prisma.diagnosis.findMany({
+      where: notDeletedWhere({
+        userId,
+        status: DiagnosisStatus.COMPLETED,
+        capturedAt: { gte: start, lt: endExclusive },
+      }),
+      orderBy: [{ capturedAt: 'asc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        capturedAt: true,
+        overallScore: true,
+      },
+    });
+
+    const dto = new ScoreSeriesDto();
+    dto.from = from;
+    dto.to = to;
+    dto.points = rows.map((r) => {
+      const point = new ScoreSeriesPointDto();
+      point.date = formatKstDate(r.capturedAt);
+      point.diagnosisId = r.id;
+      point.capturedAt = r.capturedAt.toISOString();
+      point.overallScore = r.overallScore;
+      return point;
+    });
+    return dto;
   }
 
   // ── 검증 헬퍼 ──────────────────────────────────
@@ -428,6 +569,147 @@ export class DiagnosisService {
     dto.moisture = m.moisture;
     dto.elasticity = m.elasticity;
     dto.note = m.note;
+    return dto;
+  }
+
+  private async toCalendarDiagnosisDto(
+    d: CalendarDiagnosisRow,
+    canViewMedia: boolean,
+  ): Promise<CalendarDiagnosisDto> {
+    const dto = new CalendarDiagnosisDto();
+    dto.id = d.id;
+    dto.capturedAt = d.capturedAt.toISOString();
+    dto.overallScore = d.overallScore;
+    dto.status = d.status;
+    dto.modelVersion = d.modelVersion;
+    dto.parts = d.skinMetrics.map((m) => this.metricToDto(m));
+    dto.weather = d.weatherSnapshot
+      ? this.toCalendarWeatherDto(d.weatherSnapshot)
+      : null;
+    dto.recommendations = d.recommendations.map((r) =>
+      this.toCalendarRecommendationDto(r),
+    );
+
+    if (canViewMedia) {
+      const hasImage = d.image != null && d.image.deletedAt == null;
+      if (hasImage) {
+        const signed = await this.imageStorage.getPresignedUrlForDiagnosis(
+          d.id,
+          DEFAULT_PRESIGN_EXPIRES_SECONDS,
+        );
+        dto.image = signed
+          ? this.toCalendarImageDto(signed)
+          : null;
+      } else {
+        dto.image = null;
+      }
+      dto.landmarks = this.toLandmarksDto(d.landmarks);
+    } else {
+      dto.image = null;
+      dto.landmarks = null;
+    }
+
+    return dto;
+  }
+
+  private toCalendarWeatherDto(w: WeatherSnapshot): CalendarWeatherDto {
+    const dto = new CalendarWeatherDto();
+    dto.observedAt = w.observedAt.toISOString();
+    dto.regionName = w.regionName;
+    dto.source = w.source;
+    dto.uvIndex = w.uvIndex;
+    dto.uvStatus = w.uvStatus;
+    dto.uvIndexPeak = w.uvIndexPeak;
+    dto.uvStatusPeak = w.uvStatusPeak;
+    dto.uvIndexPeakHour = w.uvIndexPeakHour;
+    dto.ozonePpm = w.ozonePpm;
+    dto.ozoneStatus = w.ozoneStatus;
+    dto.pm25 = w.pm25;
+    dto.pm25Status = w.pm25Status;
+    dto.pm10 = w.pm10;
+    dto.pm10Status = w.pm10Status;
+    dto.caiValue = w.caiValue;
+    dto.caiStatus = w.caiStatus;
+    dto.no2Value = w.no2Value;
+    dto.so2Value = w.so2Value;
+    dto.coValue = w.coValue;
+    return dto;
+  }
+
+  private toCalendarRecommendationDto(r: {
+    id: string;
+    title: string;
+    grade: string;
+    sourceLabel: string;
+    explanation: string;
+    observationalNote: string | null;
+    ingredientTags: string[];
+    timing: string | null;
+    products: Array<{
+      product: {
+        id: string;
+        name: string;
+        brand: string;
+        imageUri: string | null;
+        category: string;
+        reason: string | null;
+        timing: string | null;
+      };
+    }>;
+  }): CalendarRecommendationDto {
+    const dto = new CalendarRecommendationDto();
+    dto.id = r.id;
+    dto.title = r.title;
+    dto.grade = r.grade;
+    dto.sourceLabel = r.sourceLabel;
+    dto.explanation = r.explanation;
+    dto.observationalNote = r.observationalNote;
+    dto.ingredientTags = r.ingredientTags;
+    dto.timing = r.timing;
+    dto.products = r.products.map((rp) => {
+      const p = new CalendarProductDto();
+      p.id = rp.product.id;
+      p.name = rp.product.name;
+      p.brand = rp.product.brand;
+      p.imageUri = rp.product.imageUri;
+      p.category = rp.product.category;
+      p.reason = rp.product.reason;
+      p.timing = rp.product.timing;
+      return p;
+    });
+    return dto;
+  }
+
+  private toCalendarImageDto(signed: {
+    url: string;
+    contentType: string;
+    expiresAt: string;
+  }): CalendarImageDto {
+    const dto = new CalendarImageDto();
+    dto.url = signed.url;
+    dto.contentType = signed.contentType;
+    dto.expiresAt = signed.expiresAt;
+    return dto;
+  }
+
+  private toLandmarksDto(raw: Prisma.JsonValue | null): LandmarksDto | null {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const obj = raw as { version?: unknown; points?: unknown };
+    if (typeof obj.version !== 'string' || !Array.isArray(obj.points)) {
+      return null;
+    }
+    const points: number[][] = [];
+    for (const p of obj.points) {
+      if (!Array.isArray(p) || p.length < 2) continue;
+      const x = Number(p[0]);
+      const y = Number(p[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      points.push([x, y]);
+    }
+    if (points.length === 0) return null;
+    const dto = new LandmarksDto();
+    dto.version = obj.version;
+    dto.points = points;
     return dto;
   }
 }

@@ -1,5 +1,6 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditLogService } from '../admin/audit-log.service';
 import {
@@ -8,12 +9,16 @@ import {
 import type { ImageObjectStore } from './providers/image-object-store.interface';
 import type { InferenceImage } from '../diagnosis/providers/inference-provider.interface';
 
+/** N8: 캘린더 히스토리용 이미지 URL 기본 만료(초). */
+export const DEFAULT_PRESIGN_EXPIRES_SECONDS = 15 * 60;
+
 /**
- * ImageStorageService — N3 진단 이미지 저장/삭제.
+ * ImageStorageService — N3 진단 이미지 저장/삭제 + N8 presigned URL.
  *
  * - 저장 동의가 있을 때만 put
  * - DB에는 DiagnosisImage 메타만 저장, thumbnailUri에 논리 URI
- * - 철회 시 사용자 전체 이미지 물리 삭제 + soft delete 마킹
+ * - 철회 시 사용자 전체 이미지 물리 삭제 + soft delete 마킹 + landmarks 제거
+ * - 조회 시 S3/Memory presigned URL 발급
  */
 @Injectable()
 export class ImageStorageService {
@@ -92,8 +97,67 @@ export class ImageStorageService {
   }
 
   /**
+   * N8: 진단 이미지에 대한 단기 조회 URL.
+   * DiagnosisImage가 없거나 soft-deleted면 null.
+   */
+  async getPresignedUrlForDiagnosis(
+    diagnosisId: string,
+    expiresInSeconds = DEFAULT_PRESIGN_EXPIRES_SECONDS,
+  ): Promise<{
+    url: string;
+    contentType: string;
+    expiresAt: string;
+  } | null> {
+    const image = await this.prisma.diagnosisImage.findFirst({
+      where: { diagnosisId, deletedAt: null },
+    });
+    if (!image) {
+      return null;
+    }
+    const url = await this.store.getPresignedUrl({
+      bucket: image.s3Bucket,
+      key: image.s3Key,
+      expiresInSeconds,
+    });
+    const expiresAt = new Date(Date.now() + expiresInSeconds * 1000).toISOString();
+    return { url, contentType: image.contentType, expiresAt };
+  }
+
+  /**
+   * 소유권 확인 후 presigned URL 발급. 이미지 없으면 404.
+   */
+  async getPresignedUrlForOwnedDiagnosis(params: {
+    userId: number;
+    diagnosisId: string;
+    expiresInSeconds?: number;
+  }): Promise<{ url: string; contentType: string; expiresAt: string }> {
+    const image = await this.prisma.diagnosisImage.findFirst({
+      where: {
+        diagnosisId: params.diagnosisId,
+        userId: params.userId,
+        deletedAt: null,
+      },
+    });
+    if (!image) {
+      throw new NotFoundException('저장된 진단 이미지가 없습니다');
+    }
+    const expiresInSeconds =
+      params.expiresInSeconds ?? DEFAULT_PRESIGN_EXPIRES_SECONDS;
+    const url = await this.store.getPresignedUrl({
+      bucket: image.s3Bucket,
+      key: image.s3Key,
+      expiresInSeconds,
+    });
+    return {
+      url,
+      contentType: image.contentType,
+      expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
+    };
+  }
+
+  /**
    * 저장 동의 철회 시: 사용자 이미지를 모두 S3/메모리에서 삭제하고
-   * DiagnosisImage.deletedAt + Diagnosis.thumbnailUri=null 처리.
+   * DiagnosisImage.deletedAt + Diagnosis.thumbnailUri/landmarks=null 처리.
    */
   async deleteAllForUser(userId: number): Promise<number> {
     const images = await this.prisma.diagnosisImage.findMany({
@@ -115,7 +179,7 @@ export class ImageStorageService {
         });
         await tx.diagnosis.update({
           where: { id: img.diagnosisId },
-          data: { thumbnailUri: null },
+          data: { thumbnailUri: null, landmarks: Prisma.JsonNull },
         });
       });
       deleted += 1;
@@ -128,6 +192,13 @@ export class ImageStorageService {
         metadata: { diagnosisId: img.diagnosisId },
       });
     }
+
+    // 이미지가 없어도 랜드마크만 남아 있을 수 있으므로 사용자 진단 landmarks를 비운다.
+    await this.prisma.diagnosis.updateMany({
+      where: { userId },
+      data: { landmarks: Prisma.JsonNull },
+    });
+
     return deleted;
   }
 }

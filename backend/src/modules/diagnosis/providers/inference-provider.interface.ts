@@ -16,13 +16,24 @@ export interface InferredPartMetric {
 }
 
 /**
+ * N8: MediaPipe 얼굴 랜드마크.
+ * points는 정규화 캔버스 좌표 [[x,y], ...] (보통 478점).
+ */
+export interface InferenceLandmarks {
+  version: string;
+  points: number[][];
+}
+
+/**
  * 추론 전체 결과.
  * overallScore: 0~100. modelVersion: 추론 모델 식별자. parts: 6개 부위.
+ * landmarks: 선택. inference-service가 제공하면 Diagnosis.landmarks에 저장.
  */
 export interface InferenceResult {
   overallScore: number;
   modelVersion: string;
   parts: InferredPartMetric[];
+  landmarks?: InferenceLandmarks | null;
 }
 
 /**
@@ -33,7 +44,7 @@ export interface InferenceResult {
  * 변경하지 않는다.
  *
  * 입력: 정면 이미지 버퍼(MIME 포함). 원본 이미지는 저장하지 않고 처리 후 폐기한다.
- * 출력: 추론 결과(overallScore, modelVersion, parts).
+ * 출력: 추론 결과(overallScore, modelVersion, parts, optional landmarks).
  *
  * 실제 추론은 보류 상태이며, MockInferenceProvider는 개발/통합 테스트용 고정값을 반환한다.
  * 운영 환경에서 mock fallback이 실제 데이터처럼 보이지 않도록 환경 변수로 분리한다.

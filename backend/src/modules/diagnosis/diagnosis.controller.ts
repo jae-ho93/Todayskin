@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  Param,
   Post,
   Query,
   UploadedFiles,
@@ -10,10 +11,21 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import { DiagnosisService } from './diagnosis.service';
 import { SkinScoreSnapshotDto } from './dto/skin-score-snapshot.dto';
 import { HistoryEntryDto } from './dto/history-entry.dto';
+import {
+  CalendarDayHistoryDto,
+  ScoreSeriesDto,
+  ScoreSeriesQueryDto,
+} from './dto/calendar-history.dto';
 import { CursorPaginationQueryDto, CursorPageDto } from '../../common/pagination/cursor-pagination';
 import { SubmitDiagnosisQueryDto } from './dto/submit-diagnosis-query.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -41,6 +53,22 @@ export class DiagnosisController {
     return this.diagnosisService.getLatest(user.sub);
   }
 
+  @Get('score-series')
+  @ApiOperation({
+    summary: 'N8: overallScore 시계열 (기간별 추이, Asia/Seoul)',
+  })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  async getScoreSeries(
+    @CurrentUser() user: JwtPayload,
+    @Query() query: ScoreSeriesQueryDto,
+  ): Promise<ScoreSeriesDto> {
+    return this.diagnosisService.getScoreSeries(user.sub, {
+      from: query.from,
+      to: query.to,
+    });
+  }
+
   @Get('history')
   @ApiOperation({ summary: '진단 이력 (본인, 최신순)' })
   @ApiBearerAuth()
@@ -53,6 +81,25 @@ export class DiagnosisController {
       limit: query.limit,
       cursor: query.cursor,
     });
+  }
+
+  @Get('history/:date')
+  @ApiOperation({
+    summary:
+      'N8: 특정 날짜 통합 히스토리 (날씨·분석·추천 + 동의 시 이미지/랜드마크)',
+  })
+  @ApiParam({
+    name: 'date',
+    example: '2026-08-06',
+    description: 'Asia/Seoul 달력 날짜 YYYY-MM-DD',
+  })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  async getHistoryByDate(
+    @CurrentUser() user: JwtPayload,
+    @Param('date') date: string,
+  ): Promise<CalendarDayHistoryDto> {
+    return this.diagnosisService.getHistoryByDate(user.sub, date);
   }
 
   @Post()

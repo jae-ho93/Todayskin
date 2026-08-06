@@ -208,6 +208,9 @@ model Diagnosis {
   status             DiagnosisStatus @default(PENDING)
   modelVersion       String?         @map("model_version")
   weatherSnapshotId  String?         @map("weather_snapshot_id")
+  // N8: MediaPipe 얼굴 랜드마크(정규화 좌표). 조회는 저장 동의 시에만 노출.
+  // shape: { version: string, points: number[][] } — points는 [[x,y], ...].
+  landmarks          Json?
   createdAt          DateTime        @default(now()) @map("created_at")
   deletedAt          DateTime?       @map("deleted_at")
   purgeAfter         DateTime?       @map("purge_after")
@@ -220,7 +223,9 @@ model Diagnosis {
   // N3: 동의 기반 S3 이미지 메타데이터 (원본 바이너리는 S3에만).
   image           DiagnosisImage?
 
+  // 캘린더·시계열: userId + capturedAt 범위. 단독 capturedAt은 날짜 범위 보조.
   @@index([userId, capturedAt])
+  @@index([capturedAt])
   @@index([deletedAt, purgeAfter])
   @@map("diagnoses")
 }

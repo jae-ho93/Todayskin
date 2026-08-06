@@ -19,4 +19,16 @@ describe('MemoryImageObjectStore', () => {
     await store.deleteObject({ bucket: ref.bucket, key: ref.key });
     expect(store.has('diagnoses/1/front.jpg')).toBe(false);
   });
+
+  it('getPresignedUrl은 만료 시각이 포함된 memory URL을 반환한다', async () => {
+    const store = new MemoryImageObjectStore('test-bucket');
+    const url = await store.getPresignedUrl({
+      bucket: 'test-bucket',
+      key: 'diagnoses/1/front.jpg',
+      expiresInSeconds: 900,
+    });
+    expect(url.startsWith('memory://test-bucket/diagnoses/1/front.jpg?expires=')).toBe(
+      true,
+    );
+  });
 });

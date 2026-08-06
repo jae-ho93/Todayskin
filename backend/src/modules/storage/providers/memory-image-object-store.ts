@@ -38,6 +38,15 @@ export class MemoryImageObjectStore implements ImageObjectStore {
     this.objects.delete(`${params.bucket}/${params.key}`);
   }
 
+  async getPresignedUrl(params: {
+    bucket: string;
+    key: string;
+    expiresInSeconds: number;
+  }): Promise<string> {
+    const expiresAt = Date.now() + params.expiresInSeconds * 1000;
+    return `memory://${params.bucket}/${params.key}?expires=${expiresAt}`;
+  }
+
   /** 테스트용 */
   has(key: string): boolean {
     return this.objects.has(`${this.bucket}/${key}`);

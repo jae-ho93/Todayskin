@@ -21,6 +21,16 @@ export interface ImageObjectStore {
   }): Promise<StoredImageRef>;
 
   deleteObject(params: { bucket: string; key: string }): Promise<void>;
+
+  /**
+   * N8: 동의된 이미지 조회용 단기 URL.
+   * S3는 GetObject presigned URL, Memory는 테스트용 합성 URL을 반환한다.
+   */
+  getPresignedUrl(params: {
+    bucket: string;
+    key: string;
+    expiresInSeconds: number;
+  }): Promise<string>;
 }
 
 export const IMAGE_OBJECT_STORE = Symbol('IMAGE_OBJECT_STORE');

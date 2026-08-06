@@ -64,6 +64,7 @@ export class PythonInferenceProvider implements InferenceProvider {
       overallScore?: unknown;
       modelVersion?: unknown;
       parts?: unknown;
+      landmarks?: unknown;
     };
     if (
       typeof d.overallScore !== 'number' ||
@@ -76,6 +77,23 @@ export class PythonInferenceProvider implements InferenceProvider {
       overallScore: d.overallScore,
       modelVersion: d.modelVersion,
       parts: d.parts as InferredPartMetric[],
+      landmarks: parseLandmarks(d.landmarks),
     };
   }
+}
+
+function parseLandmarks(raw: unknown): InferenceResult['landmarks'] {
+  if (!raw || typeof raw !== 'object') return null;
+  const lm = raw as { version?: unknown; points?: unknown };
+  if (typeof lm.version !== 'string' || !Array.isArray(lm.points)) return null;
+  const points: number[][] = [];
+  for (const p of lm.points) {
+    if (!Array.isArray(p) || p.length < 2) continue;
+    const x = Number(p[0]);
+    const y = Number(p[1]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    points.push([x, y]);
+  }
+  if (points.length === 0) return null;
+  return { version: lm.version, points };
 }

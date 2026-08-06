@@ -58,6 +58,7 @@ describe('DiagnosisService', () => {
     imageStorage = {
       storeDiagnosisImage: jest.fn(),
       deleteAllForUser: jest.fn(),
+      getPresignedUrlForDiagnosis: jest.fn(),
     };
 
     prisma = {
@@ -308,6 +309,158 @@ describe('DiagnosisService', () => {
       const result = await service.getDiagnosisWithMetrics(1, 'snap-x');
       expect(result.diagnosis.id).toBe('snap-x');
       expect(result.metrics).toHaveLength(1);
+    });
+  });
+
+  // ── N8 calendar history ──────────────────────────────────
+
+  describe('getHistoryByDate', () => {
+    it('잘못된 날짜면 400', async () => {
+      await expect(service.getHistoryByDate(1, '2026-13-01')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('미동의 시 image/landmarks를 null로 반환', async () => {
+      consentService.hasActive.mockResolvedValue(false);
+      prisma.diagnosis.findMany.mockResolvedValue([
+        {
+          id: 'snap-day',
+          userId: 1,
+          capturedAt: new Date('2026-08-05T16:30:00.000Z'),
+          overallScore: 81,
+          status: 'COMPLETED',
+          modelVersion: 'mock-v0.1.0',
+          landmarks: { version: 'v1', points: [[0.1, 0.2]] },
+          skinMetrics: [
+            {
+              part: 'cheek',
+              label: '볼',
+              grade: '양호',
+              moisture: 70,
+              elasticity: 68,
+              note: null,
+            },
+          ],
+          weatherSnapshot: {
+            observedAt: new Date('2026-08-06T03:00:00.000Z'),
+            regionName: '서울특별시',
+            source: 'LIVE',
+            uvIndex: 5,
+            uvStatus: 'moderate',
+            uvIndexPeak: 7,
+            uvStatusPeak: 'bad',
+            uvIndexPeakHour: 14,
+            ozonePpm: null,
+            ozoneStatus: null,
+            pm25: 20,
+            pm25Status: 'good',
+            pm10: 30,
+            pm10Status: 'good',
+            caiValue: null,
+            caiStatus: null,
+            no2Value: null,
+            so2Value: null,
+            coValue: null,
+          },
+          recommendations: [],
+          image: { deletedAt: null },
+        },
+      ]);
+
+      const result = await service.getHistoryByDate(1, '2026-08-06');
+      expect(result.date).toBe('2026-08-06');
+      expect(result.diagnoses).toHaveLength(1);
+      expect(result.diagnoses[0].weather?.regionName).toBe('서울특별시');
+      expect(result.diagnoses[0].image).toBeNull();
+      expect(result.diagnoses[0].landmarks).toBeNull();
+      expect(imageStorage.getPresignedUrlForDiagnosis).not.toHaveBeenCalled();
+    });
+
+    it('저장 동의 시 image·landmarks를 노출', async () => {
+      consentService.hasActive.mockResolvedValue(true);
+      imageStorage.getPresignedUrlForDiagnosis.mockResolvedValue({
+        url: 'memory://bucket/key?expires=1',
+        contentType: 'image/jpeg',
+        expiresAt: '2026-08-06T12:15:00.000Z',
+      });
+      prisma.diagnosis.findMany.mockResolvedValue([
+        {
+          id: 'snap-day',
+          userId: 1,
+          capturedAt: new Date('2026-08-05T16:30:00.000Z'),
+          overallScore: 81,
+          status: 'COMPLETED',
+          modelVersion: 'mock-v0.1.0',
+          landmarks: { version: 'mediapipe-face-landmarker-v1', points: [[0.4, 0.3]] },
+          skinMetrics: [],
+          weatherSnapshot: null,
+          recommendations: [
+            {
+              id: 'rec-1',
+              title: '보습',
+              grade: 'B',
+              sourceLabel: '테스트',
+              explanation: '설명',
+              observationalNote: null,
+              ingredientTags: ['세라마이드'],
+              timing: '세안 후',
+              products: [
+                {
+                  displayOrder: 0,
+                  product: {
+                    id: 'p1',
+                    name: '크림',
+                    brand: 'Brand',
+                    imageUri: null,
+                    category: 'moisture',
+                    reason: null,
+                    timing: '세안 후',
+                  },
+                },
+              ],
+            },
+          ],
+          image: { deletedAt: null },
+        },
+      ]);
+
+      const result = await service.getHistoryByDate(1, '2026-08-06');
+      expect(result.diagnoses[0].image?.url).toContain('memory://');
+      expect(result.diagnoses[0].landmarks?.points).toEqual([[0.4, 0.3]]);
+      expect(result.diagnoses[0].recommendations[0].products[0].name).toBe('크림');
+    });
+  });
+
+  describe('getScoreSeries', () => {
+    it('from > to 이면 400', async () => {
+      await expect(
+        service.getScoreSeries(1, { from: '2026-08-10', to: '2026-08-01' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('기간 내 overallScore 시계열을 반환', async () => {
+      prisma.diagnosis.findMany.mockResolvedValue([
+        {
+          id: 'snap-a',
+          capturedAt: new Date('2026-08-01T03:00:00.000Z'),
+          overallScore: 70,
+        },
+        {
+          id: 'snap-b',
+          capturedAt: new Date('2026-08-05T16:00:00.000Z'),
+          overallScore: 82,
+        },
+      ]);
+      const result = await service.getScoreSeries(1, {
+        from: '2026-08-01',
+        to: '2026-08-06',
+      });
+      expect(result.from).toBe('2026-08-01');
+      expect(result.to).toBe('2026-08-06');
+      expect(result.points).toHaveLength(2);
+      expect(result.points[1].date).toBe('2026-08-06');
+      expect(result.points[1].overallScore).toBe(82);
     });
   });
 });

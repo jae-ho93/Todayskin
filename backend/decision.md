@@ -50,3 +50,26 @@
 
 - `src/config/env.registry.ts` — owner/description/required/safeDefault/secret/mockFlag/expiry
 - production: mock flag truthy 거부, `APP_ENV_KEYS` 선언 시 unknown key 거부
+
+## N8 히스토리 캘린더 / landmarks (2026-08-06 구현)
+
+### API
+
+- `GET /diagnosis/history/:date` — Asia/Seoul `YYYY-MM-DD`의 통합 히스토리
+  - Diagnosis + SkinMetric + WeatherSnapshot + Recommendation(+Product)
+  - `diagnosis_image_storage` 동의 활성 + 이미지 존재 시 S3/Memory **presigned URL**
+  - 동의 시에만 `landmarks` 노출. 미동의면 `image`/`landmarks` = null
+- `GET /diagnosis/score-series?from&to` — overallScore 시계열 (기본 최근 90일)
+
+### landmarks 스키마
+
+- `Diagnosis.landmarks Json?`
+- shape: `{ version: string, points: number[][] }` (정규화 캔버스 좌표)
+- inference-service가 MediaPipe 478점을 반환하면 저장. Mock은 축소 샘플.
+- **저장**: `diagnosis_image_storage` 동의 시에만 Diagnosis row에 기록
+- **철회**: 이미지 삭제와 함께 landmarks = null
+
+### 인덱스
+
+- 기존 `@@index([userId, capturedAt])` + N8 `@@index([capturedAt])`
+- 사용자 캘린더/시계열 조회는 `(userId, capturedAt)` 복합 인덱스를 사용
