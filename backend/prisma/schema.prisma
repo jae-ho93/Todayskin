@@ -34,6 +34,7 @@ model User {
   recommendations        Recommendation[]
   notificationPreference NotificationPreference?
   consentRecords         ConsentRecord[]
+  asyncJobs              AsyncJob[]
 
   auditLogs              AuditLog[]
 
@@ -377,7 +378,7 @@ model RecommendationProduct {
 model NotificationPreference {
   id                Int      @id @default(autoincrement())
   userId            Int      @unique @map("user_id")
-  // 푸시 발송은 T11 이후. DB 저장만.
+  // 푸시 발송은 N4 비동기 job. 설정 저장은 T11.
   pushEnabled       Boolean  @default(false) @map("push_enabled")
   uvAlertEnabled    Boolean  @default(true) @map("uv_alert_enabled")
   dustAlertEnabled  Boolean  @default(true) @map("dust_alert_enabled")
@@ -387,4 +388,48 @@ model NotificationPreference {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notification_preferences")
+}
+
+// ── 비동기 Job (N4 BullMQ) ─────────────────────────
+// API는 즉시 jobId를 반환하고, 결과는 polling/SSE로 조회한다.
+// status 계약: PENDING → COMPLETED | FAILED
+enum AsyncJobType {
+  RECOMMENDATION_GENERATE
+  PATTERN_ANALYZE
+  NOTIFICATION_SEND
+}
+
+enum AsyncJobStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+model AsyncJob {
+  id          String         @id @default(uuid())
+  userId      Int            @map("user_id")
+  type        AsyncJobType
+  status      AsyncJobStatus @default(PENDING)
+  // 낮을수록 높은 우선순위 (BullMQ priority와 동일)
+  priority    Int            @default(5)
+  attempts    Int            @default(0)
+  maxAttempts Int            @default(3) @map("max_attempts")
+  queueName   String         @map("queue_name")
+  // BullMQ job id (inline 모드에서는 null)
+  bullJobId   String?        @map("bull_job_id")
+  payload     Json?
+  result      Json?
+  error       String?
+  // 최종 실패 후 DLQ로 이동했는지
+  deadLetter  Boolean        @default(false) @map("dead_letter")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  startedAt   DateTime?      @map("started_at")
+  finishedAt  DateTime?      @map("finished_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([type, status])
+  @@map("async_jobs")
 }

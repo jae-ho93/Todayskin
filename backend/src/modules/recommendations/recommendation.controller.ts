@@ -16,15 +16,21 @@ import { GenerateRecommendationDto } from './dto/generate-recommendation.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../../common/strategies/jwt.strategy';
+import { JobService } from '../jobs/job.service';
+import { JobType } from '../jobs/enums/job-type.enum';
+import { EnqueueJobResponseDto } from '../jobs/dto/job-response.dto';
 
 /**
  * RecommendationController — 기존 FastAPI /recommendations 이식.
- * HTTP 처리만 담당하고 비즈니스 로직은 RecommendationService에 둔다.
+ * sync generate는 프론트 호환 유지, async generate는 N4 job enqueue.
  */
 @ApiTags('recommendations')
 @Controller('recommendations')
 export class RecommendationController {
-  constructor(private readonly recommendationService: RecommendationService) {}
+  constructor(
+    private readonly recommendationService: RecommendationService,
+    private readonly jobService: JobService,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -38,9 +44,9 @@ export class RecommendationController {
 
   @Post('generate')
   @ApiOperation({
-    summary: 'B등급 추천 생성 (피부 측정값 + 날씨)',
+    summary: 'B등급 추천 생성 (피부 측정값 + 날씨) — sync 호환',
     description:
-      'B등급(사진 기반) 매칭: 오늘 피부 측정값 + 날씨를 Gemini에 전달해 근거 기반 추천을 생성한다. grade=B, sourceLabel은 서버가 고정. Gemini 실패 시 503. 동일 진단 중복 생성 방지. diagnosisId(최종 계약) 또는 skinScore+weather(기존 호환)를 받는다.',
+      '기존 프론트 계약 유지. Gemini 실패 시 503. 동일 진단 중복 생성 방지. 비동기는 POST /recommendations/generate/async 사용.',
   })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
@@ -50,6 +56,26 @@ export class RecommendationController {
     @Body() dto: GenerateRecommendationDto,
   ): Promise<RecommendationDto[]> {
     return this.recommendationService.generate(user.sub, dto);
+  }
+
+  @Post('generate/async')
+  @ApiOperation({
+    summary: 'B등급 추천 생성 비동기 enqueue (N4)',
+    description:
+      '즉시 jobId를 반환한다. 결과는 GET /jobs/:id 또는 SSE /jobs/:id/events로 조회한다.',
+  })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(202)
+  async generateAsync(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: GenerateRecommendationDto,
+  ): Promise<EnqueueJobResponseDto> {
+    return this.jobService.enqueue(user.sub, JobType.RECOMMENDATION_GENERATE, {
+      diagnosisId: dto.diagnosisId,
+      skinScore: dto.skinScore,
+      weather: dto.weather,
+    });
   }
 
   @Get(':id')

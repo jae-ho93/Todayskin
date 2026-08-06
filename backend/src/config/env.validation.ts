@@ -25,6 +25,9 @@ export const envValidationSchema = Joi.object({
   REDIS_URL: Joi.string().uri().allow('').optional(),
   // T12: 날씨 캐시 TTL(초). 기본 300초(5분) — 정부 API 분 단위 갱신 기준.
   WEATHER_CACHE_TTL_SECONDS: Joi.number().integer().min(0).default(300),
+  // N4: Job dispatcher. auto=REDIS_URL 있으면 BullMQ, 없으면 Inline.
+  // inline은 테스트/로컬에서 Redis 없이 동일 PENDING→COMPLETED 계약 유지.
+  JOB_DISPATCHER: Joi.string().valid('auto', 'inline', 'bullmq').default('auto'),
 
   // T3에서 required로 전환
   // T3: test 환경을 제외하고 JWT secret required.
