@@ -1,8 +1,15 @@
 # Todayskin Backend (NestJS)
 
-FastAPI 기반 백엔드를 NestJS + TypeScript + PostgreSQL(Prisma) + Redis 구조로 전환하는 작업의 진행 중입니다.
+NestJS를 메인 백엔드(BFF + 비즈니스 로직)로, FastAPI(inference-service)를 독립 AI 추론 서버로
+역할 분리한 백엔드. 아키텍처 원칙은 docs/ARCHITECTURE.md, 결정 사항은 backend/decision.md,
+작업은 backend/BACKEND_TASKS.md를 따른다.
 
-현재 단계: **T14 — 전체 구조 정리 및 검증**
+**구조**: NestJS(Modular Monolith — auth/weather/diagnosis/recommendations/products/pattern/notifications/gemini) +
+FastAPI(inference-service, 피부 이미지 추론만) + PostgreSQL/Prisma + Redis + BullMQ(예정).
+
+**운영**: GitHub Actions → ECR → ECS Fargate, RDS PostgreSQL · S3 · CloudWatch, Pino · Sentry · Helmet · JWT · Swagger · Jest.
+
+현재 단계: **T0~T14 핵심 구현 완료, N0~N6 후속 작업 진행 중**
 
 ## 실행
 
@@ -148,7 +155,24 @@ backend/
 │     └─ dto/               # HealthResponseDto
 ```
 
-기존 Python 코드(`backend/app/`)는 참조용으로 보존되어 있으며, 점진적으로 NestJS 모듈로 이식됩니다.
+## 역할 분리
+
+- **NestJS(src/)** — 메인 백엔드. 모든 비즈니스 로직, 인증, 진단 결과 저장, 추천, 패턴, 알림, 날씨 관리.
+- **FastAPI(inference-service/)** — 독립 AI 추론 서버. AI 모델 서빙과 피부 이미지 추론만 담당.
+  추론 결과(점수/등급/랜드마크 메타데이터)만 NestJS로 전달. 비즈니스 로직·인증·DB 접근 없음.
+  이미지는 메모리에서 처리되며 디스크에 기록하지 않는다.
+- **InferenceProvider** — NestJS 진단 서비스가 추론 호출을 추상화.
+  `INFERENCE_SERVICE_URL` 설정 시 PythonInferenceProvider, 미설정 시 MockInferenceProvider.
+- 기존 Python DB 코드(`backend/app/`)는 참조·이식 검증용으로만 남아 있으며 운영 트래픽을 받지 않는다.
+
+## 운영/보안 스택 (N0~N6)
+
+- **로깅**: Pino JSON 구조화 로그 + correlation ID + 민감정보 마스킹 (N1)
+- **에러 트래킹**: Sentry (민감정보 전송 금지) (N1)
+- **보안**: Helmet, @nestjs/throttler Rate Limit, JWT Access/Refresh, Validation (N0)
+- **비동기**: BullMQ (추천·패턴·알림 job) (N4)
+- **이미지**: 동의한 경우만 S3 암호화 저장, 미동의 시 추론 후 즉시 삭제 (N3)
+- **히스토리**: 캘린더 중심 — 날짜 선택 시 날씨·대기질·분석·점수 변화·추천 제품, 동의 시 이미지+랜드마크
 
 ## Prisma 7 참고
 
