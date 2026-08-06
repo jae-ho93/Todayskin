@@ -56,4 +56,9 @@ export const envValidationSchema = Joi.object({
   MOCK_GEMINI: Joi.string().valid('true', 'false').allow('').optional(),
   // T9: 개발/통합 테스트용 mock 진단 추론. 운영에서는 반드시 false여야 함.
   MOCK_INFERENCE: Joi.string().valid('true', 'false').allow('').optional(),
+
+  // N0: Rate Limit 설정 — 분당 허용 요청 수와 TTL(ms).
+  // 운영에서는 Redis 저장소 기반으로, 개발/테스트는 메모리 저장소로 동작.
+  THROTTLE_LIMIT: Joi.number().integer().min(1).default(60),
+  THROTTLE_TTL_MS: Joi.number().integer().min(100).default(60_000),
 });
