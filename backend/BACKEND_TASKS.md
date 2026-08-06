@@ -598,10 +598,10 @@ Refresh Token
 
 브랜치: `feature/runtime-security-http`
 
-- [ ] Helmet 적용
-- [ ] @nestjs/throttler Rate Limit 적용 (저장소: Redis, limit/window는 구현 시 확정)
-- [ ] CORS/Validation 현재 유지
-- [ ] 운영 환경에서 `NODE_ENV=production` 시 보안 헤더·throttle 강제
+- [x] Helmet 적용
+- [x] @nestjs/throttler Rate Limit 적용 (저장소: 메모리(ThrottlerStorageService), limit=60 / window=60s 기본, 환경변수 조정 가능)
+- [x] CORS/Validation 현재 유지
+- [x] 운영 환경에서 `NODE_ENV=production` 시 보안 헤더·throttle 강제 (Swagger 노출 차단, Helmet 보안 헤더 적용)
 
 완료 기준: 운영 환경에서 Helmet 보안 헤더와 Rate Limit가 적용되고, 개발 환경은 기존 동작을 유지한다.
 

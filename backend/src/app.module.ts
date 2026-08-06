@@ -1,5 +1,11 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import {
+  ThrottlerModule,
+  ThrottlerGuard,
+  ThrottlerStorageService,
+} from '@nestjs/throttler';
 import { envValidationSchema } from './config/env.validation';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -23,6 +29,24 @@ import { NotificationModule } from './modules/notifications/notification.module'
         allowUnknown: true,
       },
     }),
+    // N0: Rate Limit. 메모리 저장소를 기본으로 사용한다(외부 의존성 최소화).
+    // limit/window는 환경변수로 조정 가능하며, 테스트 환경은 skipIf로 비활성화한다.
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        throttlers: [
+          {
+            name: 'default',
+            limit: config.get<number>('THROTTLE_LIMIT', 60),
+            ttl: config.get<number>('THROTTLE_TTL_MS', 60_000),
+          },
+        ],
+        storage: new ThrottlerStorageService(),
+        errorMessage: '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.',
+        skipIf: () => config.get<string>('NODE_ENV') === 'test',
+      }),
+    }),
     PrismaModule,
     RedisModule,
     HealthModule,
@@ -33,6 +57,10 @@ import { NotificationModule } from './modules/notifications/notification.module'
     DiagnosisModule,
     PatternModule,
     NotificationModule,
+  ],
+  providers: [
+    // ThrottlerGuard를 전역 가드로 등록해 모든 라우트에 Rate Limit 적용.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}
