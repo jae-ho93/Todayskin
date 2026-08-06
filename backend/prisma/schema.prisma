@@ -30,6 +30,7 @@ model User {
 
   refreshSessions        RefreshSession[]
   diagnoses              Diagnosis[]
+  diagnosisImages        DiagnosisImage[]
   recommendations        Recommendation[]
   notificationPreference NotificationPreference?
   consentRecords         ConsentRecord[]
@@ -125,18 +126,28 @@ model RefreshSession {
   @@map("refresh_sessions")
 }
 
-// 동의 기록 (원본 이미지 비저장 동의 등)
+// N3: 동의 기록 — 목적별 최신 상태 1건 (userId + purpose unique).
+// purpose registry: diagnosis_image_processing / diagnosis_image_storage /
+// ai_recommendation_data_transfer. 철회 시 revokedAt을 채우고 agreed=false.
 model ConsentRecord {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
-  type      String   // 예: "image_not_stored"
-  agreed    Boolean  @default(false)
-  version   String   @default("1.0.0")
-  createdAt DateTime @default(now()) @map("created_at")
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  // 동의 목적. registry의 ConsentPurpose 값만 사용한다.
+  purpose   String
+  agreed    Boolean   @default(false)
+  // 동의한 registry version. 필수 동의는 현재 requiredVersion과 일치해야 한다.
+  version   String    @default("1.0.0")
+  // 동의 수집 채널: app | web | admin 등.
+  source    String?
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, purpose])
   @@index([userId])
+  @@index([purpose, agreed])
   @@map("consent_records")
 }
 
@@ -161,7 +172,7 @@ model Diagnosis {
   userId             Int             @map("user_id")
   capturedAt         DateTime        @map("captured_at")
   overallScore       Float           @map("overall_score")
-  // 원본 이미지는 저장하지 않는다. 필요시 동의 기반 별도 보관.
+  // 원본 이미지는 diagnosis_image_storage 동의 시에만 S3 저장. 미동의면 null.
   thumbnailUri       String?         @map("thumbnail_uri")
   status             DiagnosisStatus @default(PENDING)
   modelVersion       String?         @map("model_version")
@@ -172,10 +183,38 @@ model Diagnosis {
   skinMetrics     SkinMetric[]
   weatherSnapshot WeatherSnapshot? @relation(fields: [weatherSnapshotId], references: [id])
   recommendations Recommendation[]
+  // N3: 동의 기반 S3 이미지 메타데이터 (원본 바이너리는 S3에만).
+  image           DiagnosisImage?
 
   @@index([userId, capturedAt])
   @@map("diagnoses")
 }
+
+// N3: 진단 이미지 S3 메타데이터.
+// 바이너리는 S3(SSE)에만 두고 DB에는 위치·암호화·크기만 보관한다.
+// 저장 동의 철회 시 S3 객체를 삭제하고 deletedAt을 채운다.
+model DiagnosisImage {
+  id             String    @id @default(uuid())
+  diagnosisId    String    @unique @map("diagnosis_id")
+  userId         Int       @map("user_id")
+  s3Bucket       String    @map("s3_bucket")
+  s3Key          String    @map("s3_key")
+  contentType    String    @map("content_type")
+  sizeBytes      Int       @map("size_bytes")
+  checksumSha256 String?   @map("checksum_sha256")
+  // SSE-S3 AES256 또는 aws:kms
+  encryption     String    @default("AES256")
+  storedAt       DateTime  @default(now()) @map("stored_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  diagnosis Diagnosis @relation(fields: [diagnosisId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, deletedAt])
+  @@map("diagnosis_images")
+}
+
+
 
 // 부위별 측정값 — 프론트 6개 부위 유지
 model SkinMetric {

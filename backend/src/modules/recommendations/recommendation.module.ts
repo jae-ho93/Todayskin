@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { RecommendationController } from './recommendation.controller';
 import { RecommendationService } from './recommendation.service';
 import { GeminiModule } from '../gemini/gemini.module';
+import { ConsentModule } from '../consent/consent.module';
 
 /**
  * RecommendationModule — T7.
@@ -9,7 +10,7 @@ import { GeminiModule } from '../gemini/gemini.module';
  * GeminiClient는 GeminiModule에서 주입받는다 (ProductModule과 공유).
  */
 @Module({
-  imports: [GeminiModule],
+  imports: [GeminiModule, ConsentModule],
   controllers: [RecommendationController],
   providers: [RecommendationService],
   exports: [RecommendationService],

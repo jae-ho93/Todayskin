@@ -8,7 +8,8 @@ import { KmaClient } from '../src/modules/weather/clients/kma.client';
 import { AirKoreaClient } from '../src/modules/weather/clients/airkorea.client';
 import { StationClient } from '../src/modules/weather/clients/station.client';
 import { RedisService } from '../src/redis/redis.service';
-import { signupWithOtp, loginWithOtp } from './helpers/auth-flow';
+import { signupWithOtp } from './helpers/auth-flow';
+import { grantRecommendationTransfer } from './helpers/consent-flow';
 
 /**
  * 프론트 API response contract 통합 테스트 (T13).
@@ -79,6 +80,7 @@ describe('API Response Contract (e2e)', () => {
 
   afterAll(async () => {
     await prisma.recommendation.deleteMany({ where: { user: { phoneNumber: testPhone } } });
+    await prisma.consentRecord.deleteMany({ where: { user: { phoneNumber: testPhone } } }).catch(() => undefined);
     await prisma.refreshSession.deleteMany({
       where: { user: { phoneNumber: testPhone } },
     });
@@ -168,6 +170,8 @@ describe('API Response Contract (e2e)', () => {
       });
       expect(signupRes.status).toBe(201);
       accessToken = signupRes.body.accessToken;
+      // N3: Gemini 호출 전 transfer 동의 게이트를 통과해야 503(Gemini 실패)까지 도달한다.
+      await grantRecommendationTransfer(app, accessToken);
     });
 
     it('MOCK_GEMINI=false + 키 없음 시 /recommendations/generate → 503', async () => {

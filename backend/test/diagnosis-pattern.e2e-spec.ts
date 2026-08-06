@@ -9,6 +9,7 @@ import { AirKoreaClient } from '../src/modules/weather/clients/airkorea.client';
 import { StationClient } from '../src/modules/weather/clients/station.client';
 import { RedisService } from '../src/redis/redis.service';
 import { signupWithOtp } from './helpers/auth-flow';
+import { grantDiagnosisProcessing } from './helpers/consent-flow';
 
 /**
  * 진단 파일 검증 + 개인 패턴 locked/ready e2e (T13).
@@ -77,6 +78,8 @@ describe('Diagnosis & Pattern (e2e)', () => {
     expect(signupRes.status).toBe(201);
     accessToken = signupRes.body.accessToken;
     userId = signupRes.body.id;
+    // N3: 진단 제출에 processing 동의 필수
+    await grantDiagnosisProcessing(app, accessToken);
   });
 
   afterAll(async () => {
@@ -86,6 +89,7 @@ describe('Diagnosis & Pattern (e2e)', () => {
     // 이 테스트에서 생성한 weatherSnapshot을 명시적으로 정리 (regionName=서울).
     await prisma.weatherSnapshot.deleteMany({ where: { regionName: '서울' } });
     await prisma.recommendation.deleteMany({ where: { userId } });
+    await prisma.consentRecord.deleteMany({ where: { userId } }).catch(() => undefined);
     await prisma.otpCode.deleteMany({ where: { phoneNumber: testPhone } });
     await prisma.refreshSession.deleteMany({ where: { userId } });
     await prisma.user.deleteMany({ where: { phoneNumber: testPhone } });

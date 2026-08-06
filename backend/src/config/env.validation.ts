@@ -89,4 +89,10 @@ export const envValidationSchema = Joi.object({
   SENTRY_DSN: Joi.string().uri().allow('').optional(),
   // Sentry 트레이스 샘플링 비율 (0.0~1.0). 기본 0.1.
   SENTRY_TRACES_SAMPLE_RATE: Joi.number().min(0).max(1).default(0.1),
+
+  // N3: S3 이미지 저장 (동의 기반). 비워두면 개발/테스트는 Memory store.
+  S3_BUCKET: Joi.string().allow('').optional(),
+  AWS_REGION: Joi.string().default('ap-northeast-2'),
+  // SSE-KMS 사용 시. 비우면 SSE-S3 AES256.
+  S3_KMS_KEY_ID: Joi.string().allow('').optional(),
 });

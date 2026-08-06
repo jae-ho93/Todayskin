@@ -25,6 +25,8 @@ import { ProductModule } from './modules/products/product.module';
 import { DiagnosisModule } from './modules/diagnosis/diagnosis.module';
 import { PatternModule } from './modules/pattern/pattern.module';
 import { NotificationModule } from './modules/notifications/notification.module';
+import { ConsentModule } from './modules/consent/consent.module';
+import { StorageModule } from './modules/storage/storage.module';
 
 @Module({
   imports: [
@@ -69,6 +71,8 @@ import { NotificationModule } from './modules/notifications/notification.module'
     DiagnosisModule,
     PatternModule,
     NotificationModule,
+    ConsentModule,
+    StorageModule,
   ],
   providers: [
     // ThrottlerGuard를 전역 가드로 등록해 모든 라우트에 Rate Limit 적용.
