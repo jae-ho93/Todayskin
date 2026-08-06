@@ -385,10 +385,11 @@ export class DiagnosisService {
       },
     });
 
-    const items: CalendarDiagnosisDto[] = [];
-    for (const d of diagnoses) {
-      items.push(await this.toCalendarDiagnosisDto(d, canViewMedia));
-    }
+    const items = await Promise.all(
+      diagnoses.map((diagnosis) =>
+        this.toCalendarDiagnosisDto(diagnosis, canViewMedia),
+      ),
+    );
 
     const dto = new CalendarDayHistoryDto();
     dto.date = date;

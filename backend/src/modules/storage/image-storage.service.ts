@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -48,36 +54,50 @@ export class ImageStorageService {
       contentType: params.image.mimetype,
     });
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.diagnosisImage.upsert({
-        where: { diagnosisId: params.diagnosisId },
-        create: {
-          id: randomUUID(),
-          diagnosisId: params.diagnosisId,
-          userId: params.userId,
-          s3Bucket: ref.bucket,
-          s3Key: ref.key,
-          contentType: ref.contentType,
-          sizeBytes: ref.sizeBytes,
-          checksumSha256: ref.checksumSha256,
-          encryption: ref.encryption,
-        },
-        update: {
-          s3Bucket: ref.bucket,
-          s3Key: ref.key,
-          contentType: ref.contentType,
-          sizeBytes: ref.sizeBytes,
-          checksumSha256: ref.checksumSha256,
-          encryption: ref.encryption,
-          deletedAt: null,
-          storedAt: new Date(),
-        },
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.diagnosisImage.upsert({
+          where: { diagnosisId: params.diagnosisId },
+          create: {
+            id: randomUUID(),
+            diagnosisId: params.diagnosisId,
+            userId: params.userId,
+            s3Bucket: ref.bucket,
+            s3Key: ref.key,
+            contentType: ref.contentType,
+            sizeBytes: ref.sizeBytes,
+            checksumSha256: ref.checksumSha256,
+            encryption: ref.encryption,
+          },
+          update: {
+            s3Bucket: ref.bucket,
+            s3Key: ref.key,
+            contentType: ref.contentType,
+            sizeBytes: ref.sizeBytes,
+            checksumSha256: ref.checksumSha256,
+            encryption: ref.encryption,
+            deletedAt: null,
+            storedAt: new Date(),
+          },
+        });
+        await tx.diagnosis.update({
+          where: { id: params.diagnosisId },
+          data: { thumbnailUri: ref.uri },
+        });
       });
-      await tx.diagnosis.update({
-        where: { id: params.diagnosisId },
-        data: { thumbnailUri: ref.uri },
-      });
-    });
+    } catch (error) {
+      // 객체 업로드 후 DB 반영이 실패하면 참조 없는 개인정보 객체가 남지 않도록 보상 삭제한다.
+      try {
+        await this.store.deleteObject({ bucket: ref.bucket, key: ref.key });
+      } catch (cleanupError) {
+        this.logger.error(
+          `이미지 메타데이터 저장 실패 후 객체 정리 실패 diagnosisId=${params.diagnosisId}: ${
+            cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
+          }`,
+        );
+      }
+      throw error;
+    }
 
     await this.auditLog.log({
       actorId: params.userId,
@@ -164,13 +184,27 @@ export class ImageStorageService {
       where: { userId, deletedAt: null },
     });
     let deleted = 0;
+    let failed = 0;
     for (const img of images) {
       try {
         await this.store.deleteObject({ bucket: img.s3Bucket, key: img.s3Key });
       } catch (e) {
+        failed += 1;
         this.logger.warn(
-          `이미지 객체 삭제 실패 diagnosisId=${img.diagnosisId}: ${(e as Error).message}`,
+          `이미지 객체 삭제 실패 diagnosisId=${img.diagnosisId}: ${
+            e instanceof Error ? e.message : String(e)
+          }`,
         );
+        await this.auditLog.log({
+          actorId: userId,
+          action: 'image.delete_on_revoke_failed',
+          targetType: 'DiagnosisImage',
+          targetId: img.id,
+          result: 'failure',
+          metadata: { diagnosisId: img.diagnosisId },
+        });
+        // 객체가 실제로 남아 있으므로 DB 참조를 유지해 재시도할 수 있게 한다.
+        continue;
       }
       await this.prisma.$transaction(async (tx) => {
         await tx.diagnosisImage.update({
@@ -198,6 +232,12 @@ export class ImageStorageService {
       where: { userId },
       data: { landmarks: Prisma.JsonNull },
     });
+
+    if (failed > 0) {
+      throw new ServiceUnavailableException(
+        '일부 진단 이미지를 삭제하지 못했습니다. 잠시 후 다시 시도해주세요.',
+      );
+    }
 
     return deleted;
   }

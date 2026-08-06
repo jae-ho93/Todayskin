@@ -77,7 +77,7 @@ export const ENV_REGISTRY: EnvVarDefinition[] = [
   { key: 'SENTRY_DSN', owner: 'observability', description: 'Sentry DSN', requiredIn: 'never', secret: true },
   { key: 'SENTRY_TRACES_SAMPLE_RATE', owner: 'observability', description: 'Sentry traces sample rate', requiredIn: 'never', safeDefault: 0.1, secret: false },
 
-  { key: 'S3_BUCKET', owner: 'storage', description: 'Diagnosis image S3 bucket', requiredIn: 'never', secret: false },
+  { key: 'S3_BUCKET', owner: 'storage', description: 'Diagnosis image S3 bucket', requiredIn: ['production'], secret: false },
   { key: 'AWS_REGION', owner: 'storage', description: 'AWS region', requiredIn: 'never', safeDefault: 'ap-northeast-2', secret: false },
   { key: 'S3_KMS_KEY_ID', owner: 'storage', description: 'Optional SSE-KMS key id', requiredIn: 'never', secret: true },
   { key: 'AWS_ACCESS_KEY_ID', owner: 'storage', description: 'AWS access key (local only; prefer IAM role)', requiredIn: 'never', secret: true },

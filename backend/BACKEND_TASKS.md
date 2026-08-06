@@ -6,13 +6,14 @@
 ## 목표
 
 NestJS를 메인 백엔드(BFF + 비즈니스 로직)로, FastAPI(inference-service)를 독립 AI 추론 서버로
-역할 분리한 운영 가능한 백엔드를 목표로 한다. NestJS는 Modular Monolith 구조로 auth, diagnosis,
-recommendations, products, pattern, notifications, weather, gemini 모듈로 책임을 분리하고
-모든 비즈니스 로직을 담당한다. FastAPI는 AI 모델 서빙과 피부 이미지 추론만 담당하며
+역할 분리한 운영 가능한 백엔드를 목표로 한다. NestJS는 Modular Monolith 구조로 auth, otp, admin,
+consent, storage, diagnosis, weather, recommendations, products, pattern, notifications, gemini, jobs
+모듈로 책임을 분리하고 모든 비즈니스 로직을 담당한다. FastAPI는 AI 모델 서빙과 피부 이미지 추론만 담당하며
 추론 결과만 NestJS로 전달한다.
 
-데이터는 PostgreSQL + Prisma(운영: AWS RDS), Redis(날씨 캐시·Refresh Token·Rate Limit),
-BullMQ(추천·패턴·알림 비동기)를 사용한다. 이미지는 동의한 경우만 암호화해 S3에 저장하고
+데이터는 PostgreSQL + Prisma(운영: AWS RDS), Redis(날씨 캐시·BullMQ broker),
+BullMQ(추천·패턴·알림 비동기)를 사용한다. Refresh Token은 PostgreSQL에 해시로 저장하고,
+현재 HTTP Rate Limit은 인스턴스 메모리 저장소를 사용한다. 이미지는 동의한 경우만 암호화해 S3에 저장하고
 미동의 시 추론 후 즉시 삭제한다. 운영은 GitHub Actions → ECR → ECS Fargate 배포,
 RDS·S3·CloudWatch 연동, Pino·Sentry·Helmet·JWT·Swagger·Jest를 적용한다.
 
@@ -26,12 +27,13 @@ NestJS와 FastAPI의 역할 분리는 완료되었다.
 - FastAPI(inference-service/)가 독립 AI 추론 서버로 동작한다. AI 모델 서빙과 피부 이미지
   추론만 담당하며 비즈니스 로직·인증·DB 접근을 갖지 않고 추론 결과만 NestJS로 전달한다.
 - NestJS 진단 서비스는 InferenceProvider interface로 추론 호출을 추상화한다.
-  INFERENCE_SERVICE_URL 설정 시 PythonInferenceProvider, 미설정 시 MockInferenceProvider가 동작한다.
+  `MOCK_INFERENCE=true`인 개발·테스트는 MockInferenceProvider, `INFERENCE_SERVICE_URL` 설정 시 PythonInferenceProvider,
+  둘 다 없으면 fail-closed provider가 503을 반환한다.
 - 레거시 FastAPI 비즈니스 코드(`backend/app/`)는 N7에서 제거되었다. Python은 inference-service/ 추론 서버만 유지한다.
 
-## 최신 origin/main 동기화 반영
+## 2026-08-04 프론트 계약 동기화 이력
 
-2026-08-04에 원격 origin/main의 최신 15개 커밋을 pull한 뒤 확인한 변경사항이다.
+NestJS 전환 중 원격 `origin/main`의 프론트 계약을 확인해 반영한 기준이다. 이후 N0~N8 구현 상태는 아래 `다음 과정`에 별도로 기록한다.
 
 - 날씨 API는 MOCK_WEATHER로 값을 채우지 않는다. 정부 API 실패 시 각 지표가 None/undefined가 되고 프론트가 측정 불가를 표시한다.
 - UV API가 V4에서 V5로 변경되었고 uvIndexPeak, uvStatusPeak, uvIndexPeakHour가 추가되었다.
@@ -54,15 +56,13 @@ backend/
 │  ├─ prisma/                 # PrismaModule, PrismaService
 │  ├─ redis/                  # RedisModule (날씨 캐시)
 │  └─ modules/
-│     ├─ auth/                 # 회원가입·로그인·JWT·Refresh
+│     ├─ auth/, otp/, admin/   # 인증·OTP·운영 권한
+│     ├─ consent/, storage/    # 동의 게이트·이미지 수명주기
 │     ├─ weather/              # 날씨·대기질 API + 캐시
-│     ├─ diagnosis/            # 진단 도메인 + InferenceProvider
-│     ├─ recommendations/      # 맞춤 추천 생성
-│     ├─ products/             # 제품 목록 + 날씨 기반 제품
-│     ├─ pattern/              # 개인 피부 패턴 분석
-│     ├─ notifications/        # 알림 설정 저장
-│     ├─ gemini/               # Gemini LLM 클라이언트
-│     └─ health/               # 헬스 체크
+│     ├─ diagnosis/            # 진단 도메인 + InferenceProvider + 캘린더
+│     ├─ recommendations/, products/, pattern/
+│     ├─ notifications/, gemini/
+│     └─ jobs/                 # Inline/BullMQ 비동기 작업
 ├─ inference-service/          # FastAPI 독립 AI 추론 서버
 │  ├─ main.py                  # POST /infer, GET /health
 │  ├─ analyzer.py              # SkinAnalyzer (MobileNetV3)
@@ -336,7 +336,7 @@ Recommendation(userId, diagnosisId, createdAt)
 - [x] 원본 이미지 비저장 (memoryStorage + 처리 후 GC, 동의는 ConsentRecord 모델로 별도)
 - [x] 중복 요청 방지 정책 결정 (동일 사용자 60초 이내 제출 거부)
 
-보류: 실제 Python AI 서버 호출, 실제 모델 추론, 모델 운영·배포 정책.
+후속 N5/N8에서 Python inference-service 호출, 실제 모델 컨테이너, landmarks 계약과 ECS 배포 경로까지 반영했다.
 
 ### T10. 개인 패턴 분석 API
 
@@ -375,9 +375,9 @@ Recommendation(userId, diagnosisId, createdAt)
 - [x] hit/miss 처리
 - [x] Redis 장애 시 외부 API 또는 최근 DB fallback
 - [x] live/cached 출처 구분
-- [ ] 무효화·로그·metric 정책 결정 (→ N1 관측성, N6 정책 마무리로 이동)
+- [ ] 무효화·로그·metric 정책 결정 (→ N11 다중 인스턴스 운영 보강)
 
-초기 Redis 범위는 날씨 캐시입니다. AI 작업 큐는 Python AI 서버와 실제 비동기 추론이 필요해질 때 별도 작업으로 추가합니다.
+초기 Redis 범위는 날씨 캐시였으며, N4에서 추천·패턴·알림 BullMQ 작업 큐와 Inline fallback을 추가했다.
 
 ### T13. 테스트와 API 계약
 
@@ -405,9 +405,9 @@ Recommendation(userId, diagnosisId, createdAt)
 - [x] Prisma migration 검사
 - [x] 배포 전략 결정
 
-Python AI 서버 컨테이너는 모델 학습과 서버 구현 완료 뒤 별도 작업으로 추가합니다.
+Python inference-service 컨테이너와 ECS 배포는 N5에서 추가되었다.
 
-참고: Dockerfile, docker-compose backend 서비스, CI migration diff 검사 단계, 배포 전략 문서(`docker/DEPLOYMENT.md`)를 추가했다. `prisma generate` 후 `npm run build`, 단위 테스트 112개, e2e 테스트 76개, lint가 모두 로컬에서 통과한다. CI의 migration diff 검사는 별도 shadow DB(`todayskin_shadow`)를 사용한다.
+참고: Dockerfile, docker-compose backend 서비스, CI migration diff 검사 단계, 배포 전략 문서(`docker/DEPLOYMENT.md`)를 추가했다. CI는 `prisma generate`, build, 단위/E2E 테스트와 lint를 실행한다. migration diff 검사는 별도 shadow DB(`todayskin_shadow`)를 사용한다.
 
 ## 데이터 설계 기준
 
@@ -564,34 +564,34 @@ Refresh Token
 
 ### P0
 
-- [ ] NestJS 실행 구조
-- [ ] PostgreSQL + Prisma migration
-- [ ] JWT + Refresh Token
-- [ ] USER / ADMIN
-- [ ] 기존 Auth/Weather/Recommendation/Product API 이식
-- [ ] `POST /products/weather-based` 포함
-- [ ] 사용자 데이터 소유권 검사
+- [x] NestJS 실행 구조
+- [x] PostgreSQL + Prisma migration
+- [x] JWT + Refresh Token
+- [x] USER / ADMIN
+- [x] 기존 Auth/Weather/Recommendation/Product API 이식
+- [x] `POST /products/weather-based` 포함
+- [x] 사용자 데이터 소유권 검사
 
 ### P1
 
-- [ ] WeatherSnapshot 저장
-- [ ] 개인 패턴 분석 API
-- [ ] 추천 중복 생성 방지
-- [ ] 진단 파일 검증 및 MockInferenceProvider
+- [x] WeatherSnapshot 저장
+- [x] 개인 패턴 분석 API
+- [x] 추천 중복 생성 방지
+- [x] 진단 파일 검증 및 MockInferenceProvider
 - [x] NotificationPreference DB 저장
-- [ ] Redis 날씨 캐시
+- [x] Redis 날씨 캐시
 
 ### P2
 
-- [ ] Python AI 서버 연동
-- [ ] Redis AI 작업 큐
-- [ ] WebSocket/SSE
-- [ ] Docker 배포 환경
-- [ ] GitHub Actions 배포 자동화
+- [x] Python inference-service 연동
+- [x] Redis BullMQ 작업 큐
+- [ ] WebSocket/SSE (현재 polling)
+- [x] Docker 배포 환경
+- [x] GitHub Actions 배포 자동화
 
 ## 다음 과정 (Next)
 
-> T0~T14 핵심 구현은 완료. 아래는 코드에 아직 반영되지 않은 후속 작업.
+> T0~T14와 N0~N8 구현은 완료. N9 이후는 운영 공개 전 필요한 후속 작업.
 > 4개 핵심 결정(T2-03/T3-04/T3-05/T9-03)은 decision.md에서 2026-08-07 확정.
 
 ### N0. 운영 보안·HTTP 보호
@@ -609,6 +609,10 @@ Refresh Token
 
 브랜치: `feature/structured-logging-observability`
 
+- [x] Pino JSON 구조화 로깅과 correlation ID
+- [x] 민감정보 redact 정책
+- [x] Sentry 선택적 연동과 민감정보 제거
+- [x] 감사 로그와 애플리케이션 로그 책임 분리
 
 완료 기준: 모든 요청에 correlation ID가 부여되고 JSON 로그로 남으며, 에러가 Sentry에 민감정보 없이 전송된다.
 
@@ -617,16 +621,17 @@ Refresh Token
 브랜치: `feature/otp-auth-admin`
 
 - [x] OTP provider interface 설계 (`OtpProvider`, `MockOtpProvider`, `SmsOtpProvider`)
-- [x] 가입·새 디바이스 로그인에 OTP 필수 (운영 공개 전)
+- [x] 가입·새 디바이스 로그인 OTP 검증·소비 흐름
   - 개발: allowlisted test phone / mock OTP
-  - 운영: 실제 OTP + 시도 횟수·만료·재전송 제한
-- [x] OTP 발송 채널은 구현 시 SMS/알림톡 중 선택
-- [x] JWT key rotation(kid) — 현재 단일 secret
+  - 운영: 시도 횟수·만료·재전송 제한 적용
+- [ ] 실제 SMS 게이트웨이 HTTP 호출 (현재 `SmsOtpProvider`는 fail-closed placeholder)
+- [x] OTP 발송 채널은 SMS로 결정
+- [x] JWT key rotation(kid) — DB active/verify-only 키와 기본 v1 호환
 - [x] 첫 ADMIN 운영 API + @Roles(Role.ADMIN) + 감사 로그
   - Role 기반 유지 (Permission은 3개+ 독립 action 시 도입)
 - [x] USER 403·ADMIN 200·미인증 401 e2e 테스트
 
-완료 기준: 전화번호 단독 로그인이 OTP 검증으로 대체되고, 첫 ADMIN API가 Role 가드와 감사 로그로 보호된다.
+현재 기준: OTP 검증 흐름과 ADMIN 보호는 완료했지만 실제 SMS 발송은 N9에서 완료해야 운영 공개가 가능하다.
 
 ### N3. S3 이미지 저장·Consent 실제 연동
 
@@ -643,7 +648,7 @@ Refresh Token
 
 참고: ConsentModule + StorageModule 추가. `GET/POST /consents`, registry version 게이트.
 저장 동의 시에만 SSE(AES256/KMS)로 객체 저장하고 `DiagnosisImage` 메타를 남긴다.
-S3_BUCKET 미설정 시 개발/테스트는 Memory store. 단위 138, 관련 e2e 29 통과.
+S3_BUCKET 미설정 시 개발/테스트는 Memory store를 사용한다. 운영은 S3_BUCKET 필수이며 Memory fallback을 허용하지 않는다.
 
 완료 기준: 동의 상태가 진단·추천 기능의 진입 조건으로 동작하고, 동의한 이미지만 S3에 암호화 저장된다.
 
@@ -736,6 +741,103 @@ Jest coverageThreshold를 반영했다.
 - [x] 미동의 진단은 이미지/랜드마크 노출 제외
 
 완료 기준: 날짜 선택 시 날씨·대기질·분석·점수·추천 제품이 한 번에 조회되고, 동의한 경우 이미지와 랜드마크까지 확인할 수 있다.
+
+### N9. 운영 SMS OTP 게이트웨이
+
+브랜치: `feature/production-sms-otp`
+
+- [ ] SMS provider를 확정하고 실제 HTTP 발송 구현
+- [ ] 요청 timeout·제한 재시도·provider 오류 매핑
+- [ ] 전화번호·OTP·API key 로그 금지 검증
+- [ ] 운영에서 `SMS_API_KEY`, `SMS_SENDER`, `SMS_ENDPOINT` 누락 시 readiness 실패
+- [ ] provider 계약 단위 테스트와 가입·로그인 E2E 갱신
+
+완료 기준: 운영 환경의 OTP가 실제 SMS로 발송되고, 설정 누락이나 provider 장애가 가짜 성공으로 처리되지 않는다.
+
+### N10. 이미지 저장소 reconciliation
+
+브랜치: `feature/image-storage-reconciliation`
+
+- [ ] 철회·탈퇴의 이미지 선삭제와 DB transaction 순서를 2단계 상태로 재설계
+- [ ] S3 삭제 실패 레코드 재시도 worker와 운영 지표
+- [ ] DB 메타데이터 없는 orphan 객체 탐지·정리 dry-run
+- [ ] 이미지 교체 시 이전 객체 정리 정책
+- [ ] 철회·탈퇴 삭제 실패 알림과 관리자 재처리 경로
+- [ ] S3 lifecycle rule과 보존 정책 정합성 문서화
+
+완료 기준: 일시적인 S3/DB 장애 뒤에도 개인정보 이미지 객체와 DB 메타데이터가 자동으로 수렴한다.
+
+### N11. 다중 인스턴스 운영 보강
+
+브랜치: `feature/distributed-runtime-controls`
+
+- [ ] HTTP Rate Limit 저장소를 Redis 기반으로 전환
+- [ ] 날씨 cache hit/miss와 BullMQ queue/DLQ metric 수집
+- [ ] Redis 장애 시 cache·job·rate limit별 fail-open/fail-closed 정책 확정
+- [ ] `/health/ready`에 운영 필수 inference/SMS dependency 정책 반영
+- [ ] WebSocket/SSE 필요성 재평가(현재 job polling 유지)
+
+완료 기준: ECS 다중 task에서도 rate limit과 운영 지표가 인스턴스별로 분산되지 않고 일관되게 동작한다.
+
+### N12. 서버 소유 날씨 입력 계약
+
+브랜치: `fix/server-owned-weather-contract`
+
+- [ ] `POST /products/weather-based`를 인증하고 사용자 입력 weather 전체를 신뢰하지 않도록 변경
+- [ ] 좌표/지역 식별자만 받아 WeatherService·최근 WeatherSnapshot에서 입력 구성
+- [ ] Redis·정부 API 실패 시 최근 DB snapshot fallback 구현
+- [ ] 프론트 요청 계약과 함께 단계적으로 migration
+- [ ] 비인증 호출·조작된 날씨·외부 API 실패 E2E 추가
+
+완료 기준: 날씨 기반 제품 생성이 인증된 서버 데이터만 사용하고 외부 API 장애에도 명시적인 cached/unavailable 정책을 유지한다.
+
+### N13. inference-service 내부 경계 보호
+
+브랜치: `feature/inference-service-hardening`
+
+- [ ] NestJS↔FastAPI 내부 인증(shared secret 또는 service identity)
+- [ ] FastAPI 업로드 크기·content type 상한을 NestJS와 동일하게 적용
+- [ ] queue 대기와 추론 실행 timeout·동시성 지표
+- [ ] ECS security group에서 backend task만 `/infer` 접근 허용
+- [ ] 401/413/422/500 계약 테스트
+
+완료 기준: inference-service가 내부망 오배치나 직접 호출에도 무제한 이미지 처리 endpoint로 노출되지 않는다.
+
+### N14. 외부 AI 호출 멱등성
+
+브랜치: `refactor/external-call-idempotency`
+
+- [ ] 진단 추론과 추천 Gemini 호출 전에 요청 예약/idempotency 상태 기록
+- [ ] 동일 사용자·진단 동시 요청이 외부 호출을 중복 수행하지 않도록 unique/lock 경계 이동
+- [ ] PENDING 실패·timeout·재시도 상태 전이 정의
+- [ ] 중복 요청의 동일 결과 반환 또는 409 계약 결정
+- [ ] 동시 요청 테스트 추가
+
+완료 기준: 동시 재시도에서도 외부 AI 비용이 중복 발생하지 않고 DB 결과가 하나로 수렴한다.
+
+### N15. 캘린더 히스토리 프론트 연결
+
+브랜치: `feature/calendar-history-client`
+
+- [ ] 프론트 API client에 `history/:date`, `score-series` 추가
+- [ ] 날씨·진단·추천·image·landmarks 응답 타입 동기화
+- [ ] History 화면의 기존 목록/로컬 시계열을 N8 계약으로 migration
+- [ ] 저장 미동의와 presigned URL 만료 상태 처리
+- [ ] 로딩·빈 날짜·부분 데이터·재인증 UI 검증
+
+완료 기준: 사용자가 날짜를 선택하면 N8 통합 히스토리를 실제 앱에서 조회하고 동의 상태에 맞는 이미지·landmarks를 확인할 수 있다.
+
+### N16. AWS 운영 리소스 프로비저닝·첫 배포
+
+브랜치: `chore/aws-production-bootstrap`
+
+- [ ] ECR, ECS cluster/service, RDS, Redis, S3, CloudWatch 생성
+- [ ] GitHub OIDC role과 최소 권한 task/execution role 구성
+- [ ] Secrets Manager와 production environment 승인자 설정
+- [ ] migration task → backend/inference rollout → health smoke test 실행
+- [ ] 이전 commit SHA rollback과 장애 알림 절차 실검증
+
+완료 기준: 저장소의 배포 workflow가 실제 AWS 운영 계정에 승인·migration·health·rollback을 포함해 한 번 이상 성공한다.
 
 ## 완료 정의
 

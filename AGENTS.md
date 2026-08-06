@@ -1,6 +1,6 @@
-# Expo HAS CHANGED
+# Expo SDK
 
-Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before writing any code.
+프론트엔드 코드를 수정하기 전에 `package.json`의 Expo 버전을 확인하고, 현재 SDK 54 문서인 https://docs.expo.dev/versions/v54.0.0/ 을 기준으로 작업한다.
 
 ## 아키텍처 원칙 (Todayskin)
 

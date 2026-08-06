@@ -23,7 +23,11 @@ export const envValidationSchema = Joi.object({
     then: Joi.string().uri().allow('').optional(),
     otherwise: Joi.string().uri().required(),
   }),
-  REDIS_URL: Joi.string().uri().allow('').optional(),
+  REDIS_URL: Joi.when('JOB_DISPATCHER', {
+    is: 'bullmq',
+    then: Joi.string().uri().required(),
+    otherwise: Joi.string().uri().allow('').optional(),
+  }),
   // T12: 날씨 캐시 TTL(초). 기본 300초(5분) — 정부 API 분 단위 갱신 기준.
   WEATHER_CACHE_TTL_SECONDS: Joi.number().integer().min(0).default(300),
   // N4: Job dispatcher. auto=REDIS_URL 있으면 BullMQ, 없으면 Inline.
@@ -80,7 +84,7 @@ export const envValidationSchema = Joi.object({
   MOCK_INFERENCE: Joi.string().valid('true', 'false').allow('').optional(),
 
   // N0: Rate Limit 설정 — 분당 허용 요청 수와 TTL(ms).
-  // 운영에서는 Redis 저장소 기반으로, 개발/테스트는 메모리 저장소로 동작.
+  // 현재 모든 환경에서 인스턴스 메모리 저장소를 사용하며, Redis 분산 전환은 N11 후속 작업.
   THROTTLE_LIMIT: Joi.number().integer().min(1).default(60),
   THROTTLE_TTL_MS: Joi.number().integer().min(100).default(60_000),
 
@@ -94,8 +98,12 @@ export const envValidationSchema = Joi.object({
   // Sentry 트레이스 샘플링 비율 (0.0~1.0). 기본 0.1.
   SENTRY_TRACES_SAMPLE_RATE: Joi.number().min(0).max(1).default(0.1),
 
-  // N3: S3 이미지 저장 (동의 기반). 비워두면 개발/테스트는 Memory store.
-  S3_BUCKET: Joi.string().allow('').optional(),
+  // N3: S3 이미지 저장 (동의 기반). 개발/테스트만 빈 값일 때 Memory store 허용.
+  S3_BUCKET: Joi.when('NODE_ENV', {
+    is: 'production',
+    then: Joi.string().trim().min(1).required(),
+    otherwise: Joi.string().allow('').optional(),
+  }),
   AWS_REGION: Joi.string().default('ap-northeast-2'),
   // SSE-KMS 사용 시. 비우면 SSE-S3 AES256.
   S3_KMS_KEY_ID: Joi.string().allow('').optional(),

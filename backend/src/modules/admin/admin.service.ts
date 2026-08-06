@@ -63,8 +63,8 @@ export class AdminService {
       );
     }
 
-    const target = await this.prisma.user.findUnique({
-      where: { id: dto.userId },
+    const target = await this.prisma.user.findFirst({
+      where: { id: dto.userId, deletedAt: null },
     });
     if (!target) {
       throw new NotFoundException('대상 사용자를 찾을 수 없습니다');

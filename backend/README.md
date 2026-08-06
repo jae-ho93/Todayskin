@@ -1,179 +1,158 @@
-# Todayskin Backend (NestJS)
+# Todayskin Backend
 
-NestJS를 메인 백엔드(BFF + 비즈니스 로직)로, FastAPI(inference-service)를 독립 AI 추론 서버로
-역할 분리한 백엔드. 아키텍처 원칙은 docs/ARCHITECTURE.md, 결정 사항은 backend/decision.md,
-작업은 backend/BACKEND_TASKS.md를 따른다.
+NestJS를 메인 백엔드로, `inference-service/`의 FastAPI를 이미지 추론 서버로 분리한 구조입니다. NestJS가 인증, 동의, 진단, 추천, 날씨, 데이터 영속화와 운영 정책을 담당하고 FastAPI는 추론 결과만 반환합니다.
 
-**구조**: NestJS(Modular Monolith — auth/weather/diagnosis/recommendations/products/pattern/notifications/gemini) +
-FastAPI(inference-service, 피부 이미지 추론만) + PostgreSQL/Prisma + Redis + BullMQ(예정).
+현재 T0~T14와 N0~N8이 반영되어 있습니다. 실제 SMS OTP 게이트웨이 연결과 AWS 계정 리소스 프로비저닝은 후속 작업입니다.
 
-**운영**: GitHub Actions → ECR → ECS Fargate, RDS PostgreSQL · S3 · CloudWatch, Pino · Sentry · Helmet · JWT · Swagger · Jest.
-
-현재 단계: **T0~T14 핵심 구현 완료, N0~N7 후속 작업 진행 중**
-
-## 실행
+## 로컬 실행
 
 ```bash
 cd backend
-cp .env.example .env   # DATABASE_URL 등 환경변수 설정
 npm install
+cp .env.example .env
+
+# .env의 DATABASE_URL, JWT secret 등을 개발값으로 설정
+docker compose up -d
 npm run prisma:generate
-docker compose up -d   # 로컬 PostgreSQL (dev + test DB 자동 생성)
-npm run prisma:migrate  # DB에 스키마 적용
-npm run prisma:seed     # 전역 추천 템플릿·제품 카탈로그 seed
+npm run prisma:migrate
+npm run prisma:seed
 npm run start:dev
 ```
 
-기본 포트는 3000입니다. `/health`에서 서버 상태를 확인하고, `/api/docs`에서 Swagger UI를 확인할 수 있습니다.
+- API: `http://localhost:3000`
+- Swagger: `http://localhost:3000/api/docs` (개발·테스트 환경만)
+- 호환 health: `GET /health`
+- liveness/readiness: `GET /health/live`, `GET /health/ready`
 
-## 로컬 DB
-
-`docker-compose.yml`은 개발용 PostgreSQL 컨테이너를 띄운다.
-초기화 스크립트(`docker/postgres-init.sh`)가 dev 외에 test DB를 함께 생성한다.
+FastAPI 추론 서버까지 실행하려면 다음 중 하나를 사용합니다.
 
 ```bash
-docker compose up -d        # 실행 (dev + test DB 생성)
-docker compose down         # 정지 (데이터 볼륨 유지)
-docker compose down -v      # 정지 + 데이터 삭제 (init 스크립트 재실행 시)
+# 로컬 NestJS + 컨테이너 inference-service
+npm run start:dev
+docker compose --profile inference up -d --build
+
+# PostgreSQL, Redis, NestJS, inference-service 통합 실행
+docker compose --profile backend up -d --build
 ```
 
-### 환경별 DB 분리
+## 주요 스크립트
 
-| 환경 | DATABASE_URL |
+| 명령 | 용도 |
 |---|---|
-| 개발 | `postgresql://todayskin:secret@localhost:5432/todayskin_dev` |
-| 테스트 | `postgresql://todayskin:secret@localhost:5432/todayskin_test` |
-| 운영 | 별도 관리 (컨테이너 외부, 별급 비밀번호) |
-
-## 스크립트
-
-| 스크립트 | 설명 |
-|---|---|
-| `npm run build` | TypeScript 컴파일 (`dist/`) |
-| `npm run start:dev` | 개발 모드 실행 (watch) |
-| `npm run start:prod` | `dist/main.js` 실행 |
-| `npm test` | Jest 유닛 테스트 |
-| `npm run test:e2e` | Jest e2e 테스트 |
-| `npm run lint` | ESLint 검사 (소스 수정 없음) |
+| `npm run build` | NestJS TypeScript 빌드 |
+| `npm run start:dev` | 개발 서버(watch) |
+| `npm run start:prod` | 빌드 결과 실행 |
+| `npm test` | Jest 단위 테스트 |
+| `npm run test:e2e` | PostgreSQL 기반 E2E 테스트 |
+| `npm run test:cov` | 커버리지 포함 단위 테스트 |
+| `npm run lint` | ESLint 검사(자동 수정 없음) |
 | `npm run prisma:generate` | Prisma Client 생성 |
-| `npm run prisma:migrate` | 마이그레이션 생성·적용 (`migrate dev`) |
-| `npm run prisma:seed` | seed 데이터 실행 (upsert, idempotent) |
-| `npm run prisma:studio` | Prisma Studio 실행 |
-
-## 테스트
-
-단위 테스트와 e2e 테스트가 분리되어 있다.
-
-### 단위 테스트
-
-```bash
-export DATABASE_URL=postgresql://todayskin:secret@localhost:5432/todayskin_test
-export JWT_ACCESS_SECRET=test_access_secret_at_least_32_characters_long
-export JWT_REFRESH_SECRET=test_refresh_secret_at_least_32_characters_long
-npm test
-```
-
- — Service/Guard 단위 로직을 Prisma/GeminiClient mock으로 검증.
-
-### e2e 테스트
-
-```bash
-export DATABASE_URL=postgresql://todayskin:secret@localhost:5432/todayskin_test
-export JWT_ACCESS_SECRET=e2e_access_secret_at_least_32_characters_long
-export JWT_REFRESH_SECRET=e2e_refresh_secret_at_least_32_characters_long
-export MOCK_INFERENCE=true
-npm run test:e2e
-```
-
- — 실제 PostgreSQL(test DB)에 대해 전체 HTTP 경로를 검증.
-로 순차 실행하여 test DB race condition을 방지한다.
-
-테스트 범위 (T13):
-- Auth/USER/ADMIN 권한 + 소유권 (RolesGuard 단위, e2e 인증 경로)
-- Migration/seed 멱등성 + 스키마 무결성
-- Weather parser/fallback (UNAVAILABLE, 근접측정소 폴백)
-- 추천 중복 생성 방지 (diagnosisId 기반)
-- 진단 multipart 파일 검증 (필드, MIME, 크기, 중복)
-- Pattern locked/ready (404 아닌 200 + LOCKED)
-- 프론트 API response contract (camelCase, detail 필드)
-- 운영 환경 mock fallback 비활성화 (GeminiClient.isMockEnabled)
-- 날씨 지표 undefined + 추천 API 503 계약
-
-## 환경변수
-
-`backend/.env.example` 참조. T2 단계에서 `DATABASE_URL`은 필수(test 환경 제외).
-`REDIS_URL`은 T12, JWT secret은 T3에서 required로 전환된다.
-
-## 데이터 모델
-
-```text
-User
- ├─ RefreshSession
- ├─ Diagnosis
- │   ├─ SkinMetric (unique: diagnosisId + part)
- │   └─ WeatherSnapshot (nullable 지표, UV peak, source enum)
- ├─ Recommendation ─ RecommendationProduct ─ Product
- ├─ NotificationPreference (1:1)
- └─ ConsentRecord
-
-RecommendationTemplate (전역 A등급 고정 문구)
-```
-
-- `User.gender` nullable enum(male/female) — 선택 입력, 모델 학습 전 미사용
-- `WeatherSnapshot`은 모든 지표 nullable + `WeatherSource`(LIVE/CACHED/UNAVAILABLE)로 측정 불가 상태 표현
-- `Product`에 날씨 기반 `reason`, `timing` 필드 포함
-- 전역 추천 템플릿(A등급)과 사용자별 생성 추천(B/C등급)을 분리
-- C등급 추천은 개인 패턴 기반이므로 seed에서 분리
+| `npm run prisma:migrate` | 개발 DB migration 적용 |
+| `npm run prisma:seed` | 추천 템플릿·제품 seed(upsert) |
+| `npm run audit:ci` | high 이상 npm 취약점 검사 |
 
 ## 구조
 
 ```text
 backend/
-├─ prisma/
-│  ├─ schema.prisma          # Prisma 스키마 (PostgreSQL)
-│  ├─ migrations/            # 마이그레이션
-│  └─ seed.ts                # 전역 템플릿·제품 카탈로그 seed (upsert)
-├─ prisma.config.ts          # Prisma 7 설정 (datasource URL, adapter)
-├─ docker-compose.yml        # 로컬 PostgreSQL 컨테이너 (dev + test DB)
-├─ docker/
-│  └─ postgres-init.sh       # 컨테이너 초기화 시 test DB 생성
 ├─ src/
-│  ├─ main.ts               # 부트스트랩, ValidationPipe, 예외 필터, CORS, Swagger
-│  ├─ app.module.ts         # AppModule, ConfigModule, PrismaModule
-│  ├─ config/
-│  │  └─ env.validation.ts  # Joi 환경변수 검증 스키마
-│  ├─ common/
-│  │  ├─ exceptions/        # 공통 예외 응답 DTO
-│  │  └─ filters/          # HttpExceptionFilter
-│  ├─ prisma/
-│  │  ├─ prisma.module.ts   # Global PrismaModule
-│  │  ├─ prisma.service.ts  # PrismaClient 래퍼 (driver adapter)
-│  │  └─ prisma.service.spec.ts  # 연결·모델 노출·seed 쿼리 테스트
-│  └─ health/
-│     ├─ health.module.ts
-│     ├─ health.controller.ts  # GET /health
-│     └─ dto/               # HealthResponseDto
+│  ├─ main.ts                 # Validation, CORS, Helmet, Swagger, 예외 필터
+│  ├─ app.module.ts           # 전역 모듈 조립과 rate limit
+│  ├─ config/                 # 환경변수 스키마와 registry
+│  ├─ health/                 # health/live/ready
+│  ├─ prisma/                 # Prisma 연결
+│  ├─ redis/                  # 선택적 Redis 연결
+│  ├─ common/                 # guard, decorator, logging, pagination, soft delete
+│  └─ modules/
+│     ├─ auth, otp, admin
+│     ├─ consent, storage
+│     ├─ diagnosis, weather
+│     ├─ recommendations, products, pattern
+│     ├─ notifications, gemini
+│     └─ jobs                 # Inline/BullMQ dispatcher와 상태 조회
+├─ prisma/                    # schema, migrations, seed
+├─ test/                      # E2E 테스트
+├─ inference-service/         # FastAPI + MobileNetV3 + MediaPipe landmarks
+├─ docker/                    # 로컬 초기화, ECS task definition, 배포 문서
+└─ docker-compose.yml
 ```
 
-## 역할 분리
+## 핵심 정책
 
-- **NestJS(src/)** — 메인 백엔드. 모든 비즈니스 로직, 인증, 진단 결과 저장, 추천, 패턴, 알림, 날씨 관리.
-- **FastAPI(inference-service/)** — 독립 AI 추론 서버. AI 모델 서빙과 피부 이미지 추론만 담당.
-  추론 결과(점수/등급/랜드마크 메타데이터)만 NestJS로 전달. 비즈니스 로직·인증·DB 접근 없음.
-  이미지는 메모리에서 처리되며 디스크에 기록하지 않는다.
-- **InferenceProvider** — NestJS 진단 서비스가 추론 호출을 추상화.
-  `INFERENCE_SERVICE_URL` 설정 시 PythonInferenceProvider, 미설정 시 MockInferenceProvider.
-- 레거시 FastAPI 비즈니스 코드(`backend/app/`)는 제거되었다. Python은 `inference-service/` 추론 서버만 유지한다.
+### 인증과 권한
 
-## 운영/보안 스택 (N0~N7)
+- Access/Refresh JWT를 분리하고 Refresh Token은 해시로 저장·회전합니다.
+- 가입과 로그인은 OTP 검증 기록을 소비합니다.
+- 개발·테스트는 allowlist 기반 mock OTP를 사용할 수 있습니다.
+- 운영 `SmsOtpProvider`의 실제 게이트웨이 HTTP 호출은 아직 구현되지 않았으므로 운영 공개 전 완료해야 합니다.
+- ADMIN API는 `RolesGuard`와 감사 로그를 사용합니다.
 
-- **로깅**: Pino JSON 구조화 로그 + correlation ID + 민감정보 마스킹 (N1)
-- **에러 트래킹**: Sentry (민감정보 전송 금지) (N1)
-- **보안**: Helmet, @nestjs/throttler Rate Limit, JWT Access/Refresh, Validation (N0)
-- **비동기**: BullMQ (추천·패턴·알림 job) (N4)
-- **이미지**: 동의한 경우만 S3 암호화 저장, 미동의 시 추론 후 즉시 삭제 (N3)
-- **히스토리**: 캘린더 중심 — 날짜 선택 시 날씨·대기질·분석·점수 변화·추천 제품, 동의 시 이미지+랜드마크
+### 이미지와 동의
 
-## Prisma 7 참고
+- `diagnosis_image_processing` 활성 동의가 있어야 진단할 수 있습니다.
+- `diagnosis_image_storage` 동의가 있을 때만 이미지와 landmarks를 저장·노출합니다.
+- 개발·테스트는 `S3_BUCKET`이 없으면 Memory store를 사용할 수 있습니다.
+- 운영은 `S3_BUCKET`이 필수이며 Memory fallback을 허용하지 않습니다.
+- 철회·탈퇴 시 객체 삭제가 실패하면 DB 참조를 보존하고 요청을 실패시켜 재시도할 수 있게 합니다.
 
-이 프로젝트는 Prisma 7을 사용한다. Prisma 7에서는 datasource URL을 `schema.prisma`가 아닌 `prisma.config.ts`에서 관리하며, 런타임은 driver adapter(`@prisma/adapter-pg`)로 PostgreSQL에 연결한다. 마이그레이션은 `prisma migrate deploy` / `prisma migrate dev`로 실행한다.
+### 비동기 작업
+
+`JOB_DISPATCHER=auto`가 기본입니다.
+
+- `REDIS_URL` 있음: BullMQ queue/worker, 재시도, DLQ
+- `REDIS_URL` 없음: Inline dispatcher
+- `JOB_DISPATCHER=inline|bullmq`: 동작을 명시적으로 고정
+
+추천 생성, 패턴 분석, 알림 발송은 job API로 요청하고 `jobId`를 polling해 결과를 확인할 수 있습니다.
+
+### Soft Delete
+
+탈퇴 시 PII를 즉시 스크럽하고 이미지 원본을 삭제하며, 진단은 익명화한 뒤 보존 기간 후 User만 purge합니다. FK 정책은 `prisma/schema.prisma`, 결정 근거는 `decision.md`를 따릅니다.
+
+## 주요 API
+
+| 영역 | API |
+|---|---|
+| 인증 | `POST /auth/signup`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/withdraw` |
+| OTP | `POST /otp/send`, `/otp/verify` |
+| 동의 | `GET /consents`, `POST /consents` |
+| 진단 | `POST /diagnosis`, `GET /diagnosis/latest`, `/history` |
+| 캘린더 | `GET /diagnosis/history/:date`, `/diagnosis/score-series` |
+| 추천 | `GET /recommendations`, `POST /recommendations/generate` |
+| 제품 | `GET /products`, `POST /products/weather-based` |
+| 패턴 | `GET /diagnosis/pattern` |
+| 날씨 | `GET /weather` |
+| 알림 | 알림 설정 조회·수정과 비동기 발송 |
+| 작업 | enqueue 응답의 `jobId` 상태 조회 |
+| 운영 | `GET /health/live`, `/health/ready`, ADMIN 사용자·purge API |
+
+정확한 요청·응답 계약은 개발 환경 Swagger와 E2E 테스트를 기준으로 합니다.
+
+## 테스트
+
+```bash
+cd backend
+npm test
+
+DATABASE_URL=postgresql://todayskin:secret@localhost:5432/todayskin_test \
+JWT_ACCESS_SECRET=test_access_secret_at_least_32_characters_long \
+JWT_REFRESH_SECRET=test_refresh_secret_at_least_32_characters_long \
+MOCK_INFERENCE=true \
+npm run test:e2e
+```
+
+E2E는 실제 test DB를 사용하고 `backend/test/jest-e2e.json`에 따라 순차 실행합니다.
+
+## 운영
+
+GitHub Actions가 NestJS와 inference-service 이미지를 ECR에 push하고, 승인 후 migration task와 ECS Fargate 배포를 수행합니다. 운영 절차와 rollback은 [docker/DEPLOYMENT.md](docker/DEPLOYMENT.md)를 참고합니다.
+
+운영에서 최소한 다음을 별도 secret/config로 주입합니다.
+
+- `DATABASE_URL`, `REDIS_URL`
+- `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`
+- `S3_BUCKET`, `INFERENCE_SERVICE_URL`
+- 외부 API와 관측성 설정
+- 실제 SMS 게이트웨이 설정(구현 완료 후)
+
+환경변수 전체 목록은 `.env.example`, 정책은 `src/config/env.registry.ts`를 기준으로 합니다.

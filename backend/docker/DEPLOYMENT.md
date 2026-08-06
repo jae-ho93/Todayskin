@@ -136,7 +136,7 @@ IAM:
 ### RDS · S3 · CloudWatch
 
 - **RDS**: `DATABASE_URL`만 주입. 스키마 변경은 release migrate task만 수행.
-- **S3**: `S3_BUCKET` + task role. SSE-S3 또는 `S3_KMS_KEY_ID`.
+- **S3**: `S3_BUCKET` + task role. SSE-S3 또는 `S3_KMS_KEY_ID`. 운영에서 `S3_BUCKET` 누락 시 백엔드는 시작을 거부한다.
 - **CloudWatch**: awslogs 드라이버. Pino JSON 로그가 스트림으로 수집된다. Sentry는 별도 DSN.
 
 ### Migration 전략
@@ -180,6 +180,13 @@ IAM:
 - `MOCK_INFERENCE=false`
 - `RUN_MIGRATIONS_ON_START=false`
 
+운영에서 반드시 설정:
+
+- `DATABASE_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`
+- `S3_BUCKET` (Memory fallback 금지)
+- `INFERENCE_SERVICE_URL`
+- 실제 SMS OTP 게이트웨이 구현 완료 후 `SMS_API_KEY`, `SMS_SENDER`, `SMS_ENDPOINT`
+
 ### 헬스체크 (live / ready 분리 — N6)
 
 - `GET /health` — 현재 Dockerfile / ECS healthcheck 기준
@@ -201,5 +208,7 @@ docker build -t todayskin-inference:$(git rev-parse HEAD) \
 
 - N6: health live/ready 분리, Soft Delete, pagination, env registry (완료)
 - N7: 레거시 `backend/app/` FastAPI 정리 (완료) — CI는 NestJS + inference-service만 검증
-- N8: 히스토리 캘린더 기능
+- N8: 히스토리 캘린더 기능 (완료)
+- 실제 SMS OTP 게이트웨이 연결과 timeout·재시도·전송 실패 정책
+- S3 객체 삭제 실패 재처리와 orphan reconciliation 운영 작업
 - 실제 AWS 계정에 ECR/ECS/RDS/Secrets/OIDC role 프로비저닝 (인프라 최초 1회)
