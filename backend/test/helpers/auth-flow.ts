@@ -1,6 +1,5 @@
 import request from 'supertest';
 import type { INestApplication } from '@nestjs/common';
-import type { PrismaService } from '../../src/prisma/prisma.service';
 
 /**
  * N2 e2e 테스트 헬퍼.

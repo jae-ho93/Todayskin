@@ -13,6 +13,7 @@ describe('env.registry', () => {
         'DATABASE_URL',
         'JWT_ACCESS_SECRET',
         'JWT_REFRESH_SECRET',
+        'S3_BUCKET',
       ]),
     );
   });

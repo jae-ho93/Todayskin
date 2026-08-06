@@ -5,12 +5,12 @@
 HTTP로 호출한다.
 
 업로드된 사진은 메모리에서만 디코딩·정규화·크롭되고 디스크에 저장되지 않는다.
-응답은 구조화된 진단 결과(점수/등급/수분/탄력)뿐이며, NestJS는 이 결과만 DB에 저장한다.
+응답은 구조화된 진단 결과(점수/등급/수분/탄력)와 정규화된 MediaPipe landmarks이며, NestJS는 저장 동의가 있을 때만 landmarks를 DB에 보존한다.
 
 ## 구성
 
 - `main.py` — FastAPI 앱 (`GET /health`, `POST /infer`)
-- `analyzer.py` — 원본 파이프라인의 `src/infer.py`를 이미지 바이트 입력 기준으로 이식
+- `analyzer.py` — 원본 파이프라인의 `src/infer.py`를 이미지 바이트 입력 기준으로 이식하고 landmarks를 응답에 포함
 - `crop.py`, `landmarks.py`, `model.py`, `backbones.py`, `normalize.py`, `regions.py`, `scoring.py`
   — 원본 파이프라인(`skin-analysis-pipeline/src/`)에서 그대로 가져온 전처리·모델 정의
 - `part_mapping.py` — 모델의 8개 부위(얼굴 전체 제외) 출력을 앱의 6개 부위 스키마로 매핑
@@ -54,3 +54,5 @@ curl http://127.0.0.1:8000/health
 curl -X POST http://127.0.0.1:8000/infer \
   -F "front=@/path/to/face.jpg;type=image/jpeg"
 ```
+
+`POST /infer`는 `overallScore`, `modelVersion`, 앱의 6개 `parts`, 선택적 `landmarks`를 반환한다. 인증·동의·저장 판단은 이 서비스가 아니라 NestJS가 담당한다.

@@ -88,6 +88,7 @@ describe('운영 환경 mock fallback 비활성화 (e2e)', () => {
       DATABASE_URL: 'postgresql://user:pass@db:5432/todayskin',
       JWT_ACCESS_SECRET: 'prod_access_secret_at_least_32_characters_long',
       JWT_REFRESH_SECRET: 'prod_refresh_secret_at_least_32_characters_long',
+      S3_BUCKET: 'todayskin-prod-images',
     };
 
     it('production에서 JWT_ACCESS_SECRET 32자 미만 거부', () => {
@@ -106,6 +107,18 @@ describe('운영 환경 mock fallback 비활성화 (e2e)', () => {
       );
       expect(error).toBeDefined();
       expect(error!.message).toContain('DATABASE_URL');
+    });
+
+    it('production에서 S3_BUCKET 누락을 거부', () => {
+      const { error } = envValidationSchema.validate(
+        { ...prodBase, S3_BUCKET: undefined },
+        {
+          abortEarly: false,
+          allowUnknown: true,
+        },
+      );
+      expect(error).toBeDefined();
+      expect(error!.message).toContain('S3_BUCKET');
     });
 
     it('MOCK_GEMINI는 true/false만 허용 (잘못된 값 거부)', () => {

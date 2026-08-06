@@ -42,10 +42,19 @@ export class BullMqJobDispatcher
   ) {}
 
   async onModuleInit(): Promise<void> {
-    const url = this.configService.get<string>('REDIS_URL', '');
+    const mode = this.configService.get<string>('JOB_DISPATCHER', 'auto');
+    const isTest = this.configService.get<string>('NODE_ENV') === 'test';
+    if (isTest || mode === 'inline') {
+      // provider는 DI에 등록되지만 선택되지 않은 dispatcher는 worker를 만들지 않는다.
+      this.logger.log('BullMqJobDispatcher 비활성화(Inline 사용)');
+      return;
+    }
+
+    const url = this.configService.get<string>('REDIS_URL', '').trim();
     if (!url) {
-      // Inline 모드에서는 BullMqJobDispatcher가 선택되지 않지만,
-      // provider로 등록되어 onModuleInit가 호출되므로 no-op로 스킵한다.
+      if (mode === 'bullmq') {
+        throw new Error('REDIS_URL is required when JOB_DISPATCHER=bullmq');
+      }
       this.logger.warn('REDIS_URL 없음 — BullMqJobDispatcher 비활성화(Inline 사용)');
       return;
     }

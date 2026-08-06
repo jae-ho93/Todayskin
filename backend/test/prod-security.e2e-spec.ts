@@ -13,6 +13,7 @@ describe('운영 보안 설정 (e2e)', () => {
     DATABASE_URL: 'postgresql://user:pass@db:5432/todayskin',
     JWT_ACCESS_SECRET: 'prod_access_secret_at_least_32_characters_long',
     JWT_REFRESH_SECRET: 'prod_refresh_secret_at_least_32_characters_long',
+    S3_BUCKET: 'todayskin-prod-images',
   };
 
   describe('Throttle 환경변수', () => {

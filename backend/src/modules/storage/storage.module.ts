@@ -11,8 +11,7 @@ import { S3ImageObjectStore } from './providers/s3-image-object-store';
  *
  * - S3_BUCKET 설정 시 실제 S3(SSE)
  * - 미설정 + non-production: MemoryImageObjectStore
- * - production + 미설정: Memory 금지. 저장 시도는 서비스에서 실패 가능하도록
- *   memory를 쓰되 경고 로그 (동의 저장 경로에서 운영 설정 누락을 드러냄)
+ * - production + 미설정: 애플리케이션 시작 실패(Memory fallback 금지)
  */
 @Module({
   imports: [AdminModule],
@@ -34,11 +33,12 @@ import { S3ImageObjectStore } from './providers/s3-image-object-store';
 
         if (isProduction) {
           logger.error(
-            'production에서 S3_BUCKET이 비어 있습니다. 이미지 저장은 Memory fallback으로 동작하지만 운영 배포 전 반드시 S3를 설정하세요.',
+            'production에서 S3_BUCKET이 비어 있습니다. 개인정보 이미지의 Memory fallback은 허용되지 않습니다.',
           );
-        } else {
-          logger.warn('S3_BUCKET 미설정 — MemoryImageObjectStore 사용 (개발/테스트)');
+          throw new Error('S3_BUCKET is required in production');
         }
+
+        logger.warn('S3_BUCKET 미설정 — MemoryImageObjectStore 사용 (개발/테스트)');
         return new MemoryImageObjectStore('todayskin-local');
       },
     },

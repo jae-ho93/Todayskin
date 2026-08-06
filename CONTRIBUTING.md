@@ -13,11 +13,10 @@
 ```bash
 git switch main
 git pull --ff-only origin main
-git switch <task-branch>
-git merge origin/main
+git switch -c <task-branch>
 ```
 
-T0~T14 브랜치는 미리 생성되어 있으므로 새 Task를 시작할 때 반드시 최신 `origin/main`을 먼저 병합합니다.
+T0~T14 사전 생성 브랜치는 완료된 과거 작업입니다. N9 이후 새 작업은 최신 `origin/main`에서 변경 성격에 맞는 브랜치를 새로 생성합니다.
 
 ## 브랜치 이름
 
@@ -117,4 +116,4 @@ SQLite DB
 
 ## 현재 Backend Task 담당 범위
 
-백엔드 Task와 브랜치 목록은 [backend/BACKEND_TASKS.md](backend/BACKEND_TASKS.md)를 기준으로 합니다. 작업 시작 전 Issue에 담당자와 수정 예정 파일을 댓글로 남겨 충돌을 예방합니다.
+백엔드 Task와 브랜치 목록은 [backend/BACKEND_TASKS.md](backend/BACKEND_TASKS.md)의 `다음 과정`을 기준으로 합니다. 작업 시작 전 Issue에 담당자와 수정 예정 파일을 댓글로 남겨 충돌을 예방합니다.

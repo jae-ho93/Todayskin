@@ -6,6 +6,7 @@ import { CorrelationStrength } from './enums/correlation-strength.enum';
 import { PatternSummaryDto } from './dto/pattern-summary.dto';
 import { PatternCorrelationDto } from './dto/pattern-correlation.dto';
 import { FacePart } from '../diagnosis/enums/face-part.enum';
+import { notDeletedWhere } from '../../common/soft-delete/soft-delete.policy';
 
 /**
  * 분석 정책 (T10 "분석 대상, 결측값, 최소 샘플 수 정책 결정").
@@ -78,7 +79,7 @@ export class PatternService {
    */
   async getPattern(userId: number): Promise<PatternSummaryDto> {
     const diagnoses = await this.prisma.diagnosis.findMany({
-      where: { userId, weatherSnapshotId: { not: null } },
+      where: notDeletedWhere({ userId, weatherSnapshotId: { not: null } }),
       orderBy: { capturedAt: 'asc' },
       include: {
         skinMetrics: true,

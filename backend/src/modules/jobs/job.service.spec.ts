@@ -2,7 +2,6 @@ import { Test } from '@nestjs/testing';
 import { JOB_DISPATCHER } from './jobs.constants';
 import { JobService } from './job.service';
 import { JobStateService } from './job-state.service';
-import { InlineJobDispatcher } from './dispatchers/inline.job-dispatcher';
 import { JobStatus } from './enums/job-status.enum';
 import { JobType } from './enums/job-type.enum';
 import { EnqueueJobResponseDto } from './dto/job-response.dto';

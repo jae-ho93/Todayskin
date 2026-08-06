@@ -9,9 +9,9 @@
 ### NestJS — 메인 백엔드 (BFF + 비즈니스 로직)
 - Modular Monolith 구조를 유지한다.
 - 모든 비즈니스 로직, 인증, 사용자 관리, 데이터 영속화를 담당한다.
-- 현재 모듈: auth, diagnosis, recommendations, products,
-  pattern, notifications, weather, gemini(외부 LLM 클라이언트).
-- 진단 결과 저장, 제품 추천, 피부 변화 패턴 분석, 알림, 날씨·대기질 관리.
+- 현재 도메인 모듈: auth, otp, admin, consent, storage, diagnosis, weather,
+  recommendations, products, pattern, notifications, gemini, jobs.
+- 진단 결과 저장, 제품 추천, 피부 변화 패턴 분석, 알림, 날씨·대기질, 동의·이미지 수명주기와 비동기 작업을 관리한다.
 
 ### FastAPI — 독립 AI 추론 서버
 - AI 모델 서빙과 피부 이미지 추론에만 집중한다.
@@ -27,7 +27,9 @@
 
 - 사용자가 촬영한 얼굴 이미지는 명시적 동의한 경우에만 저장한다.
 - 동의한 경우: 암호화하여 AWS S3에 저장, DB에는 메타데이터 + 저장 위치만 보관.
-- 동의하지 않은 경우: 추론 직후 즉시 삭제, 원본을 보관하지 않는다.
+- 운영 환경은 `S3_BUCKET`을 필수로 하며 Memory fallback을 허용하지 않는다.
+- 동의하지 않은 경우: 추론 직후 버퍼 참조를 해제하고 원본을 보관하지 않는다.
+- 객체 삭제 실패 시 DB 참조를 유지해 재시도 가능한 상태로 남긴다.
 - 추론 서버(FastAPI)는 원본을 디스크에 쓰지 않는다(인메모리 처리).
 
 ## 3. 데이터 계층
@@ -37,17 +39,18 @@
   - 운영: AWS RDS PostgreSQL.
   - 스키마: backend/prisma/schema.prisma.
 - Redis
-  - 날씨 캐시, Refresh Token 관리, Rate Limit.
+  - 날씨 캐시와 BullMQ broker로 사용한다.
+  - Refresh Token은 PostgreSQL에 해시로 저장하며, 현재 HTTP Rate Limit 저장소는 인스턴스 메모리다.
 - BullMQ
-  - 추천 생성, 피부 패턴 분석, 알림 발송 등 긴 작업을 비동기 처리.
-  - API 응답 속도와 확장성 확보.
+  - 추천 생성, 피부 패턴 분석, 알림 발송 등 긴 작업을 비동기 처리한다.
+  - Redis가 없는 개발·테스트 환경은 동일 상태 계약의 Inline dispatcher를 사용한다.
 
 ## 4. 개발/운영 인프라
 
 ### 개발
 - Docker Compose로 NestJS, FastAPI, PostgreSQL, Redis를 함께 운영.
 - compose: `backend/docker-compose.yml` — postgres + redis (기본),
-  `--profile inference`로 FastAPI, `--profile backend`로 NestJS+inference.
+  `--profile inference`로 FastAPI, `--profile backend`로 NestJS+FastAPI까지 실행한다.
 - 운영 CD: `.github/workflows/deploy-ecs.yml` (ECR → 승인 → migrate → Fargate).
 
 ### 운영 (CI/CD)
@@ -62,8 +65,9 @@
 - Jest Unit/E2E 테스트 (backend/test/*.e2e-spec.ts).
 - Pino Logger.
 - Sentry.
-- JWT Access Token + Refresh Token 인증 (auth 모듈).
-- Helmet, Validation, Rate Limit.
+- JWT Access Token + Refresh Token 인증과 OTP 검증 흐름.
+- Helmet, Validation, 인스턴스 단위 Rate Limit.
+- 운영 SMS OTP 게이트웨이 호출은 미구현 상태이므로 운영 공개 전 연결과 실패 정책을 완료한다.
 
 ## 6. 히스토리 기능 (캘린더 중심)
 

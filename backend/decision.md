@@ -10,6 +10,19 @@
 | T3-05 Role/Permission | 추천안 | 현재 Role 기반 유지, ADMIN endpoint 만들 때 @Roles(Role.ADMIN) + 감사 로그, 3개+ 독립 action 시 Permission 도입 |
 | T9-03 Consent | Option B | 목적 enum/registry(diagnosis_image_processing, diagnosis_image_storage, ai_recommendation_data_transfer), 필수 동의 version 없으면 기능 거부, 철회/보존 별도 정책, audit 대상. storage는 S3 저장 게이트(선택) |
 
+## 이미지 저장 실패 정합성 (2026-08-06 점검)
+
+- 운영은 `S3_BUCKET` 필수이며, 누락 시 서버 시작을 거부한다. 개인정보 이미지의 Memory fallback은 개발·테스트에서만 허용한다.
+- 객체 업로드 후 DB metadata transaction이 실패하면 방금 업로드한 객체를 보상 삭제한다.
+- 철회·탈퇴 중 S3 삭제가 실패하면 `DiagnosisImage`를 삭제 처리하지 않고 참조를 유지한 채 503을 반환한다. 이후 같은 철회·탈퇴 또는 운영 재처리가 다시 삭제할 수 있어야 한다.
+- 대규모 장애 뒤 orphan 탐지·재처리 worker는 N10 후속 작업으로 분리한다.
+
+## 운영 공개 전 미완료 결정 이행
+
+- OTP 생성·검증·소비와 제한 정책은 구현되어 있다.
+- 운영 `SmsOtpProvider`의 실제 외부 게이트웨이 호출은 아직 placeholder이므로 N9 완료 전 운영 공개가 불가능하다.
+- 다중 ECS task의 HTTP Rate Limit은 현재 인스턴스 메모리 기준이다. Redis 기반 분산 저장소 전환은 N11에서 수행한다.
+
 ## N6 Soft Delete / FK / Health / Pagination (2026-08-08 구현)
 
 ### Soft Delete 보존
