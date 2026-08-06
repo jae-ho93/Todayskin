@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { NotFoundException, ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
 import { RecommendationService } from './recommendation.service';
 import { GeminiClient, GeminiUnavailable } from '../gemini/gemini.client';
+import { ConsentService } from '../consent/consent.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EvidenceGrade } from './enums/evidence-grade.enum';
 
@@ -12,12 +13,16 @@ import { EvidenceGrade } from './enums/evidence-grade.enum';
 describe('RecommendationService', () => {
   let service: RecommendationService;
   let geminiClient: { generateRecommendations: jest.Mock };
+  let consentService: { requireActive: jest.Mock };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let prisma: Record<string, any>;
 
   beforeEach(async () => {
     geminiClient = {
       generateRecommendations: jest.fn(),
+    };
+    consentService = {
+      requireActive: jest.fn().mockResolvedValue(undefined),
     };
 
     prisma = {
@@ -40,6 +45,7 @@ describe('RecommendationService', () => {
       providers: [
         RecommendationService,
         { provide: GeminiClient, useValue: geminiClient },
+        { provide: ConsentService, useValue: consentService },
         { provide: PrismaService, useValue: prisma },
       ],
     }).compile();

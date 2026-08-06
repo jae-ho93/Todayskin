@@ -13,6 +13,8 @@ import {
 } from './providers/inference-provider.interface';
 import { WeatherService } from '../weather/weather.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ConsentService } from '../consent/consent.service';
+import { ImageStorageService } from '../storage/image-storage.service';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -24,6 +26,8 @@ describe('DiagnosisService', () => {
   let service: DiagnosisService;
   let inferenceProvider: { infer: jest.Mock };
   let weatherService: { getOrCreateSnapshot: jest.Mock };
+  let consentService: { requireActive: jest.Mock; hasActive: jest.Mock };
+  let imageStorage: { storeDiagnosisImage: jest.Mock; deleteAllForUser: jest.Mock };
   let prisma: Record<string, any>;
 
   const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0x00]);
@@ -47,6 +51,14 @@ describe('DiagnosisService', () => {
   beforeEach(async () => {
     inferenceProvider = { infer: jest.fn() };
     weatherService = { getOrCreateSnapshot: jest.fn() };
+    consentService = {
+      requireActive: jest.fn().mockResolvedValue(undefined),
+      hasActive: jest.fn().mockResolvedValue(false),
+    };
+    imageStorage = {
+      storeDiagnosisImage: jest.fn(),
+      deleteAllForUser: jest.fn(),
+    };
 
     prisma = {
       diagnosis: {
@@ -66,6 +78,8 @@ describe('DiagnosisService', () => {
         DiagnosisService,
         { provide: INFERENCE_PROVIDER, useValue: inferenceProvider },
         { provide: WeatherService, useValue: weatherService },
+        { provide: ConsentService, useValue: consentService },
+        { provide: ImageStorageService, useValue: imageStorage },
         { provide: PrismaService, useValue: prisma },
       ],
     }).compile();

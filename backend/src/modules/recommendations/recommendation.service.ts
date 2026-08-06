@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { GeminiClient, GeminiUnavailable } from '../gemini/gemini.client';
+import { ConsentService } from '../consent/consent.service';
+import { ConsentPurpose } from '../consent/enums/consent-purpose.enum';
 import { EvidenceGrade } from './enums/evidence-grade.enum';
 import { RecommendationDto, RecommendationTiming } from './dto/recommendation.dto';
 import {
@@ -41,6 +43,7 @@ export class RecommendationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly geminiClient: GeminiClient,
+    private readonly consentService: ConsentService,
   ) {}
 
   /**
@@ -80,6 +83,12 @@ export class RecommendationService {
         'diagnosisId 또는 skinScore와 weather를 함께 보내야 합니다',
       );
     }
+
+    // N3: Gemini 등 외부 AI로 피부/날씨 데이터를 보내려면 전송 동의 필수.
+    await this.consentService.requireActive(
+      userId,
+      ConsentPurpose.AI_RECOMMENDATION_DATA_TRANSFER,
+    );
 
     let skinInput: Record<string, unknown>;
     let weatherInput: Record<string, unknown>;

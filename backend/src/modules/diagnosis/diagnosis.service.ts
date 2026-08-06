@@ -16,6 +16,9 @@ import {
 } from './providers/inference-provider.interface';
 import type { InferenceProvider } from './providers/inference-provider.interface';
 import { WeatherService } from '../weather/weather.service';
+import { ConsentService } from '../consent/consent.service';
+import { ConsentPurpose } from '../consent/enums/consent-purpose.enum';
+import { ImageStorageService } from '../storage/image-storage.service';
 import { SkinScoreSnapshotDto } from './dto/skin-score-snapshot.dto';
 import { HistoryEntryDto } from './dto/history-entry.dto';
 import { SkinPartMetricDto } from './dto/skin-part-metric.dto';
@@ -60,7 +63,7 @@ const ALLOWED_PARTS = new Set([
  * - Diagnosis + SkinMetric을 하나의 transaction으로 저장(부분 저장 방지).
  * - modelVersion 저장.
  * - weatherSnapshotId 연결(위치 좌표가 있으면 getOrCreateSnapshot, 실패해도 진단은 진행).
- * - 원본 이미지 비저장(버퍼는 처리 후 폐기).
+ * - N3: processing 동의 필수. storage 동의 시에만 S3 저장, 미동의면 버퍼 폐기.
  * - 최신 진단/이력 조회 시 사용자 소유권 검사.
  * - 중복 요청 방지 정책: 동일 사용자의 최근 진단(예: 60초 이내)이 있으면 거부.
  *
@@ -77,6 +80,8 @@ export class DiagnosisService {
     private readonly prisma: PrismaService,
     @Inject(INFERENCE_PROVIDER) private readonly inferenceProvider: InferenceProvider,
     private readonly weatherService: WeatherService,
+    private readonly consentService: ConsentService,
+    private readonly imageStorage: ImageStorageService,
   ) {}
 
   /**
@@ -92,6 +97,16 @@ export class DiagnosisService {
     images: InferenceImages,
     opts?: { lat?: number; lon?: number },
   ): Promise<SkinScoreSnapshotDto> {
+    // 0. N3: 진단 이미지 처리 동의 필수 (version registry).
+    await this.consentService.requireActive(
+      userId,
+      ConsentPurpose.DIAGNOSIS_IMAGE_PROCESSING,
+    );
+    const storeImage = await this.consentService.hasActive(
+      userId,
+      ConsentPurpose.DIAGNOSIS_IMAGE_STORAGE,
+    );
+
     // 1. 업로드 파일 검증 (MIME, 크기, 빈 파일).
     this.validateImage('front', images.front);
 
@@ -182,9 +197,31 @@ export class DiagnosisService {
       return created;
     });
 
+    // 7. N3: 저장 동의가 있으면 S3(또는 개발용 memory)에 암호화 저장.
+    // 미동의면 원본을 디스크/객체저장소에 쓰지 않고 버퍼만 GC 대상으로 둔다.
+    let thumbnailUri: string | null = diagnosis.thumbnailUri ?? null;
+    if (storeImage) {
+      try {
+        const stored = await this.imageStorage.storeDiagnosisImage({
+          userId,
+          diagnosisId: diagnosis.id,
+          image: images.front,
+        });
+        thumbnailUri = stored.uri;
+      } catch (e) {
+        this.logger.warn(
+          `이미지 저장 실패(진단은 유지): ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+    }
+
     // parts는 transaction 밖에서 다시 조회하지 않고 inference 결과를 그대로 매핑한다.
     // 원본 이미지 버퍼는 더 이상 참조하지 않아 GC 대상이 된다.
-    return this.toSnapshotDto(diagnosis, inference.parts);
+    const dto = this.toSnapshotDto(
+      { ...diagnosis, thumbnailUri },
+      inference.parts,
+    );
+    return dto;
   }
 
   /**

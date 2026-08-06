@@ -632,14 +632,18 @@ Refresh Token
 
 브랜치: `feature/s3-consent-image`
 
-- [ ] 동의 목적 enum/registry 설계 (`diagnosis_image_processing`, `ai_recommendation_data_transfer`)
-- [ ] ConsentRecord 동의 흐름 코드 연동 (diagnosis upload, Gemini 전송, 이미지 저장)
-- [ ] 필수 동의 version 없으면 해당 기능 거부 (기능 진입 조건)
-- [ ] 동의 version registry 구조 설계
-- [ ] 동의한 경우 S3 암호화 저장 + DB 메타데이터/위치
-- [ ] 미동의 시 추론 후 즉시 삭제 (현재 memoryStorage 비저장 유지)
-- [ ] 동의 철회 후 신규 처리/보존 데이터 정책 구현
-- [ ] 동의 audit log 연동 (N1 로깅과 연계)
+- [x] 동의 목적 enum/registry 설계 (`diagnosis_image_processing`, `diagnosis_image_storage`, `ai_recommendation_data_transfer`)
+- [x] ConsentRecord 동의 흐름 코드 연동 (diagnosis upload, Gemini 전송, 이미지 저장)
+- [x] 필수 동의 version 없으면 해당 기능 거부 (기능 진입 조건)
+- [x] 동의 version registry 구조 설계
+- [x] 동의한 경우 S3 암호화 저장 + DB 메타데이터/위치
+- [x] 미동의 시 추론 후 즉시 삭제 (현재 memoryStorage 비저장 유지)
+- [x] 동의 철회 후 신규 처리/보존 데이터 정책 구현
+- [x] 동의 audit log 연동 (N1 로깅과 연계)
+
+참고: ConsentModule + StorageModule 추가. `GET/POST /consents`, registry version 게이트.
+저장 동의 시에만 SSE(AES256/KMS)로 객체 저장하고 `DiagnosisImage` 메타를 남긴다.
+S3_BUCKET 미설정 시 개발/테스트는 Memory store. 단위 138, 관련 e2e 29 통과.
 
 완료 기준: 동의 상태가 진단·추천 기능의 진입 조건으로 동작하고, 동의한 이미지만 S3에 암호화 저장된다.
 

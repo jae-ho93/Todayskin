@@ -1,0 +1,76 @@
+import { createHash } from 'node:crypto';
+import {
+  DeleteObjectCommand,
+  PutObjectCommand,
+  S3Client,
+  ServerSideEncryption,
+} from '@aws-sdk/client-s3';
+import {
+  ImageObjectStore,
+  StoredImageRef,
+} from './image-object-store.interface';
+
+/**
+ * AWS S3 객체 저장소 — SSE-S3(AES256) 또는 SSE-KMS.
+ * ARCHITECTURE.md: 동의한 이미지만 암호화 저장.
+ */
+export class S3ImageObjectStore implements ImageObjectStore {
+  private readonly client: S3Client;
+  private readonly bucket: string;
+  private readonly kmsKeyId?: string;
+
+  constructor(opts: {
+    bucket: string;
+    region: string;
+    kmsKeyId?: string;
+  }) {
+    this.bucket = opts.bucket;
+    this.kmsKeyId = opts.kmsKeyId;
+    this.client = new S3Client({ region: opts.region });
+  }
+
+  async putObject(params: {
+    key: string;
+    body: Buffer;
+    contentType: string;
+  }): Promise<StoredImageRef> {
+    const checksumSha256 = createHash('sha256').update(params.body).digest('hex');
+    const encryption = this.kmsKeyId ? 'aws:kms' : 'AES256';
+
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: params.key,
+        Body: params.body,
+        ContentType: params.contentType,
+        ServerSideEncryption: this.kmsKeyId
+          ? ServerSideEncryption.aws_kms
+          : ServerSideEncryption.AES256,
+        ...(this.kmsKeyId ? { SSEKMSKeyId: this.kmsKeyId } : {}),
+        // 원본 얼굴 이미지는 공개 ACL을 절대 쓰지 않는다.
+        Metadata: {
+          checksumSha256,
+        },
+      }),
+    );
+
+    return {
+      bucket: this.bucket,
+      key: params.key,
+      contentType: params.contentType,
+      sizeBytes: params.body.length,
+      checksumSha256,
+      encryption,
+      uri: `s3://${this.bucket}/${params.key}`,
+    };
+  }
+
+  async deleteObject(params: { bucket: string; key: string }): Promise<void> {
+    await this.client.send(
+      new DeleteObjectCommand({
+        Bucket: params.bucket,
+        Key: params.key,
+      }),
+    );
+  }
+}

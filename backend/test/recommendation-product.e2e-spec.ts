@@ -6,6 +6,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
 import { GeminiClient } from '../src/modules/gemini/gemini.client';
 import { signupWithOtp, loginWithOtp } from './helpers/auth-flow';
+import { grantRecommendationTransfer } from './helpers/consent-flow';
 
 /**
  * Recommendation/Product e2e 테스트.
@@ -96,10 +97,13 @@ describe('Recommendation & Product (e2e)', () => {
     });
     accessToken = signupRes.body.accessToken;
     userId = signupRes.body.id;
+    // N3: Gemini 추천 생성에 transfer 동의 필수
+    await grantRecommendationTransfer(app, accessToken);
   });
 
   afterAll(async () => {
     await prisma.recommendation.deleteMany({ where: { userId } });
+    await prisma.consentRecord.deleteMany({ where: { userId } }).catch(() => undefined);
     await prisma.otpCode.deleteMany({
       where: { phoneNumber: { in: [testPhone, '01055555554'] } },
     });
