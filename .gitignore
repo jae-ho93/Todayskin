@@ -53,7 +53,7 @@ yarn-error.*
 /ios
 /android
 
-# backend (Python)
+# backend Python (inference-service local venv/cache; legacy app/ removed)
 backend/.venv/
 backend/__pycache__/
 backend/**/__pycache__/

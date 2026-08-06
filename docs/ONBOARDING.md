@@ -12,7 +12,7 @@
 |------|------|
 | **프론트엔드** | Expo (SDK 54), React Native, Expo Router 6, React 19 |
 | **백엔드** | NestJS 11, TypeScript, Prisma 7, PostgreSQL, Redis |
-| **레거시 백엔드** | Python FastAPI (backend/app/, 마이그레이션 완료 상태) |
+| **AI 추론** | FastAPI inference-service (피부 이미지 추론) |
 | **AI** | Google Gemini (추천 생성, 근거 검증) |
 | **외부 API** | 기상청(KMA) 자외선, 에어코리아 대기질 |
 | **인프라** | Docker, docker-compose, GitHub Actions CI |
@@ -33,7 +33,7 @@
 | 백엔드 서비스 | 21 | 도메인 서비스, 외부 API 클라이언트, 정책, Prisma/Redis 서비스 |
 | 백엔드 공통 인프라 | 11 | JWT 가드, 예외 필터, 데코레이터, 환경설정 검증 |
 | 데이터 | 15 | Prisma 스키마, 마이그레이션 SQL, 11개 DB 테이블, 시드 |
-| 레거시 백엔드 | 16 | Python FastAPI 코드 (backend/app/) |
+| AI 추론 | — | FastAPI inference-service (피부 이미지 추론만) |
 | 인프라 | 4 | Dockerfile, docker-compose, 배포 문서 |
 | CI/CD | 1 | GitHub Actions 워크플로우 |
 | 설정 | 18 | package.json, tsconfig, eslint, env 예시 등 |
@@ -70,9 +70,9 @@
 
 휴대폰 번호 기반 가입/로그인, JWT access token + refresh token 이중 토큰 구조. refresh token은 해시하여 DB에 저장하고, `JwtAuthGuard`가 보호된 엔드포인트를 제어합니다.
 
-### 3.6 레거시 마이그레이션 (T0-T14)
+### 3.6 레거시 마이그레이션 (T0-T14, N7)
 
-FastAPI 기반 레거시 백엔드를 NestJS + TypeScript + PostgreSQL(Prisma) + Redis로 전환하는 14개 태스크가 완료된 상태입니다. backend/app/의 Python 코드는 레거시로 남아 있으며, 59개 설계 결정이 decision.md에 기록되어 있습니다.
+FastAPI 기반 레거시 백엔드를 NestJS + TypeScript + PostgreSQL(Prisma) + Redis로 전환하는 14개 태스크가 완료되었습니다. 레거시 `backend/app/` 비즈니스 코드는 N7에서 제거되었고, Python은 `inference-service/` 추론 서버만 유지합니다. 설계 결정은 decision.md에 기록되어 있습니다.
 
 ---
 

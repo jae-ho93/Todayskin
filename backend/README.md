@@ -9,7 +9,7 @@ FastAPI(inference-service, 피부 이미지 추론만) + PostgreSQL/Prisma + Red
 
 **운영**: GitHub Actions → ECR → ECS Fargate, RDS PostgreSQL · S3 · CloudWatch, Pino · Sentry · Helmet · JWT · Swagger · Jest.
 
-현재 단계: **T0~T14 핵심 구현 완료, N0~N6 후속 작업 진행 중**
+현재 단계: **T0~T14 핵심 구현 완료, N0~N7 후속 작업 진행 중**
 
 ## 실행
 
@@ -163,9 +163,9 @@ backend/
   이미지는 메모리에서 처리되며 디스크에 기록하지 않는다.
 - **InferenceProvider** — NestJS 진단 서비스가 추론 호출을 추상화.
   `INFERENCE_SERVICE_URL` 설정 시 PythonInferenceProvider, 미설정 시 MockInferenceProvider.
-- 기존 Python DB 코드(`backend/app/`)는 참조·이식 검증용으로만 남아 있으며 운영 트래픽을 받지 않는다.
+- 레거시 FastAPI 비즈니스 코드(`backend/app/`)는 제거되었다. Python은 `inference-service/` 추론 서버만 유지한다.
 
-## 운영/보안 스택 (N0~N6)
+## 운영/보안 스택 (N0~N7)
 
 - **로깅**: Pino JSON 구조화 로그 + correlation ID + 민감정보 마스킹 (N1)
 - **에러 트래킹**: Sentry (민감정보 전송 금지) (N1)
