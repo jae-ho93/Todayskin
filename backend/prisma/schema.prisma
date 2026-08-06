@@ -34,7 +34,73 @@ model User {
   notificationPreference NotificationPreference?
   consentRecords         ConsentRecord[]
 
+  auditLogs              AuditLog[]
+
   @@map("users")
+}
+
+// N2: OTP 인증 — 가입·새 디바이스 로그인에 OTP 필수.
+// 운영 공개 전까지 적용. 만료·시도 횟수·재전송 제한을 이 모델로 관리한다.
+// OTP code 자체는 해시로 저장하지 않는다(단기 만료 + 시도 횟수 제한으로 보호).
+model OtpCode {
+  id           Int       @id @default(autoincrement())
+  phoneNumber  String    @map("phone_number")
+  // 6자리 코드. 운영: 무작위, 개발(mock): 고정값.
+  code         String
+  // OTP 용도: signup / login
+  purpose      String
+  // 검증 완료 여부. 성공 시 true로 전환.
+  verified     Boolean   @default(false)
+  attempts     Int       @default(0)
+  // 최대 시도 횟수 초과 시 폐기. 기본 5.
+  maxAttempts  Int       @default(5)
+  expiresAt    DateTime  @map("expires_at")
+  // 재전송 제한용 최근 발송 시각. 동일 번호 재전송은 최소 60초 간격.
+  sentAt       DateTime  @default(now()) @map("sent_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@index([phoneNumber, purpose])
+  @@map("otp_codes")
+}
+
+// N2: 감사 로그 — ADMIN 운영 API 호출 등 보안 관련 행위를 기록한다.
+// N1 로깅(JSON)과 별개로 DB에 영구 보존해 이력 추적·컴플라이언스에 사용한다.
+// 응답 본문·secret은 저장하지 않고, 행위 종류·대상·결과·메타만 저장한다.
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  actorId    Int?     @map("actor_id")
+  // 행위 종류: user_role_changed, user_deleted, ...
+  action     String
+  // 대상 엔티티(예: User)와 대상 ID
+  targetType String?  @map("target_type")
+  targetId   String?  @map("target_id")
+  // 행위 결과: success / failure
+  result     String   @default("success")
+  // 부가 메타데이터(IP, UA 등). JSON 문자열.
+  metadata   Json?
+  ipAddress  String?  @map("ip_address")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
+
+// N2: JWT key rotation(kid) — 다중 서명 키 지원.
+// 현재 단일 secret에서 kid 기반 rotation으로 확장.
+// active: 현재 서명에 사용, 이전 키는 verifyOnly로 검증만 수행.
+model JwtKeyRotation {
+  id        Int      @id @default(autoincrement())
+  kid       String   @unique @map("kid")
+  secret    String
+  purpose   String   // access / refresh
+  active    Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([purpose, active])
+  @@map("jwt_key_rotations")
 }
 
 enum Gender {

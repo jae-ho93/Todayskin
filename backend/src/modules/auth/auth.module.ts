@@ -5,10 +5,13 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from '../../common/strategies/jwt.strategy';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { OtpModule } from '../otp/otp.module';
+import { JwtKeyService } from './jwt-key.service';
 
 @Module({
   imports: [
     PassportModule,
+    OtpModule,
     JwtModule.registerAsync({
       useFactory: () => ({
         // secret/expiresIn은 AuthService에서 ConfigService로 직접 관리.
@@ -17,7 +20,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, RolesGuard],
-  exports: [AuthService, JwtModule],
+  providers: [AuthService, JwtStrategy, RolesGuard, JwtKeyService],
+  exports: [AuthService, JwtModule, JwtKeyService],
 })
 export class AuthModule {}

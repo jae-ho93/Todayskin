@@ -17,6 +17,8 @@ import {
 import { LoggerModule } from './common/logging/logger.module';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 import { AuthModule } from './modules/auth/auth.module';
+import { OtpModule } from './modules/otp/otp.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { WeatherModule } from './modules/weather/weather.module';
 import { RecommendationModule } from './modules/recommendations/recommendation.module';
 import { ProductModule } from './modules/products/product.module';
@@ -59,6 +61,8 @@ import { NotificationModule } from './modules/notifications/notification.module'
     RedisModule,
     HealthModule,
     AuthModule,
+    OtpModule,
+    AdminModule,
     WeatherModule,
     RecommendationModule,
     ProductModule,

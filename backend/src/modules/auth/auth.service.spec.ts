@@ -6,6 +6,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
+import { OtpService } from '../otp/otp.service';
+import { JwtKeyService } from './jwt-key.service';
 
 /**
  * AuthService 단위 테스트.
@@ -47,6 +49,28 @@ describe('AuthService', () => {
               };
               return map[key];
             },
+          },
+        },
+        {
+          // N2: OTP 검증은 단위 테스트에서 항상 통과하도록 모킹.
+          provide: OtpService,
+          useValue: {
+            isVerified: async () => true,
+            consumeVerification: async () => undefined,
+          },
+        },
+        {
+          // N2: JwtKeyService는 환경변수 기반 기본 키(v1)를 반환하도록 모킹.
+          provide: JwtKeyService,
+          useValue: {
+            getSigningKey: async (purpose: 'access' | 'refresh') => ({
+              kid: 'v1',
+              secret:
+                purpose === 'access'
+                  ? 'test_access_secret_at_least_32_characters_long'
+                  : 'test_refresh_secret_at_least_32_characters_long',
+            }),
+            getVerifyKey: async () => null,
           },
         },
       ],

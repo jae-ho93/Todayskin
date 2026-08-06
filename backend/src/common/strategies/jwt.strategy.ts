@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import { JwtKeyService } from '../../modules/auth/jwt-key.service';
 import { Role } from '../enums/role.enum';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -20,6 +21,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly jwtKeyService: JwtKeyService,
   ) {
     const secret = configService.get<string>('JWT_ACCESS_SECRET');
     if (!secret) {
@@ -28,8 +30,39 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: secret,
+      // N2: kid 기반 JWT key rotation. 토큰 헤더의 kid로 secret을 동적 조회.
+      // kid가 없거나 미등록 키면 환경변수 JWT_ACCESS_SECRET으로 fallback해
+      // 기존 단일 secret 토큰과의 호환성을 유지한다.
+      secretOrKeyProvider: (
+        _request: unknown,
+        rawToken: string,
+        done: (err: unknown, key?: string | Buffer) => void,
+      ) => {
+        const header = JwtStrategy.decodeHeader(rawToken);
+        const kid = header?.kid;
+        if (kid) {
+          jwtKeyService
+            .getVerifyKey(kid, 'access')
+            .then((key) => done(null, key ?? secret))
+            .catch(() => done(null, secret));
+          return;
+        }
+        done(null, secret);
+      },
+      algorithms: ['HS256'],
     });
+  }
+
+  /** base64url 디코딩으로 JWT 헤더의 kid를 안전하게 추출한다. */
+  private static decodeHeader(rawToken: string): { kid?: string } | null {
+    try {
+      const parts = rawToken.split('.');
+      if (parts.length < 2) return null;
+      const json = Buffer.from(parts[0], 'base64url').toString('utf8');
+      return JSON.parse(json) as { kid?: string };
+    } catch {
+      return null;
+    }
   }
 
   async validate(payload: JwtPayload): Promise<JwtPayload> {
