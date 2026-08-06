@@ -4,12 +4,18 @@ import {
   ArgumentsHost,
   HttpException,
   HttpStatus,
-  Logger,
 } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Request, Response } from 'express';
+import { captureException } from '../logging/sentry.config';
+import { maskSensitiveData } from '../logging/redact.logger';
 
 /**
  * 모든 HTTP 예외를 하나의 응답 계약으로 변환한다.
+ *
+ * N1: NestJS 기본 Logger 대신 pino 로거를 사용해 구조화 로그로 남긴다.
+ * 500 에러는 Sentry에 캡처하고(민감정보 마스킹), 로그 메시지에서도
+ * 민감정보를 마스킹한다.
  *
  * HttpException만 잡으면 Prisma/외부 클라이언트의 예기치 않은 오류가
  * Nest 기본 응답으로 새어 나가 프론트의 `detail` 계약이 깨지고, DB 내부
@@ -17,7 +23,10 @@ import { Request, Response } from 'express';
  */
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
-  private readonly logger = new Logger(HttpExceptionFilter.name);
+  constructor(
+    @InjectPinoLogger(HttpExceptionFilter.name)
+    private readonly logger: PinoLogger,
+  ) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
@@ -26,12 +35,31 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     const { status, message, error } = this.toErrorDetails(exception);
 
+    const correlationId = (request as unknown as { id?: string }).id;
+    const logContext = {
+      method: request.method,
+      url: request.url,
+      statusCode: status,
+      correlationId,
+      errorName: exception instanceof Error ? exception.name : 'UnknownError',
+    };
+
     if (status >= 500) {
-      const errorName = exception instanceof Error ? exception.name : 'UnknownError';
-      this.logger.error(`${request.method} ${request.url} → ${status} ${errorName}`);
+      this.logger.error(
+        {
+          ...logContext,
+          err: exception instanceof Error ? exception.stack : String(exception),
+        },
+        `${request.method} ${request.url} -> ${status} ${logContext.errorName}`,
+      );
+      // 500 에러만 Sentry에 캡처 (민감정보는 sentry.config에서 마스킹)
+      captureException(exception);
     } else {
+      const safeMsg =
+        typeof message === 'string' ? maskSensitiveData(message) : message;
       this.logger.warn(
-        `${request.method} ${request.url} → ${status} ${JSON.stringify(message)}`,
+        logContext,
+        `${request.method} ${request.url} -> ${status} ${JSON.stringify(safeMsg)}`,
       );
     }
 
@@ -42,6 +70,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
       path: request.url,
     };
+
+    if (correlationId) {
+      body.correlationId = correlationId;
+    }
 
     // 기존 FastAPI 에러 응답 호환: 프론트(src/api/client.ts extractErrorMessage)는
     // { detail: "메시지" } 형태에서 에러 메시지를 추출한다. NestJS 표준 필드와 함께

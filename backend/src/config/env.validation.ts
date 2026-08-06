@@ -61,4 +61,14 @@ export const envValidationSchema = Joi.object({
   // 운영에서는 Redis 저장소 기반으로, 개발/테스트는 메모리 저장소로 동작.
   THROTTLE_LIMIT: Joi.number().integer().min(1).default(60),
   THROTTLE_TTL_MS: Joi.number().integer().min(100).default(60_000),
+
+  // N1: 구조화 로깅·관측성
+  // 로그 레벨 — trace/debug/info/warn/error/fatal. 운영은 info, 개발은 debug 기본.
+  LOG_LEVEL: Joi.string()
+    .valid('trace', 'debug', 'info', 'warn', 'error', 'fatal')
+    .default('info'),
+  // Sentry DSN — 비워두면 Sentry 비활성화. 운영에서만 설정 권장.
+  SENTRY_DSN: Joi.string().uri().allow('').optional(),
+  // Sentry 트레이스 샘플링 비율 (0.0~1.0). 기본 0.1.
+  SENTRY_TRACES_SAMPLE_RATE: Joi.number().min(0).max(1).default(0.1),
 });

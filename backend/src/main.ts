@@ -1,15 +1,28 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, Logger } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { Logger } from 'nestjs-pino';
 import helmet from 'helmet';
+import * as Sentry from '@sentry/node';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { initSentry, flushSentry } from './common/logging/sentry.config';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   const configService = app.get(ConfigService);
   const isProduction = configService.get<string>('NODE_ENV') === 'production';
+
+  // N1: pino 로거를 애플리케이션 로거로 설정
+  app.useLogger(app.get(Logger));
+
+  // N1: Sentry 초기화 — SENTRY_DSN이 있을 때만 활성화.
+  // Sentry 요청 핸들러와 트레이싱 핸들러는 Helmet/CORS 이전에 적용.
+  const sentryEnabled = initSentry(configService);
+  if (sentryEnabled) {
+    Sentry.setupExpressErrorHandler(app as never);
+  }
 
   // N0: Helmet 보안 헤더. 운영에서는 강제, 개발에서는 Swagger UI 호환을
   // 위해 crossOriginResourcePolicy를 완화한다.
@@ -33,8 +46,8 @@ async function bootstrap() {
     }),
   );
 
-  // 공통 예외 응답 포맷
-  app.useGlobalFilters(new HttpExceptionFilter());
+  // 공통 예외 응답 포맷 (N1: pino 로거 + Sentry 캡처 통합)
+  app.useGlobalFilters(new HttpExceptionFilter(app.get(Logger)));
 
   // CORS 허용 목록 환경변수화
   const rawOrigins = configService.get<string>('ALLOWED_ORIGINS', '');
@@ -43,7 +56,7 @@ async function bootstrap() {
     .map((o) => o.trim())
     .filter((o) => o.length > 0);
   app.enableCors({
-   origin: allowedOrigins.length > 0 ? allowedOrigins : false,
+    origin: allowedOrigins.length > 0 ? allowedOrigins : false,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   });
@@ -63,10 +76,18 @@ async function bootstrap() {
   const port = configService.get<number>('PORT', 3000);
   await app.listen(port);
 
-  const logger = new Logger('Bootstrap');
+  const logger = app.get(Logger);
   logger.log(`Server running on http://localhost:${port}`);
   if (!isProduction) {
     logger.log(`Swagger UI at http://localhost:${port}/api/docs`);
   }
+  if (sentryEnabled) {
+    logger.log('Sentry error tracking enabled');
+  }
+
+  // 종료 시 Sentry 이벤트 플러시
+  process.on('beforeExit', () => {
+    void flushSentry();
+  });
 }
 bootstrap();

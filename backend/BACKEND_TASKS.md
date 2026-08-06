@@ -609,11 +609,6 @@ Refresh Token
 
 브랜치: `feature/structured-logging-observability`
 
-- [ ] nestjs-pino JSON 로거 도입
-- [ ] request correlation ID middleware
-- [ ] 민감정보 마스킹(전화번호·생년월일·좌표·token)
-- [ ] Sentry 에러 트래킹 연동 (민감정보 전송 금지)
-- [ ] HttpExceptionFilter를 pino 로거로 통합
 
 완료 기준: 모든 요청에 correlation ID가 부여되고 JSON 로그로 남으며, 에러가 Sentry에 민감정보 없이 전송된다.
 
