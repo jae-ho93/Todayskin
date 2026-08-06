@@ -183,7 +183,7 @@ IAM:
 ### 헬스체크 (live / ready 분리 — N6)
 
 - `GET /health` — 현재 Dockerfile / ECS healthcheck 기준
-- `GET /health/live` · `GET /health/ready` — N6에서 분리 예정
+- `GET /health/live` · `GET /health/ready` — N6에서 분리 완료 (ready는 DB/config 필수, Redis 선택)
 - inference: `GET /health`
 
 ## 이미지 빌드 (수동)
@@ -199,6 +199,6 @@ docker build -t todayskin-inference:$(git rev-parse HEAD) \
 
 ## 후속 작업
 
-- N6: health live/ready 분리, Soft Delete, pagination, env registry
+- N6: health live/ready 분리, Soft Delete, pagination, env registry (완료)
 - N7: 레거시 `backend/app/` FastAPI 정리
 - 실제 AWS 계정에 ECR/ECS/RDS/Secrets/OIDC role 프로비저닝 (인프라 최초 1회)

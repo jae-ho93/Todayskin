@@ -8,6 +8,12 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { notDeletedWhere } from '../../common/soft-delete/soft-delete.policy';
+import {
+  buildCursorPage,
+  CursorPageDto,
+  decodeCursor,
+} from '../../common/pagination/cursor-pagination';
 import {
   InferenceImage,
   InferenceImages,
@@ -230,7 +236,7 @@ export class DiagnosisService {
    */
   async getLatest(userId: number): Promise<SkinScoreSnapshotDto> {
     const diagnosis = await this.prisma.diagnosis.findFirst({
-      where: { userId },
+      where: notDeletedWhere({ userId }),
       orderBy: { capturedAt: 'desc' },
       include: { skinMetrics: true },
     });
@@ -243,17 +249,36 @@ export class DiagnosisService {
   /**
    * 진단 이력 조회. 사용자별 최신순.
    */
-  async getHistory(userId: number): Promise<HistoryEntryDto[]> {
+  async getHistory(
+    userId: number,
+    opts?: { limit?: number; cursor?: string },
+  ): Promise<HistoryEntryDto[] | CursorPageDto<HistoryEntryDto>> {
+    const decoded = decodeCursor(opts?.cursor);
+    const where: Record<string, unknown> = notDeletedWhere({ userId });
+    if (decoded) {
+      const at = decoded.at ? new Date(decoded.at) : null;
+      where.OR = at
+        ? [
+            { capturedAt: { lt: at } },
+            { capturedAt: at, id: { lt: decoded.id } },
+          ]
+        : [{ id: { lt: decoded.id } }];
+    }
+
+    const take = opts?.limit;
     const diagnoses = await this.prisma.diagnosis.findMany({
-      where: { userId },
-      orderBy: { capturedAt: 'desc' },
+      where,
+      orderBy: [{ capturedAt: 'desc' }, { id: 'desc' }],
+      take: take ? take + 1 : undefined,
     });
-    return diagnoses.map((d) => ({
+    const items = diagnoses.map((d) => ({
       id: d.id,
       capturedAt: d.capturedAt.toISOString(),
       overallScore: d.overallScore,
       thumbnailUri: d.thumbnailUri,
     }));
+    if (!take) return items;
+    return buildCursorPage(items, take, (row) => row.capturedAt);
   }
 
   /**
@@ -264,8 +289,8 @@ export class DiagnosisService {
     diagnosis: Diagnosis;
     metrics: SkinMetric[];
   }> {
-    const diagnosis = await this.prisma.diagnosis.findUnique({
-      where: { id: diagnosisId },
+    const diagnosis = await this.prisma.diagnosis.findFirst({
+      where: notDeletedWhere({ id: diagnosisId }),
       include: { skinMetrics: true },
     });
     if (!diagnosis) {

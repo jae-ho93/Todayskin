@@ -14,6 +14,7 @@ import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagg
 import { DiagnosisService } from './diagnosis.service';
 import { SkinScoreSnapshotDto } from './dto/skin-score-snapshot.dto';
 import { HistoryEntryDto } from './dto/history-entry.dto';
+import { CursorPaginationQueryDto, CursorPageDto } from '../../common/pagination/cursor-pagination';
 import { SubmitDiagnosisQueryDto } from './dto/submit-diagnosis-query.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -44,8 +45,14 @@ export class DiagnosisController {
   @ApiOperation({ summary: '진단 이력 (본인, 최신순)' })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  async getHistory(@CurrentUser() user: JwtPayload): Promise<HistoryEntryDto[]> {
-    return this.diagnosisService.getHistory(user.sub);
+  async getHistory(
+    @CurrentUser() user: JwtPayload,
+    @Query() query: CursorPaginationQueryDto,
+  ): Promise<HistoryEntryDto[] | CursorPageDto<HistoryEntryDto>> {
+    return this.diagnosisService.getHistory(user.sub, {
+      limit: query.limit,
+      cursor: query.cursor,
+    });
   }
 
   @Post()

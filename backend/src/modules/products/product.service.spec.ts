@@ -66,7 +66,8 @@ describe('ProductService', () => {
       await service.list(ProductCategory.MOISTURE);
       expect(prisma.product.findMany).toHaveBeenCalledWith({
         where: { category: ProductCategory.MOISTURE },
-        orderBy: { createdAt: 'asc' },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        take: undefined,
       });
     });
   });

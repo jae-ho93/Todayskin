@@ -683,20 +683,25 @@ S3_BUCKET 미설정 시 개발/테스트는 Memory store. 단위 138, 관련 e2e
 
 브랜치: `feature/db-soft-delete-scalability`
 
-- [ ] User/Diagnosis에 Soft Delete 필드 + 보존 기간 도입
-- [ ] 공통 repository/query 정책(삭제 조건) + 최종 purge job
-- [ ] 개인정보/원본 이미지: 물리 삭제 기본
-- [ ] 법적 보존 진단 결과: 익명화 후 보존
-- [ ] FK Cascade/SetNull/Restrict 정책 모델별 표 확정 (schema.prisma)
-- [ ] health /health/live · /health/ready 분리
+- [x] User/Diagnosis에 Soft Delete 필드 + 보존 기간 도입
+- [x] 공통 repository/query 정책(삭제 조건) + 최종 purge job
+- [x] 개인정보/원본 이미지: 물리 삭제 기본
+- [x] 법적 보존 진단 결과: 익명화 후 보존
+- [x] FK Cascade/SetNull/Restrict 정책 모델별 표 확정 (schema.prisma)
+- [x] health /health/live · /health/ready 분리
   - live: process event loop, ready: DB·필수 config·migration 상태
   - Redis/외부 API는 선택적/요청별 dependency (readiness 무조건 실패 X)
-- [ ] 커서 pagination(진단·추천·제품 목록)
-- [ ] 환경변수 registry(owner·description·required env·safe default·secret 여부)
+- [x] 커서 pagination(진단·추천·제품 목록)
+- [x] 환경변수 registry(owner·description·required env·safe default·secret 여부)
   - mock flag는 test/dev 전용, owner/expiry 없는 flag merge 거부
   - production unknown key 엄격 처리
-- [ ] 의존성 audit(npm audit) CI 게이트 — critical/high SLA
-- [ ] coverage threshold: Auth·Diagnosis·Weather·Recommendation·Exception branch/function 우선
+- [x] 의존성 audit(npm audit) CI 게이트 — critical/high SLA
+- [x] coverage threshold: Auth·Diagnosis·Weather·Recommendation·Exception branch/function 우선
+
+참고: Soft Delete(`deletedAt`/`purgeAfter`), Diagnosis 익명 보존(`anonymizedAt`, userId SetNull),
+`POST /auth/withdraw`, ADMIN soft-delete/purge, `/health/live|/health/ready`,
+커서 pagination(limit 지정 시), `env.registry.ts`, CI `npm audit --audit-level=high`,
+Jest coverageThreshold를 반영했다.
 
 완료 기준: 탈퇴 시 Soft Delete로 보존 기간이 유지되고, purge job이 최종 삭제를 수행하며, health probe가 의존성 중요도별로 분리된다.
 

@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  Param,
   Post,
   Req,
   UseGuards,
@@ -51,5 +52,22 @@ export class AdminController {
     @Req() req: Request,
   ): Promise<AdminUserItemDto> {
     return this.adminService.changeRole(dto, user.sub, req.ip);
+  }
+
+  @Post('users/:userId/soft-delete')
+  @ApiOperation({ summary: '사용자 Soft Delete (ADMIN, N6)' })
+  @HttpCode(200)
+  async softDeleteUser(
+    @Param('userId') userId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.adminService.softDeleteUser(Number(userId), user.sub);
+  }
+
+  @Post('purge')
+  @ApiOperation({ summary: 'Soft Delete 보존 기간 만료 사용자 purge (ADMIN, N6)' })
+  @HttpCode(200)
+  async purge(@CurrentUser() user: JwtPayload) {
+    return this.adminService.runPurge(user.sub);
   }
 }

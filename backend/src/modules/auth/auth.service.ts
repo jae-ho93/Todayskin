@@ -20,6 +20,7 @@ import { JwtPayload } from '../../common/strategies/jwt.strategy';
 import { OtpService } from '../otp/otp.service';
 import { OtpPurpose } from '../otp/enums/otp-purpose.enum';
 import { JwtKeyService } from './jwt-key.service';
+import { SoftDeleteService } from '../../common/soft-delete/soft-delete.service';
 
 /**
  * 토큰 만료 문자열(ex: "15m", "14d")을 초 단위로 변환.
@@ -62,6 +63,7 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly otpService: OtpService,
     private readonly jwtKeyService: JwtKeyService,
+    private readonly softDelete: SoftDeleteService,
   ) {}
 
   async signup(dto: SignupDto): Promise<UserResponseDto> {
@@ -135,6 +137,9 @@ export class AuthService {
     if (!user) {
       throw new NotFoundException('가입되지 않은 휴대폰 번호입니다');
     }
+    if (user.deletedAt) {
+      throw new ConflictException('탈퇴한 계정입니다');
+    }
 
     // 기존 FastAPI /auth/login 응답 호환:
     // 프론트는 login 응답을 User 객체로 취급해 id/name/phoneNumber/... 와 accessToken을
@@ -194,7 +199,7 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
     });
-    if (!user) {
+    if (!user || user.deletedAt) {
       throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다');
     }
 
@@ -219,7 +224,7 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
-    if (!user) {
+    if (!user || user.deletedAt) {
       throw new NotFoundException('사용자를 찾을 수 없습니다');
     }
     return this.toUserResponse(user);
@@ -317,6 +322,16 @@ export class AuthService {
     } catch {
       throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다');
     }
+  }
+
+  
+  /**
+   * 회원 탈퇴 Soft Delete (N6).
+   * PII 즉시 스크럽, 이미지 물리 삭제, 보존 기간 후 purge.
+   */
+  async withdraw(userId: number): Promise<{ deletedAt: string; purgeAfter: string }> {
+    const result = await this.softDelete.withdrawUser(userId, userId);
+    return { deletedAt: result.deletedAt, purgeAfter: result.purgeAfter };
   }
 
   private normalizePhone(phone: string): string {

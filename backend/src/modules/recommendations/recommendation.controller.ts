@@ -38,8 +38,11 @@ export class RecommendationController {
     description:
       '오늘의 추천 카탈로그(전역, 유저 비종속). 근거등급(A/B/C) 필터 가능. A=공인 가이드라인, B=개별 임상/관찰 연구, C=개인 시계열 통계적 관찰.',
   })
-  async list(@Query() query: RecommendationQueryDto): Promise<RecommendationDto[]> {
-    return this.recommendationService.listGlobal(query.grade);
+  async list(@Query() query: RecommendationQueryDto) {
+    return this.recommendationService.listGlobal(query.grade, {
+      limit: query.limit,
+      cursor: query.cursor,
+    });
   }
 
   @Post('generate')

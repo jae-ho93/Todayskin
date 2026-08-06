@@ -1,7 +1,8 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { AuditLogService } from './audit-log.service';
+import { SoftDeleteModule } from '../../common/soft-delete/soft-delete.module';
 
 /**
  * ADMIN 운영 모듈.
@@ -11,6 +12,7 @@ import { AuditLogService } from './audit-log.service';
  * 컨트롤러 레벨 @UseGuards로 명시 적용한다.
  */
 @Module({
+  imports: [forwardRef(() => SoftDeleteModule)],
   controllers: [AdminController],
   providers: [AdminService, AuditLogService],
   exports: [AuditLogService],

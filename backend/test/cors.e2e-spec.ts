@@ -3,6 +3,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import request from 'supertest';
 import { HealthModule } from '../src/health/health.module';
+import { HealthService } from '../src/health/health.service';
 
 /**
  * CORS 허용/차단 시나리오 e2e.
@@ -24,6 +25,17 @@ describe('CORS (e2e)', () => {
         HealthModule,
       ],
     })
+      .overrideProvider(HealthService)
+      .useValue({
+        check: () => ({ status: 'ok', timestamp: new Date().toISOString() }),
+        live: () => ({ status: 'ok', probe: 'live', timestamp: new Date().toISOString() }),
+        ready: async () => ({
+          status: 'ok',
+          probe: 'ready',
+          timestamp: new Date().toISOString(),
+          dependencies: [],
+        }),
+      })
       .compile()
       .then(async (moduleRef) => {
         const app = moduleRef.createNestApplication();
