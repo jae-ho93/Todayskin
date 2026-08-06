@@ -1,0 +1,238 @@
+name: Deploy ECS Fargate
+
+# N5: CI 통과 후 ECR push → (승인) release job(migration) → NestJS/FastAPI Fargate rollout.
+# Secrets/vars는 GitHub Environment `production`과 Repository Variables에 설정한다.
+# 실제 AWS 리소스 ARN은 ACCOUNT_ID placeholder를 치환한 task definition으로 등록한다.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-ecs.yml"
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Deploy/rollback용 이미지 태그(commit SHA). 비우면 현재 SHA."
+        required: false
+        type: string
+      skip_migrate:
+        description: "rollback 시 migration 생략"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-ecs-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+  ECR_BACKEND_REPO: ${{ vars.ECR_BACKEND_REPO || 'todayskin-backend' }}
+  ECR_INFERENCE_REPO: ${{ vars.ECR_INFERENCE_REPO || 'todayskin-inference' }}
+
+jobs:
+  build-and-push:
+    name: Build and push ECR images
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+      backend_image: ${{ steps.meta.outputs.backend_image }}
+      inference_image: ${{ steps.meta.outputs.inference_image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: meta
+        run: |
+          TAG="${{ inputs.image_tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="${GITHUB_SHA}"
+          fi
+          echo "image_tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "backend_image=${ECR_BACKEND_REPO}:${TAG}" >> "$GITHUB_OUTPUT"
+          echo "inference_image=${ECR_INFERENCE_REPO}:${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push NestJS backend
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_BACKEND_REPO }}:${{ steps.meta.outputs.image_tag }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Build and push inference service
+        uses: docker/build-push-action@v6
+        with:
+          context: backend/inference-service
+          file: backend/inference-service/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_INFERENCE_REPO }}:${{ steps.meta.outputs.image_tag }}
+          cache-from: type=gha,scope=inference
+          cache-to: type=gha,mode=max,scope=inference
+
+  release:
+    name: Release (migrate + deploy)
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+      ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
+      ECS_SERVICE_BACKEND: ${{ vars.ECS_SERVICE_BACKEND }}
+      ECS_SERVICE_INFERENCE: ${{ vars.ECS_SERVICE_INFERENCE }}
+      ECS_MIGRATE_TASK_FAMILY: ${{ vars.ECS_MIGRATE_TASK_FAMILY || 'todayskin-migrate' }}
+      ECS_SUBNETS: ${{ vars.ECS_SUBNETS }}
+      ECS_SECURITY_GROUPS: ${{ vars.ECS_SECURITY_GROUPS }}
+      RDS_INSTANCE_ID: ${{ vars.RDS_INSTANCE_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Backup RDS (snapshot)
+        if: ${{ inputs.skip_migrate != true }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RDS_INSTANCE_ID}" ]; then
+            echo "RDS_INSTANCE_ID is not set; skip automated snapshot (document manual backup)."
+            exit 0
+          fi
+          SNAPSHOT_ID="todayskin-pre-release-$(echo "${IMAGE_TAG}" | cut -c1-12)-$(date +%Y%m%d%H%M%S)"
+          aws rds create-db-snapshot \
+            --db-instance-identifier "${RDS_INSTANCE_ID}" \
+            --db-snapshot-identifier "${SNAPSHOT_ID}"
+          echo "Created snapshot: ${SNAPSHOT_ID}"
+          echo "SNAPSHOT_ID=${SNAPSHOT_ID}" >> "$GITHUB_ENV"
+
+      - name: Render migrate task definition
+        if: ${{ inputs.skip_migrate != true }}
+        run: |
+          set -euo pipefail
+          REGISTRY="${{ steps.ecr.outputs.registry }}"
+          ACCOUNT_ID="$(echo "$REGISTRY" | cut -d. -f1)"
+          sed \
+            -e "s|ACCOUNT_ID|${ACCOUNT_ID}|g" \
+            -e "s|IMAGE_TAG|${IMAGE_TAG}|g" \
+            backend/docker/ecs/migrate-task-definition.json > /tmp/migrate-task.json
+          aws ecs register-task-definition --cli-input-json file:///tmp/migrate-task.json
+
+      - name: Run migrate task (diff + deploy)
+        if: ${{ inputs.skip_migrate != true }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ECS_CLUSTER}" ] || [ -z "${ECS_SUBNETS}" ] || [ -z "${ECS_SECURITY_GROUPS}" ]; then
+            echo "ECS_CLUSTER / ECS_SUBNETS / ECS_SECURITY_GROUPS required for migrate task."
+            exit 1
+          fi
+          SUBNET_JSON=$(printf '%s' "${ECS_SUBNETS}" | jq -R 'split(",")')
+          SG_JSON=$(printf '%s' "${ECS_SECURITY_GROUPS}" | jq -R 'split(",")')
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "${ECS_CLUSTER}" \
+            --launch-type FARGATE \
+            --task-definition "${ECS_MIGRATE_TASK_FAMILY}" \
+            --network-configuration "awsvpcConfiguration={subnets=${SUBNET_JSON},securityGroups=${SG_JSON},assignPublicIp=DISABLED}" \
+            --query 'tasks[0].taskArn' \
+            --output text)
+          echo "Migrate task: ${TASK_ARN}"
+          aws ecs wait tasks-stopped --cluster "${ECS_CLUSTER}" --tasks "${TASK_ARN}"
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster "${ECS_CLUSTER}" \
+            --tasks "${TASK_ARN}" \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+          if [ "${EXIT_CODE}" != "0" ]; then
+            echo "Migration failed with exit code ${EXIT_CODE}. Aborting app rollout."
+            exit 1
+          fi
+
+      - name: Render and deploy NestJS service
+        run: |
+          set -euo pipefail
+          REGISTRY="${{ steps.ecr.outputs.registry }}"
+          ACCOUNT_ID="$(echo "$REGISTRY" | cut -d. -f1)"
+          sed \
+            -e "s|ACCOUNT_ID|${ACCOUNT_ID}|g" \
+            -e "s|IMAGE_TAG|${IMAGE_TAG}|g" \
+            backend/docker/ecs/backend-task-definition.json > /tmp/backend-task.json
+          NEW_TD=$(aws ecs register-task-definition \
+            --cli-input-json file:///tmp/backend-task.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+          aws ecs update-service \
+            --cluster "${ECS_CLUSTER}" \
+            --service "${ECS_SERVICE_BACKEND}" \
+            --task-definition "${NEW_TD}" \
+            --force-new-deployment
+
+      - name: Render and deploy inference service
+        run: |
+          set -euo pipefail
+          REGISTRY="${{ steps.ecr.outputs.registry }}"
+          ACCOUNT_ID="$(echo "$REGISTRY" | cut -d. -f1)"
+          sed \
+            -e "s|ACCOUNT_ID|${ACCOUNT_ID}|g" \
+            -e "s|IMAGE_TAG|${IMAGE_TAG}|g" \
+            backend/docker/ecs/inference-task-definition.json > /tmp/inference-task.json
+          NEW_TD=$(aws ecs register-task-definition \
+            --cli-input-json file:///tmp/inference-task.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+          aws ecs update-service \
+            --cluster "${ECS_CLUSTER}" \
+            --service "${ECS_SERVICE_INFERENCE}" \
+            --task-definition "${NEW_TD}" \
+            --force-new-deployment
+
+      - name: Wait for services stable
+        run: |
+          set -euo pipefail
+          aws ecs wait services-stable \
+            --cluster "${ECS_CLUSTER}" \
+            --services "${ECS_SERVICE_BACKEND}" "${ECS_SERVICE_INFERENCE}"
+
+  rollback-docs:
+    name: Rollback instructions
+    if: failure()
+    needs: [build-and-push, release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print rollback procedure
+        run: |
+          cat <<'EOF'
+          Deployment failed. Rollback procedure:
+          1. Actions → Deploy ECS Fargate → Run workflow
+          2. image_tag = previous successful commit SHA (ECR image tag)
+          3. skip_migrate = true (schema already applied or rollback via new migration)
+          4. Approve the production environment gate
+          See backend/docker/DEPLOYMENT.md § Rollback
+          EOF

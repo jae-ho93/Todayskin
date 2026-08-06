@@ -1,7 +1,10 @@
-# 로컬 개발용 PostgreSQL + Redis + NestJS 백엔드 컨테이너 (T14).
+# 로컬 개발용 PostgreSQL + Redis + NestJS + inference-service (T14/N5).
 # 개발/테스트 DB를 하나의 인스턴스에 분리한다. 운영 DB는 별도 관리.
 # 실행: docker compose up -d            # DB + Redis만 실행
-# 실행: docker compose --profile backend up -d --build   # 백엔드 포함 전체 실행
+# 실행: docker compose --profile inference up -d --build
+#       # inference만 (로컬 nest watch용)
+# 실행: docker compose --profile backend up -d --build
+#       # NestJS + inference 포함 전체 실행
 services:
   postgres:
     image: postgres:16-alpine
@@ -40,8 +43,29 @@ services:
     # 운영에서는 requirepass로 인증 필수. 개발용은 비인증.
     # command: redis-server --requirepass yourpassword
 
-  # T14: NestJS 백엔드. 로컬 통합 환경은 development 모드로 실행해
-  # MOCK_GEMINI/INFERENCE를 안전하게 사용할 수 있게 한다. 운영은 이 compose의
+  # N5: FastAPI inference-service. 모델 가중치가 이미지에 포함되므로 첫 빌드가 길 수 있다.
+  # --profile inference: 로컬 nest watch와 함께 쓸 때
+  # --profile backend: NestJS 통합 환경에 자동 포함
+  inference:
+    profiles: ["backend", "inference"]
+    build:
+      context: ./inference-service
+      dockerfile: Dockerfile
+    container_name: todayskin-inference
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: "8000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # T14/N5: NestJS 백엔드. 로컬 통합 환경은 development 모드로 실행해
+  # MOCK_GEMINI를 안전하게 사용할 수 있게 한다. 운영은 이 compose의
   # 임시 mock 설정을 재사용하지 말고 별도 secret/config를 주입한다.
   backend:
     profiles: ["backend"]
@@ -55,6 +79,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      inference:
+        condition: service_healthy
     environment:
       NODE_ENV: development
       PORT: "3000"
@@ -65,7 +91,11 @@ services:
       JWT_ACCESS_SECRET: local_dev_access_secret_at_least_32_characters_long
       JWT_REFRESH_SECRET: local_dev_refresh_secret_at_least_32_characters_long
       MOCK_GEMINI: "true"
-      MOCK_INFERENCE: "true"
+      # compose 통합 시 실제 inference 컨테이너를 사용한다.
+      MOCK_INFERENCE: "false"
+      INFERENCE_SERVICE_URL: http://inference:8000
+      # N5: 로컬/테스트만 컨테이너 시작 시 migrate 허용. 운영 ECS는 false.
+      RUN_MIGRATIONS_ON_START: "true"
     ports:
       - "3000:3000"
 

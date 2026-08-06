@@ -37,7 +37,9 @@ COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
+COPY --from=builder /app/docker/entrypoint.sh ./docker/entrypoint.sh
 COPY package.json ./
+RUN chmod +x ./docker/entrypoint.sh
 
 EXPOSE 3000
 
@@ -45,6 +47,7 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD wget -qO- http://localhost:3000/health || exit 1
 
-# 컨테이너 시작 시 migration 적용 후 앱 실행.
-# 운영 환경에서는 외부 시크릿 관리로 DATABASE_URL, JWT_*_SECRET 등을 주입.
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+# N5: 운영은 release job이 migrate 후 rollout. 로컬/테스트만
+# RUN_MIGRATIONS_ON_START=true 로 시작 시 migrate 허용.
+# 시크릿은 Secrets Manager / 컨테이너 외부에서 주입 (.env 이미지 포함 금지).
+ENTRYPOINT ["./docker/entrypoint.sh"]

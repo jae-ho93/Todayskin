@@ -663,14 +663,19 @@ S3_BUCKET 미설정 시 개발/테스트는 Memory store. 단위 138, 관련 e2e
 
 브랜치: `chore/ecs-fargate-cicd`
 
-- [ ] GitHub Actions → ECR 이미지 빌드/푸시 (tag = commit SHA)
-- [ ] NestJS / FastAPI 각각 ECS Fargate task definition
-- [ ] RDS PostgreSQL·S3·CloudWatch 연동
-- [ ] docker-compose에 inference-service 통합(개발 환경)
-- [ ] 운영 migration: 단일 release job이 backup·diff·migrate deploy 후 app rollout
+- [x] GitHub Actions → ECR 이미지 빌드/푸시 (tag = commit SHA)
+- [x] NestJS / FastAPI 각각 ECS Fargate task definition
+- [x] RDS PostgreSQL·S3·CloudWatch 연동
+- [x] docker-compose에 inference-service 통합(개발 환경)
+- [x] 운영 migration: 단일 release job이 backup·diff·migrate deploy 후 app rollout
   - destructive는 expand/contract, local/test만 container startup migration 허용
-- [ ] production deploy: 승인 게이트 + 이전 image rollback 절차
-- [ ] secret: Secret Manager 주입
+- [x] production deploy: 승인 게이트 + 이전 image rollback 절차
+- [x] secret: Secret Manager 주입
+
+참고: `.github/workflows/deploy-ecs.yml`, `backend/docker/ecs/*.json`,
+`backend/inference-service/Dockerfile`, `RUN_MIGRATIONS_ON_START` entrypoint,
+`backend/docker/DEPLOYMENT.md`에 절차·시크릿·롤백을 정리했다.
+실제 AWS ECR/ECS/RDS/OIDC는 계정 시크릿 설정 후 워크플로로 실행한다.
 
 완료 기준: CI 통과 후 ECR에 이미지가 push되고, 승인 후 NestJS와 FastAPI가 각각 Fargate에 배포된다.
 
