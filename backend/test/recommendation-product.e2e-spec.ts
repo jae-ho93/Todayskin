@@ -157,11 +157,13 @@ describe('Recommendation & Product (e2e)', () => {
       expect(Array.isArray(res.body)).toBe(true);
       expect((res.body as unknown[]).length).toBeGreaterThan(0);
       // seed의 rec-1 (A등급)이 포함되어야 한다
-      const aGrade = (res.body as Array<{ id: string; grade: string }>).find(
+      const aGrade = (res.body as Array<{ id: string; grade: string; relatedProductIds: string[] }>).find(
         (r) => r.id === 'rec-1',
       );
       expect(aGrade).toBeDefined();
       expect(aGrade!.grade).toBe('A');
+      // N20: 목록 응답에도 관련 제품이 채워진다.
+      expect(aGrade!.relatedProductIds).toContain('prod-1');
     });
 
     it('grade=A 필터 동작', async () => {
@@ -212,6 +214,9 @@ describe('Recommendation & Product (e2e)', () => {
 
       expect(res.body.id).toBe('rec-1');
       expect(res.body.grade).toBe('A');
+      // N20: seed가 템플릿↔제품을 연결하므로 관련 제품이 실제로 반환된다.
+      expect(Array.isArray(res.body.relatedProductIds)).toBe(true);
+      expect(res.body.relatedProductIds).toContain('prod-1');
     });
 
     it('인증 없이 호출 시 401', async () => {
