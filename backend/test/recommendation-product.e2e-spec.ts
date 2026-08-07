@@ -391,4 +391,63 @@ describe('Recommendation & Product (e2e)', () => {
       await prisma.diagnosis.delete({ where: { id: diagnosis.id } });
     });
   });
+
+  describe('N14 외부 AI 호출 멱등성', () => {
+    it('같은 diagnosisId 동시 요청 → Gemini 1회만 호출, 200 + 409', async () => {
+      const geminiClient = app.get(GeminiClient) as {
+        generateRecommendations: jest.Mock;
+      };
+      const original = geminiClient.generateRecommendations.getMockImplementation();
+      // 두 요청이 in-flight 구간에 겹치도록 Gemini 응답에 지연을 건다.
+      // (B의 사전 경로: JWT + 동의 + 진단 조회 + 예약 ≈ 수백 ms — 1s로 여유 확보)
+      const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+      geminiClient.generateRecommendations.mockImplementation(async () => {
+        await delay(1000);
+        return [
+          {
+            title: '동시 생성 추천',
+            explanation: '동시 요청 테스트',
+            ingredientTags: [],
+            timing: '외출 후',
+          },
+        ];
+      });
+
+      const diagnosis = await prisma.diagnosis.create({
+        data: {
+          id: 'diag-e2e-n14',
+          userId,
+          capturedAt: new Date(),
+          overallScore: 70,
+          status: 'COMPLETED',
+        },
+      });
+
+      try {
+        const [a, b] = await Promise.all([
+          request(app.getHttpServer())
+            .post('/recommendations/generate')
+            .set('Authorization', `Bearer ${accessToken}`)
+            .send({ diagnosisId: diagnosis.id }),
+          request(app.getHttpServer())
+            .post('/recommendations/generate')
+            .set('Authorization', `Bearer ${accessToken}`)
+            .send({ diagnosisId: diagnosis.id }),
+        ]);
+
+        // N14 핵심: Gemini는 정확히 1회만 호출된다 (비용 중복 방지).
+        expect(geminiClient.generateRecommendations).toHaveBeenCalledTimes(1);
+        // 하나는 성공, 다른 하나는 in-flight 예약 충돌 409.
+        expect([a.status, b.status].sort()).toEqual([200, 409]);
+      } finally {
+        // 단언 실패 시에도 mock/DB를 복구해 후속 테스트 오염을 막는다.
+        geminiClient.generateRecommendations.mockImplementation(original!);
+        await prisma.recommendation.deleteMany({ where: { diagnosisId: diagnosis.id } });
+        await prisma.aiCallReservation.deleteMany({
+          where: { scopeKey: `recommendation:${diagnosis.id}` },
+        });
+        await prisma.diagnosis.delete({ where: { id: diagnosis.id } }).catch(() => undefined);
+      }
+    });
+  });
 });

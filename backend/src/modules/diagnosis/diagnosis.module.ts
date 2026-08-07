@@ -12,6 +12,7 @@ import { PythonInferenceProvider } from './providers/python-inference.provider';
 import { WeatherModule } from '../weather/weather.module';
 import { ConsentModule } from '../consent/consent.module';
 import { StorageModule } from '../storage/storage.module';
+import { IdempotencyModule } from '../idempotency/idempotency.module';
 
 /**
  * DiagnosisModule — T9.
@@ -27,7 +28,7 @@ import { StorageModule } from '../storage/storage.module';
  * InferenceProvider(토큰)를 주입받는다.
  */
 @Module({
-  imports: [WeatherModule, ConsentModule, StorageModule],
+  imports: [WeatherModule, ConsentModule, StorageModule, IdempotencyModule],
   controllers: [DiagnosisController],
   providers: [
     {

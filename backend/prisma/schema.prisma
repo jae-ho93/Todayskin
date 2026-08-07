@@ -59,6 +59,7 @@ model User {
   notificationPreference NotificationPreference?
   consentRecords         ConsentRecord[]
   asyncJobs              AsyncJob[]
+  aiCallReservations     AiCallReservation[]
 
   auditLogs              AuditLog[]
 
@@ -453,6 +454,12 @@ enum AsyncJobStatus {
   FAILED
 }
 
+enum AiCallReservationStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
 model AsyncJob {
   id          String         @id @default(uuid())
   userId      Int            @map("user_id")
@@ -480,4 +487,26 @@ model AsyncJob {
   @@index([status, createdAt])
   @@index([type, status])
   @@map("async_jobs")
+}
+
+/// N14: 외부 AI 호출(추론/Gemini)의 동시 중복 방지용 in-flight 예약.
+/// unique(scopeKey)로 한 요청만 PENDING을 보유한다.
+/// - PENDING: 외부 호출 진행 중 (expiresAt 경과 시 다른 요청이 takeover)
+/// - COMPLETED: 추천 생성 완료 — 동일 결과 재반환용으로 보존
+/// - FAILED: 실패 — 다음 요청이 takeover해 재시도
+/// 진단(diagnosis:{userId})은 완료/실패 시 release(삭제)해 순수 in-flight 가드로 쓴다.
+model AiCallReservation {
+  id        String                  @id @default(uuid())
+  userId    Int                     @map("user_id")
+  scopeKey  String                  @map("scope_key")
+  status    AiCallReservationStatus @default(PENDING)
+  expiresAt DateTime                @map("expires_at")
+  createdAt DateTime                @default(now()) @map("created_at")
+  updatedAt DateTime                @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([scopeKey])
+  @@index([status, expiresAt])
+  @@map("ai_call_reservations")
 }

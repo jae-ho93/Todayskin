@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   NotFoundException,
   ServiceUnavailableException,
@@ -15,6 +16,7 @@ import { WeatherService } from '../weather/weather.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ConsentService } from '../consent/consent.service';
 import { ImageStorageService } from '../storage/image-storage.service';
+import { IdempotencyService } from '../idempotency/idempotency.service';
 import { HistoryEntryDto } from './dto/history-entry.dto';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -32,6 +34,12 @@ describe('DiagnosisService', () => {
     storeDiagnosisImage: jest.Mock;
     deleteAllForUser: jest.Mock;
     getPresignedUrlForDiagnosis: jest.Mock;
+  };
+  let idempotency: {
+    acquire: jest.Mock;
+    complete: jest.Mock;
+    release: jest.Mock;
+    retake: jest.Mock;
   };
   let prisma: Record<string, any>;
 
@@ -65,6 +73,12 @@ describe('DiagnosisService', () => {
       deleteAllForUser: jest.fn(),
       getPresignedUrlForDiagnosis: jest.fn(),
     };
+    idempotency = {
+      acquire: jest.fn().mockResolvedValue({ outcome: 'acquired' }),
+      complete: jest.fn().mockResolvedValue(undefined),
+      release: jest.fn().mockResolvedValue(undefined),
+      retake: jest.fn().mockResolvedValue(undefined),
+    };
 
     prisma = {
       diagnosis: {
@@ -86,6 +100,7 @@ describe('DiagnosisService', () => {
         { provide: WeatherService, useValue: weatherService },
         { provide: ConsentService, useValue: consentService },
         { provide: ImageStorageService, useValue: imageStorage },
+        { provide: IdempotencyService, useValue: idempotency },
         { provide: PrismaService, useValue: prisma },
       ],
     }).compile();
@@ -176,6 +191,28 @@ describe('DiagnosisService', () => {
     it('InferenceProvider 실패 시 503', async () => {
       inferenceProvider.infer.mockRejectedValue(new Error('server down'));
       await expect(service.submit(1, validImages)).rejects.toThrow(ServiceUnavailableException);
+    });
+
+    it('N14: 동시 진단 요청(in-flight 예약)은 409 Conflict', async () => {
+      idempotency.acquire.mockResolvedValue({ outcome: 'in_flight' });
+      await expect(service.submit(1, validImages, { wentOutside: true })).rejects.toThrow(
+        ConflictException,
+      );
+      // N14 핵심: 외부 추론을 호출하지 않는다 (비용 중복 방지).
+      expect(inferenceProvider.infer).not.toHaveBeenCalled();
+      expect(idempotency.release).not.toHaveBeenCalled();
+    });
+
+    it('N14: 정상 완료 시 예약을 해제(release)한다', async () => {
+      await service.submit(1, validImages, { wentOutside: true });
+      expect(idempotency.acquire).toHaveBeenCalledWith('diagnosis:1', 1);
+      expect(idempotency.release).toHaveBeenCalledWith('diagnosis:1');
+    });
+
+    it('N14: 예약 획득 후에도 추론 실패 시 release로 해제한다', async () => {
+      inferenceProvider.infer.mockRejectedValue(new Error('server down'));
+      await expect(service.submit(1, validImages)).rejects.toThrow(ServiceUnavailableException);
+      expect(idempotency.release).toHaveBeenCalledWith('diagnosis:1');
     });
 
     it('추론 점수 범위 초과(101) 거부', async () => {
