@@ -1,9 +1,15 @@
 import { Test } from '@nestjs/testing';
-import { NotFoundException, ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { RecommendationService } from './recommendation.service';
 import { GeminiClient, GeminiUnavailable } from '../gemini/gemini.client';
 import { ConsentService } from '../consent/consent.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { IdempotencyService } from '../idempotency/idempotency.service';
 import { EvidenceGrade } from './enums/evidence-grade.enum';
 import { RecommendationDto } from './dto/recommendation.dto';
 
@@ -15,6 +21,12 @@ describe('RecommendationService', () => {
   let service: RecommendationService;
   let geminiClient: { generateRecommendations: jest.Mock };
   let consentService: { requireActive: jest.Mock };
+  let idempotency: {
+    acquire: jest.Mock;
+    complete: jest.Mock;
+    release: jest.Mock;
+    retake: jest.Mock;
+  };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let prisma: Record<string, any>;
 
@@ -24,6 +36,12 @@ describe('RecommendationService', () => {
     };
     consentService = {
       requireActive: jest.fn().mockResolvedValue(undefined),
+    };
+    idempotency = {
+      acquire: jest.fn().mockResolvedValue({ outcome: 'acquired' }),
+      complete: jest.fn().mockResolvedValue(undefined),
+      release: jest.fn().mockResolvedValue(undefined),
+      retake: jest.fn().mockResolvedValue(true),
     };
 
     prisma = {
@@ -48,6 +66,7 @@ describe('RecommendationService', () => {
         RecommendationService,
         { provide: GeminiClient, useValue: geminiClient },
         { provide: ConsentService, useValue: consentService },
+        { provide: IdempotencyService, useValue: idempotency },
         { provide: PrismaService, useValue: prisma },
       ],
     }).compile();
@@ -201,6 +220,87 @@ describe('RecommendationService', () => {
       expect(result[0].id).toBe('gemini-old');
       expect(geminiClient.generateRecommendations).not.toHaveBeenCalled();
       expect(prisma.recommendation.createMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('generate — N14 외부 AI 호출 멱등성', () => {
+    beforeEach(() => {
+      prisma.diagnosis.findFirst.mockResolvedValue({
+        id: 'diag-1', userId: 1,
+        capturedAt: new Date(), overallScore: 70, thumbnailUri: null,
+        skinMetrics: [], weatherSnapshot: null,
+      });
+      prisma.recommendation.findMany.mockResolvedValue([]);
+      geminiClient.generateRecommendations.mockResolvedValue([
+        { title: 'T', explanation: 'E', ingredientTags: [], timing: null },
+      ]);
+    });
+
+    it('Gemini 호출 전에 예약을 획득하고 성공 시 complete로 전환한다', async () => {
+      await service.generate(1, { diagnosisId: 'diag-1' });
+      expect(idempotency.acquire).toHaveBeenCalledWith('recommendation:diag-1', 1);
+      expect(idempotency.complete).toHaveBeenCalledWith('recommendation:diag-1');
+      expect(idempotency.release).not.toHaveBeenCalled();
+    });
+
+    it('in-flight 예약(동시 요청)은 409 Conflict + Gemini 미호출', async () => {
+      idempotency.acquire.mockResolvedValue({ outcome: 'in_flight' });
+      await expect(service.generate(1, { diagnosisId: 'diag-1' })).rejects.toThrow(
+        ConflictException,
+      );
+      expect(geminiClient.generateRecommendations).not.toHaveBeenCalled();
+    });
+
+    it('completed 예약 + 기존 결과 존재 시 동일 결과 재반환 (Gemini 미호출)', async () => {
+      idempotency.acquire.mockResolvedValue({ outcome: 'completed' });
+      prisma.recommendation.findMany.mockResolvedValue([
+        { id: 'gemini-old', userId: 1, diagnosisId: 'diag-1',
+          title: '기존 추천', grade: 'B',
+          sourceLabel: 'AI 종합 분석 · 피부과학 일반 지식 기반',
+          explanation: '...', observationalNote: null,
+          ingredientTags: [], timing: null, createdAt: new Date() },
+      ]);
+
+      const result = await service.generate(1, { diagnosisId: 'diag-1' });
+      expect(result[0].id).toBe('gemini-old');
+      expect(geminiClient.generateRecommendations).not.toHaveBeenCalled();
+      expect(idempotency.retake).not.toHaveBeenCalled();
+    });
+
+    it('completed 예약인데 결과가 없으면 retake 후 재생성한다', async () => {
+      idempotency.acquire.mockResolvedValue({ outcome: 'completed' });
+      // findMany는 [] (이미 mock 기본값) → retake 성공 후 진행
+      await service.generate(1, { diagnosisId: 'diag-1' });
+      expect(idempotency.retake).toHaveBeenCalledWith('recommendation:diag-1');
+      expect(geminiClient.generateRecommendations).toHaveBeenCalledTimes(1);
+      expect(idempotency.complete).toHaveBeenCalledWith('recommendation:diag-1');
+    });
+
+    it('completed + retake 경쟁에서 남이 먼저 retake하면 409 Conflict', async () => {
+      idempotency.acquire.mockResolvedValue({ outcome: 'completed' });
+      idempotency.retake.mockResolvedValue(false);
+      await expect(service.generate(1, { diagnosisId: 'diag-1' })).rejects.toThrow(
+        ConflictException,
+      );
+      expect(geminiClient.generateRecommendations).not.toHaveBeenCalled();
+    });
+
+    it('Gemini 실패(503) 시 예약을 release해 재시도를 허용한다', async () => {
+      geminiClient.generateRecommendations.mockRejectedValue(
+        new GeminiUnavailable('GEMINI_API_KEY not configured'),
+      );
+      await expect(service.generate(1, { diagnosisId: 'diag-1' })).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      expect(idempotency.release).toHaveBeenCalledWith('recommendation:diag-1');
+      expect(idempotency.complete).not.toHaveBeenCalled();
+    });
+
+    it('호환 모드(skinScore+weather, diagnosisId 없음)는 예약을 사용하지 않는다', async () => {
+      await service.generate(1, { skinScore: { id: 'snap-1' }, weather: { uvIndex: 5 } });
+      expect(idempotency.acquire).not.toHaveBeenCalled();
+      expect(idempotency.complete).not.toHaveBeenCalled();
+      expect(prisma.recommendation.createMany).toHaveBeenCalledTimes(1);
     });
   });
 

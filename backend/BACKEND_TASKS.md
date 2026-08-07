@@ -844,13 +844,15 @@ Jest coverageThreshold를 반영했다.
 
 브랜치: `refactor/external-call-idempotency`
 
-- [ ] 진단 추론과 추천 Gemini 호출 전에 요청 예약/idempotency 상태 기록
-- [ ] 동일 사용자·진단 동시 요청이 외부 호출을 중복 수행하지 않도록 unique/lock 경계 이동
-- [ ] PENDING 실패·timeout·재시도 상태 전이 정의
-- [ ] 중복 요청의 동일 결과 반환 또는 409 계약 결정
-- [ ] 동시 요청 테스트 추가
+- [x] 진단 추론과 추천 Gemini 호출 전에 요청 예약/idempotency 상태 기록
+- [x] 동일 사용자·진단 동시 요청이 외부 호출을 중복 수행하지 않도록 unique/lock 경계 이동
+- [x] PENDING 실패·timeout·재시도 상태 전이 정의
+- [x] 중복 요청의 동일 결과 반환 또는 409 계약 결정
+- [x] 동시 요청 테스트 추가
 
 완료 기준: 동시 재시도에서도 외부 AI 비용이 중복 발생하지 않고 DB 결과가 하나로 수렴한다.
+
+> ✅ 완료 (PR, `refactor/external-call-idempotency`): `ai_call_reservations`(unique scopeKey) 테이블로 외부 AI 호출 **전에** in-flight 예약. 진단 `diagnosis:{userId}`(완료/실패 시 release — 순수 in-flight 가드, 동시 409), 추천 `recommendation:{diagnosisId}`(성공 시 COMPLETED 보존 → 동일 결과 재반환, 실패 시 release, 동시 409). PENDING lease 60s + FAILED/만료 takeover로 stuck 예약 회수. e2e: 같은 diagnosisId 동시 요청 2건 → Gemini 1회 호출 + 200/409 검증. unit: idempotency 10 + diagnosis 3 + recommendation 6케이스.
 
 ### N15. 캘린더 히스토리 프론트 연결
 

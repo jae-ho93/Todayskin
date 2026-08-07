@@ -5,6 +5,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ConflictException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -23,6 +24,7 @@ import {
 import type { InferenceProvider } from './providers/inference-provider.interface';
 import { WeatherService } from '../weather/weather.service';
 import { ConsentService } from '../consent/consent.service';
+import { IdempotencyService } from '../idempotency/idempotency.service';
 import { ConsentPurpose } from '../consent/enums/consent-purpose.enum';
 import { ImageStorageService } from '../storage/image-storage.service';
 import { SkinScoreSnapshotDto } from './dto/skin-score-snapshot.dto';
@@ -125,6 +127,7 @@ export class DiagnosisService {
     private readonly weatherService: WeatherService,
     private readonly consentService: ConsentService,
     private readonly imageStorage: ImageStorageService,
+    private readonly idempotency: IdempotencyService,
   ) {}
 
   /**
@@ -158,7 +161,31 @@ export class DiagnosisService {
     // 2. 중복 요청 방지 — 동일 사용자의 최근 PENDING/COMPLETED 진단이 DEDUP_WINDOW 이내면 거부.
     await this.guardDuplicate(userId);
 
-    // 3. 추론. Provider 실패(실제 서버 장애)는 503으로 전파.
+    // 3. N14: 동시 요청 in-flight 예약 — 추론 호출 전에 unique 예약을 잡아
+    //    같은 사용자의 동시 재시도가 외부 추론을 중복 호출하지 않게 한다.
+    //    (성공·실패 모두 finally에서 release — 순수 in-flight 가드)
+    const reservation = await this.idempotency.acquire(`diagnosis:${userId}`, userId);
+    if (reservation.outcome !== 'acquired') {
+      throw new ConflictException('이미 진행 중인 진단 요청이 있습니다');
+    }
+    try {
+      return await this.runReservedSubmit(userId, images, storeImage, opts);
+    } finally {
+      await this.idempotency.release(`diagnosis:${userId}`);
+    }
+  }
+
+  /**
+   * N14 예약 획득 이후의 진단 본체 — 추론 → 결과 검증 → 날씨 → transaction 저장 → DTO.
+   * 예약은 호출부(submit)의 finally에서 해제된다.
+   */
+  private async runReservedSubmit(
+    userId: number,
+    images: InferenceImages,
+    storeImage: boolean,
+    opts?: { lat?: number; lon?: number; wentOutside?: boolean },
+  ): Promise<SkinScoreSnapshotDto> {
+    // 4. 추론. Provider 실패(실제 서버 장애)는 503으로 전파.
     let inference;
     try {
       inference = await this.inferenceProvider.infer(images);

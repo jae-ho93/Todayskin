@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -10,6 +11,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { GeminiClient, GeminiUnavailable } from '../gemini/gemini.client';
 import { ConsentService } from '../consent/consent.service';
 import { ConsentPurpose } from '../consent/enums/consent-purpose.enum';
+import { IdempotencyService } from '../idempotency/idempotency.service';
 import { EvidenceGrade } from './enums/evidence-grade.enum';
 import { RecommendationDto, RecommendationTiming } from './dto/recommendation.dto';
 import {
@@ -50,6 +52,7 @@ export class RecommendationService {
     private readonly prisma: PrismaService,
     private readonly geminiClient: GeminiClient,
     private readonly consentService: ConsentService,
+    private readonly idempotency: IdempotencyService,
   ) {}
 
   /**
@@ -175,62 +178,106 @@ export class RecommendationService {
       }
     }
 
-    // Gemini 호출 — 실패 시 503 (가짜 추천으로 대체하지 않음).
-    let items;
-    try {
-      items = await this.geminiClient.generateRecommendations(skinInput, weatherInput);
-    } catch (e) {
-      if (e instanceof GeminiUnavailable) {
-        throw new ServiceUnavailableException(
-          'AI 추천을 생성할 수 없어요. 잠시 후 다시 시도해주세요.',
-        );
-      }
-      throw e;
-    }
-
-    // 서버가 grade=B, sourceLabel을 고정한다. 모든 row를 먼저 구성한 뒤
-    // 하나의 transaction에서 일괄 저장한다. 기존 구현처럼 item별 create를
-    // 순차 실행하면 중간 DB 오류 때 추천이 일부만 남을 수 있다.
-    const createdAt = new Date();
-    const data = items.map((item) => {
-      const id = `gemini-${this.shortId()}`;
-      const timing = (item.timing as RecommendationTiming | null) ?? null;
-      return {
-        id,
+    // N14: Gemini 호출 전에 동시 요청을 in-flight 예약으로 가른다.
+    // 같은 진단의 동시 재시도가 Gemini를 중복 호출하지 않게 하는 핵심 경계다.
+    // (진단이 없으면 호환 모드 — 멱등 키가 없으므로 기존 transaction lock에 맡긴다)
+    let reservationScope: string | null = null;
+    if (diagnosisId) {
+      const reservation = await this.idempotency.acquire(
+        `recommendation:${diagnosisId}`,
         userId,
-        diagnosisId: diagnosisId ?? null,
-        title: item.title,
-        grade: EvidenceGrade.B,
-        sourceLabel: B_GRADE_SOURCE_LABEL,
-        explanation: item.explanation,
-        observationalNote: null,
-        ingredientTags: item.ingredientTags,
-        timing,
-      };
-    });
-
-    const persisted = await this.prisma.$transaction(async (tx) => {
-      // 같은 진단에 대한 동시 요청은 DB advisory lock으로 직렬화한다.
-      // lock은 transaction 종료 시 자동 해제되므로 별도 unlock 누락이 없다.
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`todayskin:recommendation:${diagnosisId ?? `user:${userId}`}`}))`;
-
-      // 첫 조회와 Gemini 호출 사이에 다른 요청이 저장했을 수 있으므로
-      // lock을 획득한 뒤 반드시 다시 확인한다.
-      if (diagnosisId) {
-        const existing = await tx.recommendation.findMany({
+      );
+      if (reservation.outcome === 'in_flight') {
+        throw new ConflictException('이미 추천이 생성 중입니다');
+      }
+      if (reservation.outcome === 'completed') {
+        // 이전 요청이 완료한 예약 — 동일 결과를 재반환한다.
+        const existing = await this.prisma.recommendation.findMany({
           where: { diagnosisId, userId },
           orderBy: { createdAt: 'desc' },
         });
-        if (existing.length > 0) return existing;
+        if (existing.length > 0) {
+          return existing.map((r) => this.modelToDto(r));
+        }
+        // 예약만 남고 결과가 정리된 경우 → 재시도 진행.
+        // 다른 요청이 먼저 retake했다면(false) in-flight로 보고 409 (이중 Gemini 방지).
+        const retaken = await this.idempotency.retake(`recommendation:${diagnosisId}`);
+        if (!retaken) {
+          throw new ConflictException('이미 추천이 생성 중입니다');
+        }
+      }
+      reservationScope = `recommendation:${diagnosisId}`;
+    }
+
+    try {
+      // Gemini 호출 — 실패 시 503 (가짜 추천으로 대체하지 않음).
+      let items;
+      try {
+        items = await this.geminiClient.generateRecommendations(skinInput, weatherInput);
+      } catch (e) {
+        if (e instanceof GeminiUnavailable) {
+          throw new ServiceUnavailableException(
+            'AI 추천을 생성할 수 없어요. 잠시 후 다시 시도해주세요.',
+          );
+        }
+        throw e;
       }
 
-      await tx.recommendation.createMany({ data });
-      // 응답에 필요한 값은 모두 서버가 생성한 data에 있으므로 저장 직후
-      // 같은 row를 다시 조회하는 불필요한 DB round-trip을 만들지 않는다.
-      return data.map((row) => ({ ...row, createdAt }));
-    });
+      // 서버가 grade=B, sourceLabel을 고정한다. 모든 row를 먼저 구성한 뒤
+      // 하나의 transaction에서 일괄 저장한다. 기존 구현처럼 item별 create를
+      // 순차 실행하면 중간 DB 오류 때 추천이 일부만 남을 수 있다.
+      const createdAt = new Date();
+      const data = items.map((item) => {
+        const id = `gemini-${this.shortId()}`;
+        const timing = (item.timing as RecommendationTiming | null) ?? null;
+        return {
+          id,
+          userId,
+          diagnosisId: diagnosisId ?? null,
+          title: item.title,
+          grade: EvidenceGrade.B,
+          sourceLabel: B_GRADE_SOURCE_LABEL,
+          explanation: item.explanation,
+          observationalNote: null,
+          ingredientTags: item.ingredientTags,
+          timing,
+        };
+      });
 
-    return persisted.map((r) => this.modelToDto(r as RecommendationModel));
+      const persisted = await this.prisma.$transaction(async (tx) => {
+        // 같은 진단에 대한 동시 요청은 DB advisory lock으로 직렬화한다.
+        // lock은 transaction 종료 시 자동 해제되므로 별도 unlock 누락이 없다.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`todayskin:recommendation:${diagnosisId ?? `user:${userId}`}`}))`;
+
+        // 첫 조회와 Gemini 호출 사이에 다른 요청이 저장했을 수 있으므로
+        // lock을 획득한 뒤 반드시 다시 확인한다.
+        if (diagnosisId) {
+          const existing = await tx.recommendation.findMany({
+            where: { diagnosisId, userId },
+            orderBy: { createdAt: 'desc' },
+          });
+          if (existing.length > 0) return existing;
+        }
+
+        await tx.recommendation.createMany({ data });
+        // 응답에 필요한 값은 모두 서버가 생성한 data에 있으므로 저장 직후
+        // 같은 row를 다시 조회하는 불필요한 DB round-trip을 만들지 않는다.
+        return data.map((row) => ({ ...row, createdAt }));
+      });
+
+      // N14: 성공 시 예약을 COMPLETED로 전환 — 이후 재시도는 동일 결과를 재반환받는다.
+      if (reservationScope) {
+        await this.idempotency.complete(reservationScope);
+      }
+
+      return persisted.map((r) => this.modelToDto(r as RecommendationModel));
+    } catch (e) {
+      // N14: 실패(503/저장 오류) 시 예약을 해제해 재시도가 가능하게 한다.
+      if (reservationScope) {
+        await this.idempotency.release(reservationScope);
+      }
+      throw e;
+    }
   }
 
   /**
