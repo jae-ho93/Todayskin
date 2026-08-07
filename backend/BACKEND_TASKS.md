@@ -839,6 +839,82 @@ Jest coverageThreshold를 반영했다.
 
 완료 기준: 저장소의 배포 workflow가 실제 AWS 운영 계정에 승인·migration·health·rollback을 포함해 한 번 이상 성공한다.
 
+### N17. CI 테스트 복구 — 코드-테스트 드리프트 정리
+
+브랜치: `fix/ci-test-recovery`
+
+> 2026-08-07 오디트 기준: main의 `backend-build-test → npm test`가 실패 중(2 suites / 3 tests).
+> 원인은 N8/#37 이후 구현이 바뀌었는데 테스트 기대값이 갱신되지 않은 드리프트다.
+
+- [ ] `diagnosis.service.spec.ts` 2건 — N8 이후 `submit()`이 `wentOutside=true`일 때만 날씨 스냅샷을 연결하도록 바뀐 것을 테스트에 반영
+- [ ] `python-inference.provider.spec.ts` 1건 — N8 landmarks 필드가 provider 출력에 추가된 것을 mock fixture에 반영(`landmarks: null`)
+- [ ] spec 파일 TS 타입 에러 정리 — `soft-delete.service.spec`(implicit any), `diagnosis.service.spec`/`weather.service.spec`(mock에 `getPresignedUrlForDiagnosis`/`$executeRaw` 누락), `product`/`recommendation.service.spec`(`CursorPageDto` 인덱싱)
+- [ ] 로컬 단위 테스트가 DB 없이도 동작하도록 mock 보강 또는 DB 필요 조건 문서화 (`auth`/`prisma` service spec이 실 DB 의존)
+
+완료 기준: `npm test`가 CI·로컬에서 모두 초록이고 main CI가 복구된다.
+
+### N18. 앱 세션 토큰 수명 관리
+
+브랜치: `feature/app-session-refresh`
+
+- [ ] 프론트에 refresh token 회전 연동 (현재 `saveSession`은 accessToken만 저장, refresh 미사용)
+- [ ] 401 응답 시 재로그인 유도 흐름 (현재는 "불러올 수 없어요"만 노출되고 로그인 화면으로 복귀하지 않음)
+- [ ] access token(15m) 만료 후에도 앱이 조용히 갱신되거나 명확한 재인증 UX 제공
+
+완료 기준: 세션이 15분 이상 지속돼도 인증 API가 끊기지 않고, 토큰 무효 시 사용자가 로그인 화면으로 안내된다.
+
+### N19. 설정 화면 기능 연동
+
+브랜치: `feature/settings-integration`
+
+- [ ] 알림 스위치를 `NotificationPreference` API에 연동 (현재 로컬 state만 변경, 서버 미저장)
+- [ ] "안면 이미지 처리방침 확인" / "데이터 처리 동의 철회" 행에 consent 조회·철회 API 연결
+- [ ] 탈퇴(withdraw) UI — 백엔드 `POST /auth/withdraw`(N6)는 구현돼 있으나 앱 진입점 없음
+- [ ] 구독(프리미엄) 화면 — 현재 정적 표시만, 결제·권한 로직 없음 (범위 별도 결정)
+
+완료 기준: 설정 화면의 모든 항목이 실제 API와 동기화되고 동의 철회·탈퇴가 사용자 흐름으로 동작한다.
+
+### N20. 추천-제품 연결 데이터 구축
+
+브랜치: `fix/recommendation-product-links`
+
+- [ ] `RecommendationDto.relatedProductIds`가 항상 빈 배열로 반환되는 문제 해결 (template/생성 추천 모두)
+- [ ] seed에 `RecommendationProduct` 연결 데이터 추가
+- [ ] 프론트 추천 상세의 "관련 제품" 섹션 활성화 (현재 `recommendation/[id]`에서 영영 빈 목록)
+
+완료 기준: A/B/C 추천 상세에서 실제 관련 제품이 표시된다.
+
+### N21. 패턴 분석 정확성·성능 개선
+
+브랜치: `fix/pattern-analysis-quality`
+
+- [ ] `collectedDays`를 UTC → KST 기준으로 통일 (`calendar-date.util`과 정합, 현재 `toISOString().slice(0,10)`은 UTC)
+- [ ] `collectDailyPeakEnv`의 진단당 1회 aggregate 쿼리(N+1)를 일괄 집계로 개선
+- [ ] 실내 사용자(`wentOutside=false`)는 weatherSnapshot이 없어 패턴이 영원히 LOCKED — 기본 지역 스냅샷 참조 등 정책 재검토
+- [ ] (배포 시점) `WeatherCollectionScheduler`가 ECS task마다 실행되어 정부 API를 중복 호출 — 싱글턴/별도 스케줄 task 검토
+
+완료 기준: 날짜 집계가 KST 기준으로 일관되고, 쿼리 수가 진단 수와 무관해지며, 실내 사용자 정책이 결정된다.
+
+### N22. OTP 남용 방지·저장 강화 (SMS 연동 시점)
+
+브랜치: `feature/otp-abuse-hardening`
+
+- [ ] OTP 발송에 전화번호별 글로벌 제한 추가 (현재는 IP 기반 rate limit만이라 SMS 도배에 취약)
+- [ ] OTP 코드 해시 저장 검토 (현재 평문 — 단기 만료·시도 제한으로 보완 중이나 DB 유출 시 노출)
+- [ ] SMS 게이트웨이 연동(N9) 시 발송 실패·재시도·모니터링 정책 확정
+
+완료 기준: SMS 게이트웨이 활성화 상태에서도 임의 번호 대상 OTP 도배가 불가능하다.
+
+### N23. 프론트 배포 준비 (EAS / 실기기)
+
+브랜치: `chore/expo-deploy-config`
+
+- [ ] `app.json`에 `ios.bundleIdentifier`·`android.package` 설정 (현재 없어 EAS 빌드 불가)
+- [ ] 운영 `EXPO_PUBLIC_API_BASE_URL` 주입과 `extra.apiBaseUrl`(localhost 고정) 환경화
+- [ ] 로컬 의존성 설치 상태 점검 — `npm ci`로 `expo-image-picker` 등 node_modules 갱신 (pull 후 미설치 상태 확인됨)
+
+완료 기준: `eas build`가 통과하고 실기기 빌드가 운영 API URL을 사용한다.
+
 ## 완료 정의
 
 - NestJS 모듈 경계 안에 기능이 구현되어 있습니다.
