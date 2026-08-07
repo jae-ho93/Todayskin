@@ -30,6 +30,7 @@ describe('WeatherService', () => {
       findUnique: jest.Mock;
     };
     $transaction: jest.Mock;
+    $executeRaw: jest.Mock;
   };
 
   const uv = (over: Partial<UvForecastWithTime> = {}): UvForecastWithTime => ({
@@ -60,6 +61,7 @@ describe('WeatherService', () => {
         findUnique: jest.fn(),
       },
       $transaction: jest.fn(),
+      $executeRaw: jest.fn().mockResolvedValue(1),
     };
     prisma.$transaction.mockImplementation(
       async (callback: (tx: typeof prisma) => unknown) =>
