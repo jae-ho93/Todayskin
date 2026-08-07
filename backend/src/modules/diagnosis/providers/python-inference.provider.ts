@@ -13,12 +13,18 @@ import {
  * 이미지 버퍼는 요청 body로만 전달하고 NestJS 쪽에서 별도로 저장하지 않는다
  * (원본 이미지 비저장 원칙). 응답은 InferenceResult 계약(overallScore/modelVersion/parts)과
  * 1:1 대응하도록 inference-service의 part_mapping.py가 이미 맞춰서 반환한다.
+ *
+ * N13: 내부망 전용 인증 — INFERENCE_SHARED_SECRET을 X-Inference-Key 헤더로 보낸다.
+ * inference-service는 같은 값이 아니면 401, secret 미설정이면 503으로 거부한다.
  */
 @Injectable()
 export class PythonInferenceProvider implements InferenceProvider {
   private readonly logger = new Logger(PythonInferenceProvider.name);
 
-  constructor(private readonly baseUrl: string) {}
+  constructor(
+    private readonly baseUrl: string,
+    private readonly sharedSecret: string,
+  ) {}
 
   async infer(images: InferenceImages): Promise<InferenceResult> {
     const formData = new FormData();
@@ -28,10 +34,18 @@ export class PythonInferenceProvider implements InferenceProvider {
       'front.jpg',
     );
 
+    // N13: shared secret 헤더. 미설정(빈 문자열)이면 헤더를 생략하고,
+    // inference-service가 401/503으로 거부하게 둔다.
+    const headers: Record<string, string> = {};
+    if (this.sharedSecret) {
+      headers['x-inference-key'] = this.sharedSecret;
+    }
+
     let res: Response;
     try {
       res = await fetch(`${this.baseUrl}/infer`, {
         method: 'POST',
+        headers,
         body: formData,
         signal: AbortSignal.timeout(30000),
       });

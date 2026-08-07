@@ -91,6 +91,8 @@ export const envValidationSchema = Joi.object({
   MOCK_GEMINI: Joi.string().valid('true', 'false').allow('').optional(),
   // T9: 개발/통합 테스트용 mock 진단 추론. 운영에서는 반드시 false여야 함.
   MOCK_INFERENCE: Joi.string().valid('true', 'false').allow('').optional(),
+  // N13: NestJS↔inference-service 내부망 인증 shared secret. INFERENCE_SERVICE_URL과 함께 설정.
+  INFERENCE_SHARED_SECRET: Joi.string().allow('').optional(),
 
   // N0/N11: Rate Limit 설정 — 분당 허용 요청 수와 TTL(ms).
   // N11부터 THROTTLE_STORAGE=redis(또는 auto+REDIS_URL) 시 Redis 분산 저장소 사용.

@@ -52,8 +52,14 @@ import { StorageModule } from '../storage/storage.module';
 
         const inferenceServiceUrl = config.get<string>('INFERENCE_SERVICE_URL');
         if (inferenceServiceUrl) {
+          const inferenceSecret = config.get<string>('INFERENCE_SHARED_SECRET', '');
+          if (!inferenceSecret) {
+            logger.warn(
+              'INFERENCE_SHARED_SECRET 미설정 — inference-service가 401/503을 반환합니다. 운영에서는 반드시 설정하세요 (N13).',
+            );
+          }
           logger.log(`PythonInferenceProvider 연결: ${inferenceServiceUrl}`);
-          return new PythonInferenceProvider(inferenceServiceUrl);
+          return new PythonInferenceProvider(inferenceServiceUrl, inferenceSecret);
         }
 
         logger.warn(

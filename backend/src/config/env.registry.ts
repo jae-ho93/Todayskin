@@ -74,6 +74,8 @@ export const ENV_REGISTRY: EnvVarDefinition[] = [
   { key: 'MOCK_GEMINI', owner: 'ai', description: 'Use Gemini mock responses (dev/test only)', requiredIn: 'never', safeDefault: 'false', secret: false, mockFlag: true, expiry: '2027-01-01' },
   { key: 'MOCK_INFERENCE', owner: 'diagnosis', description: 'Use mock diagnosis inference (dev/test only)', requiredIn: 'never', safeDefault: 'false', secret: false, mockFlag: true, expiry: '2027-01-01' },
   { key: 'INFERENCE_SERVICE_URL', owner: 'diagnosis', description: 'Python inference service base URL', requiredIn: 'never', secret: false },
+  // N13: NestJS↔inference-service 내부망 인증 shared secret (INFERENCE_SERVICE_URL과 함께 설정).
+  { key: 'INFERENCE_SHARED_SECRET', owner: 'diagnosis', description: 'Shared secret for NestJS↔inference-service internal auth', requiredIn: 'never', secret: true },
 
   { key: 'THROTTLE_LIMIT', owner: 'security', description: 'Rate limit max requests per window', requiredIn: 'never', safeDefault: 60, secret: false },
   { key: 'THROTTLE_TTL_MS', owner: 'security', description: 'Rate limit window ms', requiredIn: 'never', safeDefault: 60_000, secret: false },
