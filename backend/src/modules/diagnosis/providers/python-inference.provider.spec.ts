@@ -25,19 +25,23 @@ describe('PythonInferenceProvider', () => {
     jest.restoreAllMocks();
   });
 
-  it('정상 응답을 InferenceResult로 반환', async () => {
+  it('정상 응답을 InferenceResult로 반환 + N13 인증 헤더 전송', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => validResponse,
     }) as unknown as typeof fetch;
 
-    const provider = new PythonInferenceProvider('http://127.0.0.1:8000');
+    const provider = new PythonInferenceProvider('http://127.0.0.1:8000', 'test-shared-secret');
     const result = await provider.infer(images);
 
     expect(result).toEqual(validResponse);
     expect(global.fetch).toHaveBeenCalledWith(
       'http://127.0.0.1:8000/infer',
-      expect.objectContaining({ method: 'POST' }),
+      expect.objectContaining({
+        method: 'POST',
+        // N13: 내부망 인증 shared secret이 X-Inference-Key로 전달된다.
+        headers: expect.objectContaining({ 'x-inference-key': 'test-shared-secret' }),
+      }),
     );
   });
 
@@ -48,14 +52,14 @@ describe('PythonInferenceProvider', () => {
       text: async () => '얼굴을 인식할 수 없습니다',
     }) as unknown as typeof fetch;
 
-    const provider = new PythonInferenceProvider('http://127.0.0.1:8000');
+    const provider = new PythonInferenceProvider('http://127.0.0.1:8000', 'test-shared-secret');
     await expect(provider.infer(images)).rejects.toThrow(/HTTP 422/);
   });
 
   it('네트워크 오류 시 예외', async () => {
     global.fetch = jest.fn().mockRejectedValue(new Error('ECONNREFUSED')) as unknown as typeof fetch;
 
-    const provider = new PythonInferenceProvider('http://127.0.0.1:8000');
+    const provider = new PythonInferenceProvider('http://127.0.0.1:8000', 'test-shared-secret');
     await expect(provider.infer(images)).rejects.toThrow(/ECONNREFUSED/);
   });
 
@@ -65,7 +69,7 @@ describe('PythonInferenceProvider', () => {
       json: async () => ({ unexpected: true }),
     }) as unknown as typeof fetch;
 
-    const provider = new PythonInferenceProvider('http://127.0.0.1:8000');
+    const provider = new PythonInferenceProvider('http://127.0.0.1:8000', 'test-shared-secret');
     await expect(provider.infer(images)).rejects.toThrow(/Unexpected inference service response/);
   });
 });

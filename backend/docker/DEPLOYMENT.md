@@ -124,7 +124,7 @@ Task definition 템플릿:
 - `DATABASE_URL`, `REDIS_URL`
 - `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`
 - `KMA_API_KEY`, `AIRKOREA_API_KEY`, `GEMINI_API_KEY`
-- `ALLOWED_ORIGINS`, `S3_BUCKET`, `INFERENCE_SERVICE_URL`, `SENTRY_DSN`
+- `ALLOWED_ORIGINS`, `S3_BUCKET`, `INFERENCE_SERVICE_URL`, `INFERENCE_SHARED_SECRET`, `SENTRY_DSN`
 
 IAM:
 
@@ -132,6 +132,19 @@ IAM:
 - **backend task role**: S3 객체 읽기/쓰기(동의 이미지), (선택) KMS
 - **inference task role**: 최소 권한 (로그 외 외부 리소스 불필요)
 - **migrate task role**: RDS 네트워크 접근 + `DATABASE_URL` secret read
+
+### 네트워크 보안 (N13)
+
+inference-service는 **내부망 전용** 서비스다. 무제한 이미지 처리 endpoint로
+노출되지 않도록 아래를 지킨다:
+
+- **Security group**: inference task의 SG는 8000번 포트 ingress를 **backend task의 SG로만**
+  허용한다 (SG reference rule). 인터넷 게이트웨이 / 퍼블릭 IP / ALB/NLB는 두지 않는다.
+- **내부 인증**: `/infer`는 `X-Inference-Key`(shared secret `INFERENCE_SHARED_SECRET`)를
+  요구한다. 같은 VPC 안에서도 backend만 호출 가능하다. secret 미설정 시 fail-closed(503).
+- GitHub Variables `ECS_SECURITY_GROUPS`에는 backend/inference 각각의 SG id를 지정한다.
+  (ECS service가 task에 연결된 SG를 그대로 사용하므로, 배포 시에도 SG reference rule이 유지된다.)
+- `/health`는 (외부 ALB/헬스체크용으로) 열 수 있지만 `/infer`·`/metrics`는 내부망으로만 노출한다.
 
 ### RDS · S3 · CloudWatch
 
@@ -185,6 +198,7 @@ IAM:
 - `DATABASE_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`
 - `S3_BUCKET` (Memory fallback 금지)
 - `INFERENCE_SERVICE_URL`
+- `INFERENCE_SHARED_SECRET` (inference 서비스와 동일한 값 — N13)
 - 실제 SMS OTP 게이트웨이 구현 완료 후 `SMS_API_KEY`, `SMS_SENDER`, `SMS_ENDPOINT`
 
 ### 헬스체크 (live / ready 분리 — N6)

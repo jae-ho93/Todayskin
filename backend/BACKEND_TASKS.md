@@ -830,13 +830,15 @@ Jest coverageThreshold를 반영했다.
 
 브랜치: `feature/inference-service-hardening`
 
-- [ ] NestJS↔FastAPI 내부 인증(shared secret 또는 service identity)
-- [ ] FastAPI 업로드 크기·content type 상한을 NestJS와 동일하게 적용
-- [ ] queue 대기와 추론 실행 timeout·동시성 지표
-- [ ] ECS security group에서 backend task만 `/infer` 접근 허용
-- [ ] 401/413/422/500 계약 테스트
+- [x] NestJS↔FastAPI 내부 인증(shared secret 또는 service identity)
+- [x] FastAPI 업로드 크기·content type 상한을 NestJS와 동일하게 적용
+- [x] queue 대기와 추론 실행 timeout·동시성 지표
+- [x] ECS security group에서 backend task만 `/infer` 접근 허용
+- [x] 401/413/422/500 계약 테스트
 
 완료 기준: inference-service가 내부망 오배치나 직접 호출에도 무제한 이미지 처리 endpoint로 노출되지 않는다.
+
+> ✅ 완료 (PR, `feature/inference-service-hardening`): `X-Inference-Key`(INFERENCE_SHARED_SECRET) 내부 인증 + 미설정 시 fail-closed(503). FastAPI 업로드 상한을 NestJS와 동일(10MB/413, jpeg·png·webp/415)하게 적용. 추론 timeout(25s→503) + lock 대기/실행 시간·in-flight·status 카운터를 의존성 없는 `/metrics`(Prometheus 텍스트)로 노출. ECS SG(backend만 `/infer` 접근)·secret 주입·DEPLOYMENT 문서화. 계약 테스트(401/413/415/422/500/503/200)는 pytest로 모델 스택을 stub해 의존성 없이 실행.
 
 ### N14. 외부 AI 호출 멱등성
 

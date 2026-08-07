@@ -1,0 +1,5 @@
+# N13 계약 테스트 전용 (런타임 이미지에 포함하지 않는다).
+# 테스트는 analyzer/part_mapping을 stub하므로 torch/mediapipe가 필요 없다.
+# 실행: pip install -r requirements-dev.txt && pytest tests/
+pytest==8.3.4
+httpx==0.28.1
