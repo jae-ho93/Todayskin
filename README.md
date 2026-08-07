@@ -19,8 +19,8 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/T0--T14-완료-38A169?style=flat-square" alt="T0-T14 done">
-  <img src="https://img.shields.io/badge/N0--N8-완료-38A169?style=flat-square" alt="N0-N8 done">
-  <img src="https://img.shields.io/badge/N9%2B-운영%20공개%20전%20후속작업-D69E2E?style=flat-square" alt="N9+ pending">
+  <img src="https://img.shields.io/badge/N0--N22-완료-38A169?style=flat-square" alt="N0-N22 done">
+  <img src="https://img.shields.io/badge/N16-AWS%20첫%20배포만%20남음-D69E2E?style=flat-square" alt="N16 AWS deploy pending">
 </p>
 
 ---
@@ -56,10 +56,10 @@ flowchart LR
 ## 진행 상태
 
 - ✅ **T0~T14** — 초기 구조(NestJS/Prisma/인증/진단/추천 등 MVP 기능) 완료
-- ✅ **N0~N8** — 운영 보안, 구조화 로깅, S3+동의 연동, BullMQ, ECS 배포, Soft Delete, 레거시 FastAPI 정리, 히스토리 캘린더까지 완료
-- ⏳ **N9 이후** — 운영 공개 전 후속 작업. 특히:
-  - 실제 SMS OTP 게이트웨이 연결 (현재는 개발용 Mock OTP만 동작)
-  - AWS 운영 리소스 프로비저닝 및 첫 배포
+- ✅ **N0~N22** — 운영 보안·SMS OTP·S3 동의·BullMQ·ECS 배포·Soft Delete·캘린더·서버 소유 날씨 계약·inference 경계 보호·외부 AI 멱등성·세션·OTP 남용 방지 등 완료
+- ⏳ **N16** — AWS 운영 리소스 프로비저닝 및 첫 배포 (계정·시크릿·승인자 준비 후 진행)
+
+프론트 범위에서 완료된 작업(N15 캘린더 연결, N18 세션 수명, N19 설정 화면)의 기록은 `backend/BACKEND_TASKS.md`의 `프론트 범위 완료 기록`에 보존하고, 미완료 프론트 작업(N23 EAS 배포)은 프론트 팀 문서에서 관리한다.
 
 ## 문서
 

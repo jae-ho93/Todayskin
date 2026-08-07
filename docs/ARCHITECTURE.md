@@ -40,7 +40,7 @@
   - 스키마: backend/prisma/schema.prisma.
 - Redis
   - 날씨 캐시와 BullMQ broker로 사용한다.
-  - Refresh Token은 PostgreSQL에 해시로 저장하며, 현재 HTTP Rate Limit 저장소는 인스턴스 메모리다.
+  - Refresh Token은 PostgreSQL에 해시로 저장한다. HTTP Rate Limit은 N11부터 Redis 분산 저장소를 사용한다.
 - BullMQ
   - 추천 생성, 피부 패턴 분석, 알림 발송 등 긴 작업을 비동기 처리한다.
   - Redis가 없는 개발·테스트 환경은 동일 상태 계약의 Inline dispatcher를 사용한다.
@@ -66,8 +66,8 @@
 - Pino Logger.
 - Sentry.
 - JWT Access Token + Refresh Token 인증과 OTP 검증 흐름.
-- Helmet, Validation, 인스턴스 단위 Rate Limit.
-- 운영 SMS OTP 게이트웨이 호출은 미구현 상태이므로 운영 공개 전 연결과 실패 정책을 완료한다.
+- Helmet, Validation, Rate Limit(N11부터 Redis 분산 저장소 — `THROTTLE_STORAGE=redis`/auto).
+- 운영 SMS OTP 게이트웨이(알리고) 호출은 N9에서 구현 완료. 번호별 일일 발송 한도와 코드 해시 저장은 N22에서 강화했다.
 
 ## 6. 히스토리 기능 (캘린더 중심)
 
