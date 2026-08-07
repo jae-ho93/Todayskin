@@ -888,7 +888,9 @@ Jest coverageThreshold를 반영했다.
 완료 기준: `npm test`가 CI·로컬에서 모두 초록이고 main CI가 복구된다.
 
 > 2026-08-07 완료: 로컬 `npm test` 190 passed(+13 skipped=DB 스위트), `tsc --noEmit` 클린, `npm run build`/`lint` 통과, `npm audit --audit-level=high` 0 vulnerabilities.
-> `test:cov`(coverage threshold)·`test:e2e`는 로컬 postgres 부재로 미실행 — 다음 CI 런에서 검증한다.
+> e2e 드리프트 1건 추가 수정: N11 이후 `WeatherService`가 `redisService.incrementCounter`를 호출하는데
+> e2e 4개 스펙(`api-contract`/`consent-image`/`calendar-history`/`diagnosis-pattern`)의 RedisService mock에 메서드가 없어 `/weather`가 500 — mock에 `incrementCounter` 추가.
+> **PR #43 CI에서 `backend-build-test`(build→test→test:cov→test:e2e→lint→audit)와 `frontend-typecheck` 모두 초록 확인** (#25 이후 첫 초록).
 > 참고: 로컬에서 DB 없이 `npm run test:cov`를 돌리면 auth/prisma 스위트가 skip되어 `auth.service.ts` coverage threshold(60%)에 미달할 수 있다.
 
 ### N18. 앱 세션 토큰 수명 관리
