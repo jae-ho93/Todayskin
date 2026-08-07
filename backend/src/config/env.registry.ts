@@ -103,6 +103,7 @@ export const ENV_REGISTRY: EnvVarDefinition[] = [
   { key: 'SOFT_DELETE_PURGE_INTERVAL_MS', owner: 'platform', description: 'Purge scheduler interval ms (0=disabled)', requiredIn: 'never', safeDefault: 3_600_000, secret: false },
 
   { key: 'WEATHER_COLLECTION_INTERVAL_MS', owner: 'platform', description: 'Background weather collection scheduler interval ms (0=disabled)', requiredIn: 'never', safeDefault: 3_600_000, secret: false },
+  { key: 'WEATHER_COLLECTOR_ENABLED', owner: 'platform', description: 'Enable background weather collection scheduler (keep true on exactly one ECS task)', requiredIn: 'never', safeDefault: 'true', secret: false },
 ];
 
 const REGISTRY_BY_KEY = new Map(ENV_REGISTRY.map((d) => [d.key, d]));

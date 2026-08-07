@@ -23,7 +23,7 @@ describe('PatternService', () => {
     prisma = {
       diagnosis: { findMany: jest.fn() },
       recommendation: { findMany: jest.fn().mockResolvedValue([]) },
-      weatherSnapshot: { aggregate: jest.fn().mockResolvedValue(emptyMax()) },
+      weatherSnapshot: { findMany: jest.fn().mockResolvedValue([]) },
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -36,27 +36,28 @@ describe('PatternService', () => {
     service = moduleRef.get(PatternService);
   });
 
-  /** diagnosis.findMany 결과에 맞춰 aggregate mock을 day(KST)별로 연결한다. */
-  function wireAggregateToDiagnoses(diags: any[]) {
-    prisma.weatherSnapshot.aggregate.mockImplementation(
-      async ({ where }: { where: { observedAt: { gte: Date } } }) => {
-        const match = diags.find(
-          (d) =>
-            d.weatherSnapshot &&
-            kstDayKey(d.capturedAt) === where.observedAt.gte.toISOString(),
-        );
-        if (!match) return emptyMax();
-        const s = match.weatherSnapshot;
-        return {
-          _max: {
-            uvIndexPeak: s.uvIndexPeak,
-            pm25: s.pm25,
-            pm10: s.pm10,
-            ozonePpm: s.ozonePpm,
-            caiValue: s.caiValue,
-          },
-        };
-      },
+  /**
+   * N21: 일괄 집계(findMany) mock — where.regionName.in에 해당하는 진단의 스냅샷을
+   * (지역, 날짜)별 최댓값 계산용 원본 행으로 돌려준다.
+   */
+  function wireSnapshotsToDiagnoses(diags: any[]) {
+    prisma.weatherSnapshot.findMany.mockImplementation(
+      async ({ where }: { where: { regionName: { in: string[] } } }) =>
+        diags
+          .filter(
+            (d) =>
+              d.weatherSnapshot &&
+              where.regionName.in.includes(d.weatherSnapshot.regionName),
+          )
+          .map((d) => ({
+            regionName: d.weatherSnapshot.regionName,
+            observedAt: d.capturedAt,
+            uvIndexPeak: d.weatherSnapshot.uvIndexPeak,
+            pm25: d.weatherSnapshot.pm25,
+            pm10: d.weatherSnapshot.pm10,
+            ozonePpm: d.weatherSnapshot.ozonePpm,
+            caiValue: d.weatherSnapshot.caiValue,
+          })),
     );
   }
 
@@ -67,7 +68,7 @@ describe('PatternService', () => {
     it('진단이 MIN_SAMPLES 미만이면 200 + LOCKED를 반환한다', async () => {
       const diags = buildDiagnoses(3);
       prisma.diagnosis.findMany.mockResolvedValue(diags);
-      wireAggregateToDiagnoses(diags);
+      wireSnapshotsToDiagnoses(diags);
       const result = await service.getPattern(1);
 
       expect(result.status).toBe(PatternStatus.LOCKED);
@@ -93,7 +94,7 @@ describe('PatternService', () => {
     it('최소 샘플 이상이면 READY이고 상관 분석 결과를 반환한다', async () => {
       const diags = buildDiagnoses(6);
       prisma.diagnosis.findMany.mockResolvedValue(diags);
-      wireAggregateToDiagnoses(diags);
+      wireSnapshotsToDiagnoses(diags);
       const result = await service.getPattern(1);
 
       expect(result.status).toBe(PatternStatus.READY);
@@ -113,7 +114,7 @@ describe('PatternService', () => {
       // 무작위 noise — 상관이 거의 0에 가까운 데이터.
       const diags = buildNoiseDiagnoses(8);
       prisma.diagnosis.findMany.mockResolvedValue(diags);
-      wireAggregateToDiagnoses(diags);
+      wireSnapshotsToDiagnoses(diags);
       const result = await service.getPattern(1);
 
       // 노이즈에서는 NEGLIGIBLE만 나오므로 correlations가 비거나 매우 적어야 한다.
@@ -125,7 +126,7 @@ describe('PatternService', () => {
     it('결과는 |r| 내림차순으로 정렬된다', async () => {
       const diags = buildDiagnoses(8);
       prisma.diagnosis.findMany.mockResolvedValue(diags);
-      wireAggregateToDiagnoses(diags);
+      wireSnapshotsToDiagnoses(diags);
       const result = await service.getPattern(1);
 
       const abs = result.correlations.map((c) => Math.abs(c.r));
@@ -136,7 +137,7 @@ describe('PatternService', () => {
     it('C등급 추천 id를 recommendationIds에 반환한다', async () => {
       const diags = buildDiagnoses(6);
       prisma.diagnosis.findMany.mockResolvedValue(diags);
-      wireAggregateToDiagnoses(diags);
+      wireSnapshotsToDiagnoses(diags);
       prisma.recommendation.findMany.mockResolvedValue([
         { id: 'rec-c-1' },
         { id: 'rec-c-2' },
@@ -147,49 +148,71 @@ describe('PatternService', () => {
     });
   });
 
-  describe('getPattern — weatherSnapshot 없음', () => {
-    it('weatherSnapshot이 null인 진단은 시계열에서 제외된다', async () => {
-      const diags = buildDiagnoses(6).map((d: any, i: number) =>
-        i % 2 === 0 ? { ...d, weatherSnapshot: null } : d,
+  describe('getPattern — weatherSnapshot 없음 (N21 실내 사용자 폴백)', () => {
+    it('weatherSnapshot이 없는 진단도 기본 지역 스냅샷으로 시계열에 포함된다', async () => {
+      // 실내 사용자 — 모든 진단에 스냅샷이 없다. 기본 지역(서울특별시) 스냅샷만 존재.
+      const diags = buildDiagnoses(6);
+      const noSnapshot = diags.map((d: any) => ({ ...d, weatherSnapshot: null }));
+      prisma.diagnosis.findMany.mockResolvedValue(noSnapshot);
+      prisma.weatherSnapshot.findMany.mockResolvedValue(
+        diags.map((d: any) => ({
+          regionName: '서울특별시',
+          observedAt: d.capturedAt,
+          uvIndexPeak: d.weatherSnapshot.uvIndexPeak,
+          pm25: d.weatherSnapshot.pm25,
+          pm10: d.weatherSnapshot.pm10,
+          ozonePpm: d.weatherSnapshot.ozonePpm,
+          caiValue: d.weatherSnapshot.caiValue,
+        })),
       );
-      prisma.diagnosis.findMany.mockResolvedValue(diags);
-      wireAggregateToDiagnoses(diags);
       const result = await service.getPattern(1);
 
-      // 6개 중 3개만 유효 → 상관 계산 쌍이 부족할 수 있지만 status는 READY다.
-      // (진단 총 6개 >= MIN_SAMPLES이므로 READY. 유효 시계열 3개는 MIN_PAIRS_FOR_CORR=3 이상.)
+      // 스냅샷이 없어도 READY가 되고, 기본 지역 환경 데이터로 상관이 계산된다.
       expect(result.status).toBe(PatternStatus.READY);
+      const pm25Corr = result.correlations.find(
+        (c) => c.skinMetric === 'overallScore' && c.envMetric === 'pm25',
+      );
+      expect(pm25Corr).toBeDefined();
+      expect(pm25Corr!.sampleSize).toBeGreaterThanOrEqual(3);
+    });
+
+    it('N21: collectedDays를 KST 달력일 기준으로 센다', async () => {
+      // 서로 다른 UTC 날짜지만 같은 KST 날짜(2026-01-01)인 두 진단:
+      // - 2025-12-31T16:00:00Z = KST 2026-01-01 01:00
+      // - 2026-01-01T02:00:00Z = KST 2026-01-01 11:00
+      // UTC 기준으론 2일, KST 기준 1일 — 기존 UTC 구현이었다면 2가 나와야 한다.
+      const diags = [
+        new Date('2025-12-31T16:00:00Z'),
+        new Date('2026-01-01T02:00:00Z'),
+      ].map((d, i) => ({
+        id: `kst-${i}`,
+        capturedAt: d,
+        overallScore: 60,
+        skinMetrics: [],
+        weatherSnapshot: null,
+      }));
+      prisma.diagnosis.findMany.mockResolvedValue(diags);
+      const result = await service.getPattern(1);
+
+      // 진단 2개 < MIN_SAMPLES → LOCKED지만 collectedDays는 KST 기준 1이어야 한다.
+      expect(result.status).toBe(PatternStatus.LOCKED);
+      expect(result.collectedDays).toBe(1);
+    });
+
+    it('N21: 일괄 집계 — 진단 수와 무관하게 weatherSnapshot을 정확히 1회만 조회한다', async () => {
+      // N+1 회귀 방지: 6개 진단이어도 findMany는 1회여야 한다.
+      const diags = buildDiagnoses(6);
+      prisma.diagnosis.findMany.mockResolvedValue(diags);
+      wireSnapshotsToDiagnoses(diags);
+      await service.getPattern(1);
+
+      expect(prisma.weatherSnapshot.findMany).toHaveBeenCalledTimes(1);
     });
   });
 });
 
 // ── 테스트 데이터 빌더 ──────────────────────────
 
-const EMPTY_MAX = {
-  _max: {
-    uvIndexPeak: null,
-    pm25: null,
-    pm10: null,
-    ozonePpm: null,
-    caiValue: null,
-  },
-};
-
-function emptyMax() {
-  return EMPTY_MAX;
-}
-
-/**
- * pattern.service.ts의 kstDayBounds(start)와 동일한 계산 — aggregate mock이 어느
- * 진단(day)의 where.observedAt.gte에 해당하는지 찾기 위한 키.
- */
-function kstDayKey(date: Date): string {
-  const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
-  const kst = new Date(date.getTime() + KST_OFFSET_MS);
-  const startUtcMs =
-    Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate()) - KST_OFFSET_MS;
-  return new Date(startUtcMs).toISOString();
-}
 
 /**
  * overallScore는 시간에 따라 증가, pm25는 감소하는 시계열.

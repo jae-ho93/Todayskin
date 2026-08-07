@@ -201,6 +201,20 @@ inference-service는 **내부망 전용** 서비스다. 무제한 이미지 처�
 - `INFERENCE_SHARED_SECRET` (inference 서비스와 동일한 값 — N13)
 - 실제 SMS OTP 게이트웨이 구현 완료 후 `SMS_API_KEY`, `SMS_SENDER`, `SMS_ENDPOINT`
 
+### 날씨 수집 스케줄러 (N21 싱글턴)
+
+`WeatherCollectionScheduler`는 기상청/에어코리아를 주기적으로 호출한다. ECS task가
+여러 개 뜨면 **각 task마다** 스케줄러가 실행되어 정부 API를 중복 호출하므로,
+backend service의 **정확히 1개 task만** `WEATHER_COLLECTOR_ENABLED=true`로 유지한다:
+
+- **한계**: ECS service의 모든 task는 같은 task definition/env를 공유하므로, 같은
+  service 안에서는 "1개만 true"로 둘 수 없다. 실제로는 아래 중 하나로 운영한다.
+  1. backend service를 **task 1개로 유지**(기본값 `WEATHER_COLLECTOR_ENABLED=true`)
+  2. 또는 스케줄러 전용 task(service)를 별도로 두고 나머지 backend task는
+     `WEATHER_COLLECTOR_ENABLED=false`로 설정
+- `WEATHER_COLLECTION_INTERVAL_MS`(기본 1시간)·`REGION_STAGGER_MS`(3초)로 호출 빈도 조정
+- task 수를 늘려야 하면 (2) 방식으로 전환한다. 모든 task가 true면 중복 호출이 계속된다.
+
 ### 헬스체크 (live / ready 분리 — N6)
 
 - `GET /health` — 현재 Dockerfile / ECS healthcheck 기준

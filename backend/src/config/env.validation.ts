@@ -137,6 +137,8 @@ export const envValidationSchema = Joi.object({
   // 개인 패턴 분석(T10)이 그날의 실제 최고 UV/오존/미세먼지에 가깝게 집계되도록,
   // 사용자가 앱을 안 켜도 등록된 전체 지역(REGIONS)을 주기적으로 수집해둔다.
   WEATHER_COLLECTION_INTERVAL_MS: Joi.number().integer().min(0).default(3_600_000),
+  // N21: ECS 다중 task에서 스케줄러 중복 실행 방지 — 정확히 1개 task만 true 유지.
+  WEATHER_COLLECTOR_ENABLED: Joi.string().valid('true', 'false').default('true'),
 
   // N6: production unknown key 검사에 사용하는 선언 목록(선택)
   APP_ENV_KEYS: Joi.string().allow('').optional(),

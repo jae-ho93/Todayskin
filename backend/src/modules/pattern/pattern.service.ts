@@ -7,6 +7,7 @@ import { PatternSummaryDto } from './dto/pattern-summary.dto';
 import { PatternCorrelationDto } from './dto/pattern-correlation.dto';
 import { FacePart } from '../diagnosis/enums/face-part.enum';
 import { notDeletedWhere } from '../../common/soft-delete/soft-delete.policy';
+import { DEFAULT_REGION } from '../weather/regions/region.registry';
 
 /**
  * 분석 정책 (T10 "분석 대상, 결측값, 최소 샘플 수 정책 결정").
@@ -58,12 +59,31 @@ type EnvRow = {
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
+// N21: 실내 사용자(wentOutside=false) 진단은 weatherSnapshot이 없으므로
+// 환경 지표로 기본 지역(서울)의 그날 스냅샷을 참조한다.
+const DEFAULT_REGION_NAME = DEFAULT_REGION.cityName;
+
 /** date가 속한 KST 달력일(00:00~24:00 KST)의 UTC 경계를 계산한다. */
 function kstDayBounds(date: Date): { start: Date; end: Date } {
   const kst = new Date(date.getTime() + KST_OFFSET_MS);
   const startUtcMs =
     Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate()) - KST_OFFSET_MS;
   return { start: new Date(startUtcMs), end: new Date(startUtcMs + 24 * 60 * 60 * 1000) };
+}
+
+/** (지역, KST 달력일) 집계 키. */
+function dailyKey(regionName: string, date: Date): string {
+  return `${regionName}|${new Date(date.getTime() + KST_OFFSET_MS).toISOString().slice(0, 10)}`;
+}
+
+function maxOr(a: number | null | undefined, b: number | null | undefined): number | null {
+  if (a == null) return b ?? null;
+  if (b == null) return a;
+  return Math.max(a, b);
+}
+
+function emptyEnv(): EnvRow {
+  return { uvIndexPeak: null, pm25: null, pm10: null, ozonePpm: null, caiValue: null };
 }
 
 /**
@@ -92,8 +112,10 @@ export class PatternService {
    * 5. 사용자의 C등급 추천 id를 함께 반환(연결).
    */
   async getPattern(userId: number): Promise<PatternSummaryDto> {
+    // N21: weatherSnapshotId 조건을 제거 — 실내 사용자(wentOutside=false) 진단도
+    // 기본 지역 스냅샷 참조로 시계열에 포함시켜 패턴이 영원히 LOCKED에 머물지 않게 한다.
     const diagnoses = await this.prisma.diagnosis.findMany({
-      where: notDeletedWhere({ userId, weatherSnapshotId: { not: null } }),
+      where: notDeletedWhere({ userId }),
       orderBy: { capturedAt: 'asc' },
       include: {
         skinMetrics: true,
@@ -115,19 +137,24 @@ export class PatternService {
       };
     }
 
-    // 2) 시계열 구성. weatherSnapshot이 있는 진단만 사용하고, 그 진단 시각의 스냅샷 값 대신
-    // 같은 지역·같은 날(KST)의 최댓값(그날 가장 심한 노출)을 환경 지표로 쓴다.
-    const withSnapshot = diagnoses.filter(
-      (d) => d.weatherSnapshot !== null,
-    ) as (typeof diagnoses[number] & { weatherSnapshot: NonNullable<(typeof diagnoses)[number]['weatherSnapshot']> })[];
-    const series: SeriesPoint[] = await Promise.all(
-      withSnapshot.map(async (d) => ({
-        capturedAt: d.capturedAt,
-        overallScore: d.overallScore,
-        metrics: d.skinMetrics,
-        env: await this.collectDailyPeakEnv(d.weatherSnapshot.regionName, d.capturedAt),
-      })),
-    );
+    // 2) 시계열 구성. 그 진단 시각의 스냅샷 값 대신 같은 지역·같은 날(KST)의
+    // 최댓값(그날 가장 심한 노출)을 환경 지표로 쓴다.
+    // 스냅샷이 연결된 진단은 그 지역을, 연결이 없는 진단(실내 사용자)은 기본 지역을 참조한다.
+    // 주의: 실외/실내 진단이 섞인 사용자는 한 시계열에 서로 다른 지역의 환경 데이터가
+    // 섞일 수 있다(기본 지역 폴백은 정책 결정 — N21). 상관 분석에 약간의 노이즈가 될 수 있다.
+    const points = diagnoses.map((d) => ({
+      capturedAt: d.capturedAt,
+      overallScore: d.overallScore,
+      metrics: d.skinMetrics,
+      regionName: d.weatherSnapshot?.regionName ?? DEFAULT_REGION_NAME,
+    }));
+    const peakByDay = await this.collectDailyPeaks(points);
+    const series: SeriesPoint[] = points.map((p) => ({
+      capturedAt: p.capturedAt,
+      overallScore: p.overallScore,
+      metrics: p.metrics,
+      env: peakByDay.get(dailyKey(p.regionName, p.capturedAt)) ?? emptyEnv(),
+    }));
 
     // 3) 피부 지표 × 환경 지표 상관 계산.
     const correlations = this.computeCorrelations(series);
@@ -146,23 +173,52 @@ export class PatternService {
   }
 
   /**
-   * regionName·capturedAt이 속한 KST 달력일 동안 수집된 모든 WeatherSnapshot 중
-   * 지표별 최댓값(그날 가장 심한 노출)을 계산한다.
+   * N21: (지역, KST 달력일)별 지표 최댓값을 일괄 조회한다.
+   * 기존 구현은 진단마다 aggregate 쿼리 1회(N+1)였지만, 조회 범위를 진단들의
+   * KST 날짜 [min start, max end)로 좁힌 findMany 1회 + 메모리 max로 바꿔
+   * 쿼리 수를 진단 수와 무관하게 만든다.
    * 그날 수집된 스냅샷이 적을수록(앱을 그날 거의 안 켰을수록) 실제 최고치와의 오차가 커질 수 있다.
    */
-  private async collectDailyPeakEnv(regionName: string, capturedAt: Date): Promise<EnvRow> {
-    const { start, end } = kstDayBounds(capturedAt);
-    const result = await this.prisma.weatherSnapshot.aggregate({
-      where: { regionName, observedAt: { gte: start, lt: end } },
-      _max: { uvIndexPeak: true, pm25: true, pm10: true, ozonePpm: true, caiValue: true },
+  private async collectDailyPeaks(
+    points: { regionName: string; capturedAt: Date }[],
+  ): Promise<Map<string, EnvRow>> {
+    const map = new Map<string, EnvRow>();
+    if (points.length === 0) return map;
+
+    const regions = new Set(points.map((p) => p.regionName));
+    const bounds: { start: Date; end: Date }[] = points.map((p) =>
+      kstDayBounds(p.capturedAt),
+    );
+    const start = bounds.reduce((a, b) => (a.start < b.start ? a : b), bounds[0]).start;
+    const end = bounds.reduce((a, b) => (a.end > b.end ? a : b), bounds[0]).end;
+
+    const snapshots = await this.prisma.weatherSnapshot.findMany({
+      where: {
+        regionName: { in: [...regions] },
+        observedAt: { gte: start, lt: end },
+      },
+      select: {
+        regionName: true,
+        observedAt: true,
+        uvIndexPeak: true,
+        pm25: true,
+        pm10: true,
+        ozonePpm: true,
+        caiValue: true,
+      },
     });
-    return {
-      uvIndexPeak: result._max.uvIndexPeak,
-      pm25: result._max.pm25,
-      pm10: result._max.pm10,
-      ozonePpm: result._max.ozonePpm,
-      caiValue: result._max.caiValue,
-    };
+    for (const s of snapshots) {
+      const key = dailyKey(s.regionName, s.observedAt);
+      const cur = map.get(key);
+      map.set(key, {
+        uvIndexPeak: maxOr(cur?.uvIndexPeak, s.uvIndexPeak),
+        pm25: maxOr(cur?.pm25, s.pm25),
+        pm10: maxOr(cur?.pm10, s.pm10),
+        ozonePpm: maxOr(cur?.ozonePpm, s.ozonePpm),
+        caiValue: maxOr(cur?.caiValue, s.caiValue),
+      });
+    }
+    return map;
   }
 
   // ── 상관 계산 ──────────────────────────────────
@@ -308,12 +364,13 @@ export class PatternService {
 
   /**
    * 고유 날짜(YYYY-MM-DD 기준) 수. collectedDays 계산용.
+   * N21: UTC가 아니라 KST 달력일 기준으로 센다 (캘린더 히스토리 등 타 모듈과 정합).
    * 진단 캡처 시각의 날짜가 다르면 별도 일수로 센다.
    */
   private countDistinctDays(dates: Date[]): number {
     const days = new Set<string>();
     for (const d of dates) {
-      days.add(d.toISOString().slice(0, 10));
+      days.add(new Date(d.getTime() + KST_OFFSET_MS).toISOString().slice(0, 10));
     }
     return days.size;
   }
