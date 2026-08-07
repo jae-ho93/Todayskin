@@ -90,6 +90,13 @@ export class HealthService {
       detail: missing.length ? `missing=${missing.join(',')}` : undefined,
     });
 
+    // N11: 운영 필수 외부 의존성 — inference·SMS.
+    // inference: MOCK_INFERENCE=false인 운영에서 INFERENCE_SERVICE_URL 누락 시
+    //   진단 기능이 불가능하므로 ready를 실패시킨다(required).
+    // SMS: N9에서 env.registry requiredIn production으로 이미 required_config에 포함.
+    this.pushInferenceDependency(dependencies);
+    this.pushSmsDependency(dependencies);
+
     // Redis — 선택적. 다운이어도 ready를 무조건 실패시키지 않음.
     try {
       const url = (this.config.get<string>('REDIS_URL') ?? '').trim();
@@ -128,5 +135,59 @@ export class HealthService {
       timestamp: new Date().toISOString(),
       dependencies,
     };
+  }
+
+  /**
+   * N11: inference 의존성. 운영(MOCK_INFERENCE=false)에서
+   * INFERENCE_SERVICE_URL이 없으면 required down — 진단이 동작할 수 없기 때문.
+   * 개발/테스트(mock)에서는 skipped/optional로 취급한다.
+   */
+  private pushInferenceDependency(dependencies: HealthDependencyDto[]): void {
+    const isProduction = this.config.get<string>('NODE_ENV') === 'production';
+    const mockInference =
+      (this.config.get<string>('MOCK_INFERENCE') ?? '').trim().toLowerCase() ===
+      'true';
+    const url = (this.config.get<string>('INFERENCE_SERVICE_URL') ?? '').trim();
+
+    if (mockInference || !url) {
+      // mock이거나 URL 미설정: 개발/테스트는 mock fallback이 가능하므로 skipped.
+      // production에서만 URL 누락을 required down으로 강제한다(진단 불가).
+      dependencies.push({
+        name: 'inference',
+        status: mockInference ? 'skipped' : isProduction ? 'down' : 'skipped',
+        required: !mockInference && isProduction,
+        detail: mockInference
+          ? 'MOCK_INFERENCE=true (dev/test)'
+          : isProduction
+            ? 'INFERENCE_SERVICE_URL unset in production'
+            : 'INFERENCE_SERVICE_URL unset (dev: MOCK_INFERENCE 권장)',
+      });
+      return;
+    }
+    dependencies.push({ name: 'inference', status: 'up', required: true });
+  }
+
+  /**
+   * N11: SMS 의존성. 운영에서 SMS 설정이 없으면 ready 실패(N9 readiness 게이트와 정합).
+   * 개발/테스트는 MockOtpProvider 사용 가능하므로 skipped로 취급한다.
+   */
+  private pushSmsDependency(dependencies: HealthDependencyDto[]): void {
+    const isProduction = this.config.get<string>('NODE_ENV') === 'production';
+    const configured =
+      Boolean((this.config.get<string>('SMS_API_KEY') ?? '').trim()) &&
+      Boolean((this.config.get<string>('SMS_SENDER') ?? '').trim());
+
+    if (configured) {
+      dependencies.push({ name: 'sms', status: 'up', required: isProduction });
+      return;
+    }
+    dependencies.push({
+      name: 'sms',
+      status: isProduction ? 'down' : 'skipped',
+      required: isProduction,
+      detail: isProduction
+        ? 'SMS_API_KEY/SMS_SENDER unset in production'
+        : 'SMS unset (dev: MockOtpProvider)',
+    });
   }
 }

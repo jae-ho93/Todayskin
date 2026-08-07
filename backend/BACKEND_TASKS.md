@@ -787,11 +787,28 @@ Jest coverageThreshold를 반영했다.
 
 브랜치: `feature/distributed-runtime-controls`
 
-- [ ] HTTP Rate Limit 저장소를 Redis 기반으로 전환
-- [ ] 날씨 cache hit/miss와 BullMQ queue/DLQ metric 수집
-- [ ] Redis 장애 시 cache·job·rate limit별 fail-open/fail-closed 정책 확정
-- [ ] `/health/ready`에 운영 필수 inference/SMS dependency 정책 반영
-- [ ] WebSocket/SSE 필요성 재평가(현재 job polling 유지)
+- [x] HTTP Rate Limit 저장소를 Redis 기반으로 전환
+  - `RedisThrottlerStorage`(ThrottlerStorage 구현) — key `throttle:{name}:{key}`, INCR+TTL
+  - `THROTTLE_STORAGE=auto|memory|redis` — auto는 REDIS_URL 설정 시 Redis, 아니면 메모리
+  - ECS 다중 task에서 분당 제한이 인스턴스별로 나뉘지 않음
+- [x] 날씨 cache hit/miss와 BullMQ queue/DLQ metric 수집
+  - 날씨: `metric:weather:cache:hit/miss` Redis 카운터 (WeatherService)
+  - BullMQ: `JobMetricsScheduler`(`JOB_METRICS_INTERVAL_MS`, 기본 60s)가 queue별
+    waiting/active/completed/failed/delayed + DLQ waiting을 구조화 로그로 수집
+- [x] Redis 장애 시 cache·job·rate limit별 fail-open/fail-closed 정책 확정
+  - **cache: fail-open** — Redis 다운 시 외부 API/DB fallback (기존 T12 설계)
+  - **rate limit: fail-open** — Redis 다운 시 요청 통과. rate limit이 서비스 가용성을
+    깨지 않게 하며, 복구 전 짧은 남용 가능성은 인지된 tradeoff
+  - **job(BullMQ): fail-closed** — 큐 add 실패는 명시적 오류 전파(요청자가 재시도),
+    재시도·DLQ 정책은 기존 JOB_POLICIES 유지. Inline fallback은 JOB_DISPATCHER=inline로 명시 선택
+- [x] `/health/ready`에 운영 필수 inference/SMS dependency 정책 반영
+  - inference: production+MOCK_INFERENCE=false에서 INFERENCE_SERVICE_URL 없으면 required down
+  - SMS: production에서 SMS_API_KEY/SMS_SENDER 없으면 required down (N9 readiness 게이트와 정합)
+  - dev/test는 skipped로 취급해 ready를 깨지 않음
+- [x] WebSocket/SSE 필요성 재평가(현재 job polling 유지)
+  - 결정: **job polling 유지** — N4 job 상태 API + 프론트 polling이 MVP에 충분.
+    실시간 알림/라이브 차트 요구가 생기면 N11 후속으로 재평가 (SSE가 서버 비용·인프라
+    측면에서 WebSocket보다 우선 후보)
 
 완료 기준: ECS 다중 task에서도 rate limit과 운영 지표가 인스턴스별로 분산되지 않고 일관되게 동작한다.
 

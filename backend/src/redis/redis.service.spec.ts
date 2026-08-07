@@ -35,6 +35,13 @@ describe('RedisService', () => {
     expect(await service.invalidatePattern('*')).toBe(0);
   });
 
+  it('N11: isAvailable=false면 incrementCounter/getCounter/getCounterTtlMs는 no-op', async () => {
+    await service.onModuleInit();
+    expect(await service.incrementCounter('c')).toBeNull();
+    expect(await service.getCounter('c')).toBe(0);
+    expect(await service.getCounterTtlMs('c')).toBe(0);
+  });
+
   it('WEATHER_CACHE_TTL_SECONDS 기본값은 300', async () => {
     configGet.mockImplementation((key: string, def?: unknown) =>
       key === 'WEATHER_CACHE_TTL_SECONDS' ? def : '',

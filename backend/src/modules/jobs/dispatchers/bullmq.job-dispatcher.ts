@@ -2,7 +2,11 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import { Job, Queue, Worker } from 'bullmq';
 import type { ConnectionOptions } from 'bullmq';
-import type { DispatchJobInput, JobDispatcher } from './job-dispatcher.interface';
+import type {
+  DispatchJobInput,
+  JobDispatcher,
+  QueueMetrics,
+} from './job-dispatcher.interface';
 import { JobHandlerRegistry } from '../handlers/job-handler.registry';
 import { JobStateService } from '../job-state.service';
 import {
@@ -113,6 +117,32 @@ export class BullMqJobDispatcher
     this.workers.push(dlqWorker);
 
     this.logger.log('BullMQ queues and workers started');
+  }
+
+  /**
+   * N11: queue/DLQ 운영 지표 수집.
+   * worker가 없으면(Inline 사용 등) null — 호출부가 수집 스킵.
+   */
+  async collectMetrics(): Promise<QueueMetrics | null> {
+    if (this.queues.size === 0) return null;
+    const queues: QueueMetrics['queues'] = {};
+    for (const [name, queue] of this.queues) {
+      if (name === QUEUE_DLQ) continue;
+      const c = await queue.getJobCounts();
+      queues[name] = {
+        waiting: c.waiting ?? 0,
+        active: c.active ?? 0,
+        completed: c.completed ?? 0,
+        failed: c.failed ?? 0,
+        delayed: c.delayed ?? 0,
+      };
+    }
+    const dlq = this.queues.get(QUEUE_DLQ);
+    const dlqCounts = dlq ? await dlq.getJobCounts() : null;
+    return {
+      queues,
+      dlqWaiting: dlqCounts?.waiting ?? 0,
+    };
   }
 
   async dispatch(input: DispatchJobInput): Promise<string | null> {

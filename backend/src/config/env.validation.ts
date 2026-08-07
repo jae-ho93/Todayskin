@@ -92,10 +92,14 @@ export const envValidationSchema = Joi.object({
   // T9: 개발/통합 테스트용 mock 진단 추론. 운영에서는 반드시 false여야 함.
   MOCK_INFERENCE: Joi.string().valid('true', 'false').allow('').optional(),
 
-  // N0: Rate Limit 설정 — 분당 허용 요청 수와 TTL(ms).
-  // 현재 모든 환경에서 인스턴스 메모리 저장소를 사용하며, Redis 분산 전환은 N11 후속 작업.
+  // N0/N11: Rate Limit 설정 — 분당 허용 요청 수와 TTL(ms).
+  // N11부터 THROTTLE_STORAGE=redis(또는 auto+REDIS_URL) 시 Redis 분산 저장소 사용.
   THROTTLE_LIMIT: Joi.number().integer().min(1).default(60),
   THROTTLE_TTL_MS: Joi.number().integer().min(100).default(60_000),
+  // 저장소 선택: auto(기본)=REDIS_URL 설정 시 redis, 아니면 memory. memory|redis 강제도 가능.
+  THROTTLE_STORAGE: Joi.string().valid('auto', 'memory', 'redis').default('auto'),
+  // N11: BullMQ queue/DLQ 지표 수집 간격(ms, 0=비활성). 기본 60초.
+  JOB_METRICS_INTERVAL_MS: Joi.number().integer().min(0).default(60_000),
 
   // N1: 구조화 로깅·관측성
   // 로그 레벨 — trace/debug/info/warn/error/fatal. 운영은 info, 개발은 debug 기본.
