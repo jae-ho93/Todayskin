@@ -17,7 +17,12 @@ describe('WeatherService', () => {
   let kmaClient: jest.Mocked<KmaClient>;
   let airKoreaClient: jest.Mocked<AirKoreaClient>;
   let stationClient: jest.Mocked<StationClient>;
-  let redisService: { isAvailable: jest.Mock; getJson: jest.Mock; setJson: jest.Mock };
+  let redisService: {
+    isAvailable: jest.Mock;
+    getJson: jest.Mock;
+    setJson: jest.Mock;
+    incrementCounter: jest.Mock;
+  };
   let prisma: {
     weatherSnapshot: {
       findFirst: jest.Mock;
@@ -75,6 +80,7 @@ describe('WeatherService', () => {
             isAvailable: jest.fn().mockReturnValue(false),
             getJson: jest.fn().mockResolvedValue(null),
             setJson: jest.fn().mockResolvedValue(true),
+            incrementCounter: jest.fn().mockResolvedValue(null),
           },
         },
         {
@@ -332,6 +338,10 @@ describe('WeatherService', () => {
     expect(kmaClient.fetchUvIndex).not.toHaveBeenCalled();
     expect(airKoreaClient.fetchAirQuality).not.toHaveBeenCalled();
     expect(prisma.weatherSnapshot.create).not.toHaveBeenCalled();
+    // N11: cache hit 지표 기록
+    expect(redisService.incrementCounter).toHaveBeenCalledWith(
+      'metric:weather:cache:hit',
+    );
   });
 
   it('캐시 miss 시 외부 API 호출 후 결과를 캐시에 저장한다', async () => {
@@ -348,6 +358,10 @@ describe('WeatherService', () => {
     // 캐시 키가 weather:current: 형식
     const [key] = redisService.setJson.mock.calls[0];
     expect(key).toMatch(/^weather:current:/);
+    // N11: cache miss 지표 기록
+    expect(redisService.incrementCounter).toHaveBeenCalledWith(
+      'metric:weather:cache:miss',
+    );
   });
 
   it('Redis 장애 시 외부 API fallback으로 정상 응답한다', async () => {

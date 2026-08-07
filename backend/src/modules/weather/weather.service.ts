@@ -92,8 +92,10 @@ export class WeatherService {
     const cached = await this.tryCache(cacheKey);
     if (cached) {
       this.logger.debug(`Weather cache hit: ${cacheKey}`);
+      await this.recordCacheMetric('hit');
       return cached;
     }
+    await this.recordCacheMetric('miss');
 
     const collected = await this.collect(lat, lon);
     const dto = this.buildSnapshotDto(collected);
@@ -233,6 +235,15 @@ export class WeatherService {
 
   private defaultRegionName(): string {
     return DEFAULT_REGION.cityName;
+  }
+
+  /**
+   * N11: 날씨 캐시 hit/miss 지표를 Redis 카운터에 누적한다.
+   * Redis 장애 시 조용히 무시(지표 수집이 응답 경로를 방해하지 않음).
+   */
+  private async recordCacheMetric(kind: 'hit' | 'miss'): Promise<void> {
+    // incrementCounter는 내부에서 예외를 삼키고 null을 반환한다(응답 경로 비차단).
+    await this.redisService.incrementCounter(`metric:weather:cache:${kind}`);
   }
 
   /**

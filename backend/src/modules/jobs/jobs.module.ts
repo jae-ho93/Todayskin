@@ -8,6 +8,7 @@ import { JobHandlerRegistry } from './handlers/job-handler.registry';
 import { DomainJobHandlers } from './handlers/domain-job.handlers';
 import { InlineJobDispatcher } from './dispatchers/inline.job-dispatcher';
 import { BullMqJobDispatcher } from './dispatchers/bullmq.job-dispatcher';
+import { JobMetricsScheduler } from './job-metrics.scheduler';
 import { RecommendationModule } from '../recommendations/recommendation.module';
 import { PatternModule } from '../pattern/pattern.module';
 import { NotificationModule } from '../notifications/notification.module';
@@ -58,6 +59,7 @@ import { NotificationModule } from '../notifications/notification.module';
       },
     },
     JobService,
+    JobMetricsScheduler,
   ],
   exports: [JobService],
 })

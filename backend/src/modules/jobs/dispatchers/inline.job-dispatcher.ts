@@ -18,6 +18,11 @@ export class InlineJobDispatcher implements JobDispatcher, OnModuleDestroy {
     private readonly jobState: JobStateService,
   ) {}
 
+  /** N11: Inline은 큐가 없으므로 metric 미지원. */
+  async collectMetrics(): Promise<null> {
+    return null;
+  }
+
   async dispatch(input: DispatchJobInput): Promise<string | null> {
     if (this.closed) {
       throw new Error('InlineJobDispatcher already closed');

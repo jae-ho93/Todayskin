@@ -187,6 +187,59 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       return 0;
     }
   }
+
+  /**
+   * N11: 원자적 카운터 증가(N11 rate limit·metric 공용).
+   * INCR과 EXPIRE를 MULTI로 묶어 "증가 후 만료 설정 전 프로세스 종료"로 키가
+   * TTL 없이 남는 race를 제거한다(EXPIRE NX — 이미 TTL이 있으면 유지).
+   * 첫 증가 시 ttlSeconds로 키를 만료시킨다. Redis 장애 시 null(fail-open 신호).
+   * rate limit 분산 저장소(ThrottlerStorage)와 운영 지표 카운터가 이 메서드를 쓴다.
+   */
+  async incrementCounter(key: string, ttlSeconds?: number): Promise<number | null> {
+    if (!this.isAvailable() || !this.client) return null;
+    try {
+      if (ttlSeconds !== undefined) {
+        const results = await this.client
+          .multi()
+          .incr(key)
+          .expire(key, ttlSeconds, 'NX')
+          .exec();
+        const value = results?.[0]?.[1];
+        return typeof value === 'number' ? value : null;
+      }
+      return await this.client.incr(key);
+    } catch (e) {
+      this.available = false;
+      this.logger.debug(`Redis incrementCounter 실패: ${errorName(e)}`);
+      return null;
+    }
+  }
+
+  /** N11: 카운터 값 조회(없으면 0). Redis 장애 시 0. */
+  async getCounter(key: string): Promise<number> {
+    if (!this.isAvailable() || !this.client) return 0;
+    try {
+      const raw = await this.client.get(key);
+      return raw ? Number(raw) : 0;
+    } catch (e) {
+      this.available = false;
+      this.logger.debug(`Redis getCounter 실패: ${errorName(e)}`);
+      return 0;
+    }
+  }
+
+  /** N11: 카운터 남은 TTL(ms, 없으면 0). block duration 헤더 계산용. */
+  async getCounterTtlMs(key: string): Promise<number> {
+    if (!this.isAvailable() || !this.client) return 0;
+    try {
+      const ttl = await this.client.ttl(key);
+      return ttl > 0 ? ttl * 1000 : 0;
+    } catch (e) {
+      this.available = false;
+      this.logger.debug(`Redis getCounterTtlMs 실패: ${errorName(e)}`);
+      return 0;
+    }
+  }
 }
 
 function errorName(e: unknown): string {

@@ -77,6 +77,9 @@ export const ENV_REGISTRY: EnvVarDefinition[] = [
 
   { key: 'THROTTLE_LIMIT', owner: 'security', description: 'Rate limit max requests per window', requiredIn: 'never', safeDefault: 60, secret: false },
   { key: 'THROTTLE_TTL_MS', owner: 'security', description: 'Rate limit window ms', requiredIn: 'never', safeDefault: 60_000, secret: false },
+  // N11: 분산 rate limit 저장소. auto=REDIS_URL 설정 시 Redis, 아니면 memory.
+  { key: 'THROTTLE_STORAGE', owner: 'security', description: 'Rate limit storage: auto|memory|redis', requiredIn: 'never', safeDefault: 'auto', secret: false },
+  { key: 'JOB_METRICS_INTERVAL_MS', owner: 'jobs', description: 'BullMQ queue/DLQ metrics collection interval ms (0=disabled)', requiredIn: 'never', safeDefault: 60_000, secret: false },
 
   { key: 'LOG_LEVEL', owner: 'observability', description: 'Pino log level', requiredIn: 'never', safeDefault: 'info', secret: false },
   { key: 'SENTRY_DSN', owner: 'observability', description: 'Sentry DSN', requiredIn: 'never', secret: true },
