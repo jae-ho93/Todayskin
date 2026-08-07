@@ -81,6 +81,8 @@ describe('Calendar History (e2e)', () => {
         isAvailable: jest.fn().mockReturnValue(false),
         getJson: jest.fn().mockResolvedValue(null),
         setJson: jest.fn().mockResolvedValue(true),
+        // N11: WeatherService가 캐시 hit/miss 지표를 기록하므로 mock에도 필요.
+        incrementCounter: jest.fn().mockResolvedValue(null),
       })
       .overrideProvider(IMAGE_OBJECT_STORE)
       .useValue(memoryStore)
