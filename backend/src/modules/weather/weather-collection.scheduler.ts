@@ -33,6 +33,13 @@ export class WeatherCollectionScheduler implements OnModuleInit, OnModuleDestroy
     if (this.config.get<string>('NODE_ENV') === 'test') {
       return;
     }
+    // N21: ECS에서 task가 여러 개 뜨면 각 task마다 스케줄러가 실행돼 정부 API를
+    // 중복 호출한다. WEATHER_COLLECTOR_ENABLED=false로 설정한 task는 스케줄러를 끈다
+    // (배포 시 정확히 1개 task만 true로 유지 — DEPLOYMENT.md 참고).
+    if (this.config.get<string>('WEATHER_COLLECTOR_ENABLED', 'true') === 'false') {
+      this.logger.log('Weather collection scheduler disabled (WEATHER_COLLECTOR_ENABLED=false)');
+      return;
+    }
     const interval = Number(
       this.config.get<number>('WEATHER_COLLECTION_INTERVAL_MS') ?? 3_600_000,
     );
