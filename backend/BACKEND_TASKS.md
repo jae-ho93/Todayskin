@@ -25,10 +25,10 @@ NestJS와 FastAPI의 역할 분리는 완료되었다.
 
 - NestJS(src/)가 메인 백엔드(BFF + 비즈니스 로직)로 동작한다.
 - FastAPI(inference-service/)가 독립 AI 추론 서버로 동작한다. AI 모델 서빙과 피부 이미지
-  추론만 담당하며 비즈니스 로직·인증·DB 접근을 갖지 않고 추론 결과만 NestJS로 전달한다.
+추론만 담당하며 비즈니스 로직·인증·DB 접근을 갖지 않고 추론 결과만 NestJS로 전달한다.
 - NestJS 진단 서비스는 InferenceProvider interface로 추론 호출을 추상화한다.
-  `MOCK_INFERENCE=true`인 개발·테스트는 MockInferenceProvider, `INFERENCE_SERVICE_URL` 설정 시 PythonInferenceProvider,
-  둘 다 없으면 fail-closed provider가 503을 반환한다.
+`MOCK_INFERENCE=true`인 개발·테스트는 MockInferenceProvider, `INFERENCE_SERVICE_URL` 설정 시 PythonInferenceProvider,
+둘 다 없으면 fail-closed provider가 503을 반환한다.
 - 레거시 FastAPI 비즈니스 코드(`backend/app/`)는 N7에서 제거되었다. Python은 inference-service/ 추론 서버만 유지한다.
 
 ## 2026-08-04 프론트 계약 동기화 이력
@@ -78,23 +78,25 @@ backend/
 
 ## 파일 매핑 (전환 완료)
 
-| 기존 FastAPI | NestJS |
-|---|---|
-| main.py | main.ts, app.module.ts |
-| database.py | PrismaModule, PrismaService |
-| models.py | prisma/schema.prisma |
-| schemas.py | 모듈별 dto/, enum/ |
-| deps.py | JwtStrategy, JwtAuthGuard, RolesGuard |
-| seed.py | prisma/seed.ts |
-| regions.py | RegionResolver (region.registry) |
-| mock_data.py | seed, fixture, MockInferenceProvider |
-| gemini_client.py | GeminiClient, EvidencePolicy |
-| routers/auth.py | AuthController, AuthService |
-| routers/weather.py | WeatherController, WeatherService, API Clients |
-| routers/diagnosis.py | DiagnosisController, DiagnosisService |
-| routers/recommendations.py | Recommendation/Product modules |
-| trend.tsx mock | PatternController, PatternService |
-| settings 로컬 상태 | NotificationController, NotificationService |
+
+| 기존 FastAPI                 | NestJS                                         |
+| -------------------------- | ---------------------------------------------- |
+| main.py                    | main.ts, app.module.ts                         |
+| database.py                | PrismaModule, PrismaService                    |
+| models.py                  | prisma/schema.prisma                           |
+| schemas.py                 | 모듈별 dto/, enum/                                |
+| deps.py                    | JwtStrategy, JwtAuthGuard, RolesGuard          |
+| seed.py                    | prisma/seed.ts                                 |
+| regions.py                 | RegionResolver (region.registry)               |
+| mock_data.py               | seed, fixture, MockInferenceProvider           |
+| gemini_client.py           | GeminiClient, EvidencePolicy                   |
+| routers/auth.py            | AuthController, AuthService                    |
+| routers/weather.py         | WeatherController, WeatherService, API Clients |
+| routers/diagnosis.py       | DiagnosisController, DiagnosisService          |
+| routers/recommendations.py | Recommendation/Product modules                 |
+| trend.tsx mock             | PatternController, PatternService              |
+| settings 로컬 상태             | NotificationController, NotificationService    |
+
 
 Controller는 HTTP 처리만 담당하고, 비즈니스 로직은 Service에 둔다. 외부 API는 Client,
 정책은 Policy로 분리한다. 단순 CRUD마다 Repository를 무조건 만들지는 않는다.
@@ -115,8 +117,8 @@ Controller는 HTTP 처리만 담당하고, 비즈니스 로직은 Service에 둔
 - 기상청 UV endpoint는 최신 V5 기준으로 이식한다.
 - GEMINI_MODEL 기본값은 현재 gemini-flash-latest 기준으로 관리한다.
 - 기존 KMA_AREA_NO, AIRKOREA_STATION_NAME은 위치 조회 실패 시 기본 지역 fallback에 필요하므로
-  환경변수와 코드 중 어느 쪽을 기준으로 할지 결정해야 한다. 지역 registry를 기준으로 할 경우
-  환경변수는 기본 region id로 단순화한다.
+환경변수와 코드 중 어느 쪽을 기준으로 할지 결정해야 한다. 지역 registry를 기준으로 할 경우
+환경변수는 기본 region id로 단순화한다.
 
 ### 3. 날씨 기반 제품 추천 API 추가
 
@@ -435,19 +437,21 @@ Recommendation
 
 ## API 계약 기준
 
-| 현재 API | NestJS 책임 |
-|---|---|
-| `POST /auth/signup` | `AuthController.signup()` |
-| `POST /auth/login` | `AuthController.login()` |
-| `POST /auth/logout` | `AuthController.logout()` |
-| `GET /weather` | `WeatherController.getCurrentWeather()` |
-| `GET /diagnosis/latest` | `DiagnosisController.getLatest()` |
-| `GET /diagnosis/history` | `DiagnosisController.getHistory()` |
-| `POST /diagnosis` | `DiagnosisController.submit()` |
-| `GET /recommendations` | `RecommendationController.list()` |
-| `POST /recommendations/generate` | `RecommendationController.generate()` |
-| `GET /recommendations/:id` | `RecommendationController.getById()` |
-| `GET /products` | `ProductController.list()` |
+
+| 현재 API                           | NestJS 책임                               |
+| -------------------------------- | --------------------------------------- |
+| `POST /auth/signup`              | `AuthController.signup()`               |
+| `POST /auth/login`               | `AuthController.login()`                |
+| `POST /auth/logout`              | `AuthController.logout()`               |
+| `GET /weather`                   | `WeatherController.getCurrentWeather()` |
+| `GET /diagnosis/latest`          | `DiagnosisController.getLatest()`       |
+| `GET /diagnosis/history`         | `DiagnosisController.getHistory()`      |
+| `POST /diagnosis`                | `DiagnosisController.submit()`          |
+| `GET /recommendations`           | `RecommendationController.list()`       |
+| `POST /recommendations/generate` | `RecommendationController.generate()`   |
+| `GET /recommendations/:id`       | `RecommendationController.getById()`    |
+| `GET /products`                  | `ProductController.list()`              |
+
 
 가능하면 기존 `camelCase` 응답 필드와 `Authorization: Bearer ...` 헤더 계약을 유지합니다.
 
@@ -591,7 +595,7 @@ Refresh Token
 
 ## 다음 과정 (Next)
 
-> T0~T14와 N0~N8 구현은 완료. N9 이후는 운영 공개 전 필요한 후속 작업.
+> T0~~T14와 N0~~N8 구현은 완료. N9 이후는 운영 공개 전 필요한 후속 작업.
 > 4개 핵심 결정(T2-03/T3-04/T3-05/T9-03)은 decision.md에서 2026-08-07 확정.
 
 ### N0. 운영 보안·HTTP 보호
@@ -794,21 +798,21 @@ Jest coverageThreshold를 반영했다.
 - [x] 날씨 cache hit/miss와 BullMQ queue/DLQ metric 수집
   - 날씨: `metric:weather:cache:hit/miss` Redis 카운터 (WeatherService)
   - BullMQ: `JobMetricsScheduler`(`JOB_METRICS_INTERVAL_MS`, 기본 60s)가 queue별
-    waiting/active/completed/failed/delayed + DLQ waiting을 구조화 로그로 수집
+  waiting/active/completed/failed/delayed + DLQ waiting을 구조화 로그로 수집
 - [x] Redis 장애 시 cache·job·rate limit별 fail-open/fail-closed 정책 확정
   - **cache: fail-open** — Redis 다운 시 외부 API/DB fallback (기존 T12 설계)
   - **rate limit: fail-open** — Redis 다운 시 요청 통과. rate limit이 서비스 가용성을
-    깨지 않게 하며, 복구 전 짧은 남용 가능성은 인지된 tradeoff
+  깨지 않게 하며, 복구 전 짧은 남용 가능성은 인지된 tradeoff
   - **job(BullMQ): fail-closed** — 큐 add 실패는 명시적 오류 전파(요청자가 재시도),
-    재시도·DLQ 정책은 기존 JOB_POLICIES 유지. Inline fallback은 JOB_DISPATCHER=inline로 명시 선택
+  재시도·DLQ 정책은 기존 JOB_POLICIES 유지. Inline fallback은 JOB_DISPATCHER=inline로 명시 선택
 - [x] `/health/ready`에 운영 필수 inference/SMS dependency 정책 반영
   - inference: production+MOCK_INFERENCE=false에서 INFERENCE_SERVICE_URL 없으면 required down
   - SMS: production에서 SMS_API_KEY/SMS_SENDER 없으면 required down (N9 readiness 게이트와 정합)
   - dev/test는 skipped로 취급해 ready를 깨지 않음
 - [x] WebSocket/SSE 필요성 재평가(현재 job polling 유지)
   - 결정: **job polling 유지** — N4 job 상태 API + 프론트 polling이 MVP에 충분.
-    실시간 알림/라이브 차트 요구가 생기면 N11 후속으로 재평가 (SSE가 서버 비용·인프라
-    측면에서 WebSocket보다 우선 후보)
+  실시간 알림/라이브 차트 요구가 생기면 N11 후속으로 재평가 (SSE가 서버 비용·인프라
+  측면에서 WebSocket보다 우선 후보)
 
 완료 기준: ECS 다중 task에서도 rate limit과 운영 지표가 인스턴스별로 분산되지 않고 일관되게 동작한다.
 
@@ -903,9 +907,9 @@ Jest coverageThreshold를 반영했다.
 
 브랜치: `feature/app-session-refresh`
 
-- [ ] 프론트에 refresh token 회전 연동 (현재 `saveSession`은 accessToken만 저장, refresh 미사용)
-- [ ] 401 응답 시 재로그인 유도 흐름 (현재는 "불러올 수 없어요"만 노출되고 로그인 화면으로 복귀하지 않음)
-- [ ] access token(15m) 만료 후에도 앱이 조용히 갱신되거나 명확한 재인증 UX 제공
+- [x] 프론트에 refresh token 회전 연동 (현재 `saveSession`은 accessToken만 저장, refresh 미사용)
+- [x] 401 응답 시 재로그인 유도 흐름 (현재는 "불러올 수 없어요"만 노출되고 로그인 화면으로 복귀하지 않음)
+- [x] access token(15m) 만료 후에도 앱이 조용히 갱신되거나 명확한 재인증 UX 제공
 
 완료 기준: 세션이 15분 이상 지속돼도 인증 API가 끊기지 않고, 토큰 무효 시 사용자가 로그인 화면으로 안내된다.
 
@@ -971,3 +975,4 @@ Jest coverageThreshold를 반영했다.
 - secret이 코드에 포함되지 않았습니다.
 - PR 리뷰가 완료되고 `main`에 병합되었습니다.
 - 보류 항목과 후속 작업이 PR에 기록되었습니다.
+

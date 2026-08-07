@@ -15,7 +15,7 @@ import type {
   WeatherSnapshot,
   PatternSummary,
 } from '../types';
-import { getToken } from '../lib/session';
+import { clearSession, getRefreshToken, getToken, updateTokens } from '../lib/session';
 
 // 로컬 개발 시 NestJS 백엔드(backend/)를 http://localhost:3000 에서 구동
 //
@@ -52,14 +52,90 @@ async function safeFetch<T>(path: string, timeoutMs = 2500): Promise<T | null> {
 
 export type FetchResult<T> = { status: 'ok'; data: T } | { status: 'not_found' } | { status: 'error' };
 
+// N18: refresh 토큰 회전. 여러 요청이 동시에 401을 받아도 refresh는 정확히 1회만 보낸다.
+// 성공하면 새 access token으로 세션이 갱신되고, 실패하면 clearSession()이 호출돼
+// 루트 레이아웃이 로그인 화면으로 안내한다.
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function refreshSession(): Promise<boolean> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    const refreshToken = await getRefreshToken();
+    if (!refreshToken) {
+      await clearSession();
+      return false;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+        signal: timeoutSignal(8000),
+      });
+      if (!res.ok) {
+        // refresh 토큰도 무효·만료 → 세션 정리 후 재로그인 유도.
+        await clearSession();
+        return false;
+      }
+      const data = (await res.json()) as {
+        accessToken: string;
+        refreshToken?: string;
+        expiresIn?: number;
+      };
+      await updateTokens(data.accessToken, data.refreshToken, data.expiresIn);
+      return true;
+    } catch {
+      await clearSession();
+      return false;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
+}
+
+// N18: 인증 요청 공통. 401이면 refresh 회전을 1회 시도하고 재시도한다.
+// refresh 실패 시 clearSession()이 이미 호출됐으므로 호출부는 기존처럼 실패를 받는다.
+//
+// 401로 거부된 요청은 JwtAuthGuard 단계에서 본문 처리 전에 거절되므로,
+// POST(진단 제출·동의 등)를 refresh 후 재시도해도 서버가 부분 처리하지 않는다.
+// 재시도는 doFetch()를 직접 호출(재귀 아님)하므로 refresh된 토큰도 401이면
+// 무한 재시도 없이 그대로 반환된다.
+async function fetchWithAuth(
+  path: string,
+  init: {
+    method?: string;
+    body?: BodyInit | null;
+    timeoutMs?: number;
+    contentType?: string;
+  } = {},
+  allowRetry = true,
+): Promise<Response> {
+  const doFetch = async () =>
+    fetch(`${API_BASE_URL}${path}`, {
+      method: init.method ?? 'GET',
+      headers: {
+        ...(init.contentType ? { 'Content-Type': init.contentType } : {}),
+        ...(await authHeaders()),
+      },
+      body: init.body,
+      signal: timeoutSignal(init.timeoutMs ?? 4000),
+    });
+
+  const res = await doFetch();
+  if (res.status === 401 && allowRetry) {
+    if (await refreshSession()) {
+      return doFetch();
+    }
+  }
+  return res;
+}
+
 // 로그인한 유저 기준 데이터 조회. 404("정상적으로 없음")와 그 외 실패(네트워크 오류·타임아웃·5xx)를
 // 구분해야 하는 화면(예: 아직 촬영 기록 없음 vs. 불러오는 데 실패함)을 위해 결과를 분리해서 반환한다.
 async function authFetch<T>(path: string): Promise<FetchResult<T>> {
   try {
-    const res = await fetch(`${API_BASE_URL}${path}`, {
-      headers: await authHeaders(),
-      signal: timeoutSignal(4000),
-    });
+    const res = await fetchWithAuth(path);
     if (res.status === 404) return { status: 'not_found' };
     if (!res.ok) return { status: 'error' };
     return { status: 'ok', data: (await res.json()) as T };
@@ -97,12 +173,15 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
 // 읽기 성격의 POST(추천 생성 등). 실패 시 목업으로 대체하지 않고 null을 반환한다.
 async function safePostJson<T>(path: string, body: unknown, timeoutMs = 20000): Promise<T | null> {
   try {
-    const res = await fetch(`${API_BASE_URL}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
-      body: JSON.stringify(body),
-      signal: timeoutSignal(timeoutMs),
-    });
+    const res = await fetchWithAuth(
+      path,
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+        timeoutMs,
+        contentType: 'application/json',
+      },
+    );
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {
@@ -112,11 +191,11 @@ async function safePostJson<T>(path: string, body: unknown, timeoutMs = 20000): 
 
 // 인증이 필요한 쓰기 요청(동의 등록 등). 실패를 숨기면 안 되므로 에러를 그대로 던진다.
 async function authPostJson<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const res = await fetchWithAuth(path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
     body: JSON.stringify(body),
-    signal: timeoutSignal(8000),
+    timeoutMs: 8000,
+    contentType: 'application/json',
   });
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new Error(extractErrorMessage(data, res.status));
@@ -173,14 +252,14 @@ export const api = {
       params.set('lat', String(photo.coords.latitude));
       params.set('lon', String(photo.coords.longitude));
     }
-    const res = await fetch(`${API_BASE_URL}/diagnosis?${params.toString()}`, {
-      method: 'POST',
-      headers: await authHeaders(),
-      body: formData,
+    // N18: 401(access 만료)이면 refresh 후 1회 재시도하도록 fetchWithAuth를 사용한다.
+    // FormData는 Content-Type을 직접 지정하면 경계 문자열이 깨지므로 지정하지 않는다.
+    const res = await fetchWithAuth(
+      `/diagnosis?${params.toString()}`,
+      { method: 'POST', body: formData, timeoutMs: 45000 },
       // 진단 추론 뒤 KMA/AirKorea 스냅샷을 연결한다. 외부 API의 최악 대기
       // 예산(각 8초)보다 짧게 끊으면 서버 저장은 성공하고 앱만 실패로 보일 수 있다.
-      signal: timeoutSignal(45000),
-    });
+    );
     const data = await res.json().catch(() => null);
     if (!res.ok) throw new Error(extractErrorMessage(data, res.status));
     return data as SkinScoreSnapshot;
@@ -219,6 +298,7 @@ export const api = {
   // 서버 토큰 무효화는 최선 노력만 하고, 실패해도 로컬 세션 정리는 항상 진행되도록 에러를 삼킨다
   logout: async () => {
     try {
+      // 401이면 이미 세션이 무효 — refresh를 시도할 필요가 없다.
       await fetch(`${API_BASE_URL}/auth/logout`, {
         method: 'POST',
         headers: await authHeaders(),

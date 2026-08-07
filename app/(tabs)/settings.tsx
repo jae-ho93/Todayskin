@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { api } from '../../src/api/client';
@@ -86,11 +85,12 @@ export default function SettingsScreen() {
       <View>
         <Text style={styles.sectionTitle}>계정</Text>
         <Card>
+          {/* N18: clearSession()이 루트 레이아웃의 세션 만료 콜백을 통해
+              로그인 화면으로 안내하므로 여기서 별도로 이동하지 않는다. */}
           <Pressable
             onPress={async () => {
               await api.logout();
               await clearSession();
-              router.replace('/onboarding/login');
             }}
           >
             <SettingsRow

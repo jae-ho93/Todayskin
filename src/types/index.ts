@@ -107,6 +107,10 @@ export interface User {
   gender?: Gender;
   createdAt: string;
   accessToken: string;
+  // N18: refresh 토큰 회전 (NestJS /auth/refresh 응답). 로그인/가입 응답에 포함된다.
+  refreshToken?: string;
+  // access token 만료(초) — 백엔드 기본 15m(900s).
+  expiresIn?: number;
 }
 
 // ── 동의(consent) ──────────────────────────────
