@@ -397,6 +397,9 @@ describe('Recommendation & Product (e2e)', () => {
       const geminiClient = app.get(GeminiClient) as {
         generateRecommendations: jest.Mock;
       };
+      // suite 내 이전 테스트들이 같은 mock을 호출해 카운트가 누적됐으므로
+      // 이 테스트의 호출 횟수만 검사하도록 초기화한다.
+      geminiClient.generateRecommendations.mockClear();
       const original = geminiClient.generateRecommendations.getMockImplementation();
       // 두 요청이 in-flight 구간에 겹치도록 Gemini 응답에 지연을 건다.
       // (B의 사전 경로: JWT + 동의 + 진단 조회 + 예약 ≈ 수백 ms — 1s로 여유 확보)
