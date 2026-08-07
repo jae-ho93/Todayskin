@@ -69,12 +69,15 @@ model User {
 
 // N2: OTP 인증 — 가입·새 디바이스 로그인에 OTP 필수.
 // 운영 공개 전까지 적용. 만료·시도 횟수·재전송 제한을 이 모델로 관리한다.
-// OTP code 자체는 해시로 저장하지 않는다(단기 만료 + 시도 횟수 제한으로 보호).
+// N22: OTP code는 평문이 아닌 SHA-256(salt + code) 해시로 저장한다 — DB 유출 시에도
+// 코드 원문이 노출되지 않는다. salt는 코드마다 무작위로 생성해 함께 저장한다.
 model OtpCode {
   id           Int       @id @default(autoincrement())
   phoneNumber  String    @map("phone_number")
-  // 6자리 코드. 운영: 무작위, 개발(mock): 고정값.
-  code         String
+  // 6자리 코드의 해시 (SHA-256(salt + code)). 운영: 무작위, 개발(mock): 고정값.
+  codeHash     String    @map("code_hash")
+  // 코드별 무작위 salt.
+  salt         String
   // OTP 용도: signup / login
   purpose      String
   // 검증 완료 여부. 성공 시 true로 전환.
@@ -89,6 +92,23 @@ model OtpCode {
 
   @@index([phoneNumber, purpose])
   @@map("otp_codes")
+}
+
+// N22: OTP 발송 로그 — 번호별 일일 발송 한도 집계 전용.
+// otp_codes와 달리 프루닝(maxPending)·검증 소비(consumeVerification)의
+// 대상이 아니어서 발송 횟수가 줄어들지 않는다.
+// (일일 한도를 otp_codes row 수로 세면 maxPending 프루닝 때문에
+//  count가 계속 3에 머물러 한도가 우회된다)
+model OtpSendLog {
+  id          Int      @id @default(autoincrement())
+  phoneNumber String   @map("phone_number")
+  // OTP 용도: signup / login
+  purpose     String
+  // 발송 시각 (KST 일일 집계 기준)
+  sentAt      DateTime @default(now()) @map("sent_at")
+
+  @@index([phoneNumber, sentAt])
+  @@map("otp_send_logs")
 }
 
 // N2: 감사 로그 — ADMIN 운영 API 호출 등 보안 관련 행위를 기록한다.

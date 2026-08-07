@@ -53,6 +53,7 @@ export const ENV_REGISTRY: EnvVarDefinition[] = [
   { key: 'OTP_MAX_ATTEMPTS', owner: 'auth', description: 'OTP max verify attempts', requiredIn: 'never', safeDefault: 5, secret: false },
   { key: 'OTP_RESEND_COOLDOWN_SECONDS', owner: 'auth', description: 'OTP resend cooldown', requiredIn: 'never', safeDefault: 60, secret: false },
   { key: 'OTP_MAX_PENDING_PER_PHONE', owner: 'auth', description: 'Max pending OTP per phone', requiredIn: 'never', safeDefault: 3, secret: false },
+  { key: 'OTP_DAILY_LIMIT_PER_PHONE', owner: 'auth', description: 'Max OTP sends per phone per KST day (0=unlimited, allowlisted phones exempt)', requiredIn: 'never', safeDefault: 10, secret: false },
   { key: 'OTP_ALLOWLIST_PHONES', owner: 'auth', description: 'Dev allowlisted phones for mock OTP', requiredIn: 'never', safeDefault: '', secret: false, mockFlag: true, expiry: '2027-01-01' },
 
   // N9: 운영 SMS OTP 게이트웨이(알리고). production에서 누락 시 readiness 실패.

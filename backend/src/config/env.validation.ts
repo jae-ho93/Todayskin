@@ -59,6 +59,8 @@ export const envValidationSchema = Joi.object({
   OTP_RESEND_COOLDOWN_SECONDS: Joi.number().integer().min(0).default(60),
   // OTP_MAX_PENDING_PER_PHONE: 번호별 미검증 코드 최대 개수. 기본 3.
   OTP_MAX_PENDING_PER_PHONE: Joi.number().integer().min(1).default(3),
+  // N22: 번호별 하루(KST) 최대 OTP 발송 횟수. 기본 10. allowlisted 개발 번호는 예외.
+  OTP_DAILY_LIMIT_PER_PHONE: Joi.number().integer().min(0).default(10),
   // 개발용 고정 OTP를 허용할 테스트 전화번호 (쉼표 구분, 하이픈 제거).
   // 운영에서는 비활성화. 예: 01012345678,01099999999
   OTP_ALLOWLIST_PHONES: Joi.string().allow('').default(''),
