@@ -34,7 +34,7 @@
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.1.28",
-    "@nestjs/swagger": "11.4.5",
+    "@nestjs/swagger": "11.4.6",
     "@nestjs/throttler": "^6.5.0",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
@@ -152,5 +152,10 @@
     "esbuild@0.28.1": true,
     "msgpackr-extract@3.0.4": true,
     "prisma@7.9.1": true
+  },
+  "overrides": {
+    "@nestjs/swagger": {
+      "js-yaml": "5.2.3"
+    }
   }
 }
