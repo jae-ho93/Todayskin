@@ -125,6 +125,98 @@ export interface ConsentPurposeInfo {
   withdrawalPolicy: 'keep_results' | 'delete_images';
 }
 
+// ── 캘린더 히스토리 (N8) ──────────────────────────
+// GET /diagnosis/history/:date 응답 계약.
+// 날씨·진단 분석·추천이 항상 오고, image/landmarks는 저장 동의 + 데이터 존재 시에만 채워진다.
+
+export interface CalendarWeather {
+  observedAt: string;
+  regionName: string;
+  source: string; // LIVE | CACHED | UNAVAILABLE
+  uvIndex?: number | null;
+  uvStatus?: AirStatus | null;
+  uvIndexPeak?: number | null;
+  uvStatusPeak?: AirStatus | null;
+  uvIndexPeakHour?: number | null;
+  ozonePpm?: number | null;
+  ozoneStatus?: AirStatus | null;
+  pm25?: number | null;
+  pm25Status?: AirStatus | null;
+  pm10?: number | null;
+  pm10Status?: AirStatus | null;
+  caiValue?: number | null;
+  caiStatus?: AirStatus | null;
+  no2Value?: number | null;
+  so2Value?: number | null;
+  coValue?: number | null;
+}
+
+export interface CalendarProduct {
+  id: string;
+  name: string;
+  brand: string;
+  imageUri?: string | null;
+  category: string;
+  reason?: string | null;
+  timing?: string | null;
+}
+
+export interface CalendarRecommendation {
+  id: string;
+  title: string;
+  grade: EvidenceGrade;
+  sourceLabel: string;
+  explanation: string;
+  observationalNote?: string | null;
+  ingredientTags: string[];
+  timing?: string | null;
+  products: CalendarProduct[];
+}
+
+export interface CalendarImage {
+  url: string; // presigned URL
+  contentType: string;
+  expiresAt: string; // ISO8601 — 만료 시각
+}
+
+export interface Landmarks {
+  version: string;
+  points: number[][]; // 정규화 좌표 [[x, y], ...] (0~1)
+}
+
+export interface CalendarDiagnosis {
+  id: string;
+  capturedAt: string;
+  overallScore: number;
+  status: string;
+  modelVersion?: string | null;
+  parts: SkinPartMetric[];
+  weather: CalendarWeather | null;
+  recommendations: CalendarRecommendation[];
+  /** 저장 동의 + 이미지 존재 시에만 채워짐. 미동의면 null. */
+  image: CalendarImage | null;
+  /** 저장 동의 + 랜드마크 존재 시에만 채워짐. 미동의면 null. */
+  landmarks: Landmarks | null;
+}
+
+export interface CalendarDayHistory {
+  date: string; // Asia/Seoul YYYY-MM-DD
+  diagnoses: CalendarDiagnosis[];
+}
+
+export interface ScoreSeriesPoint {
+  date: string;
+  diagnosisId: string;
+  capturedAt: string;
+  overallScore: number;
+}
+
+export interface ScoreSeries {
+  from: string;
+  to: string;
+  points: ScoreSeriesPoint[];
+}
+
 // ── 개인 패턴 분석 (T10) ──────────────────────────
 
 export type PatternStatus = 'LOCKED' | 'READY';
