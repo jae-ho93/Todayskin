@@ -2,6 +2,7 @@ import { Logger, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AdminModule } from '../admin/admin.module';
 import { ImageStorageService } from './image-storage.service';
+import { ImageReconciliationScheduler } from './image-reconciliation.scheduler';
 import { IMAGE_OBJECT_STORE } from './providers/image-object-store.interface';
 import { MemoryImageObjectStore } from './providers/memory-image-object-store';
 import { S3ImageObjectStore } from './providers/s3-image-object-store';
@@ -43,6 +44,7 @@ import { S3ImageObjectStore } from './providers/s3-image-object-store';
       },
     },
     ImageStorageService,
+    ImageReconciliationScheduler,
   ],
   exports: [ImageStorageService, IMAGE_OBJECT_STORE],
 })

@@ -47,6 +47,17 @@ export class MemoryImageObjectStore implements ImageObjectStore {
     return `memory://${params.bucket}/${params.key}?expires=${expiresAt}`;
   }
 
+  /**
+   * N10: bucket 내 객체 key 목록(prefix 필터). orphan 탐지 테스트용.
+   */
+  async listObjects(params: { bucket: string; prefix?: string }): Promise<string[]> {
+    const prefixFull = `${params.bucket}/`;
+    return [...this.objects.keys()]
+      .filter((full) => full.startsWith(prefixFull))
+      .map((full) => full.slice(prefixFull.length))
+      .filter((key) => !params.prefix || key.startsWith(params.prefix));
+  }
+
   /** 테스트용 */
   has(key: string): boolean {
     return this.objects.has(`${this.bucket}/${key}`);

@@ -88,6 +88,10 @@ export const ENV_REGISTRY: EnvVarDefinition[] = [
   { key: 'AWS_ACCESS_KEY_ID', owner: 'storage', description: 'AWS access key (local only; prefer IAM role)', requiredIn: 'never', secret: true },
   { key: 'AWS_SECRET_ACCESS_KEY', owner: 'storage', description: 'AWS secret key (local only; prefer IAM role)', requiredIn: 'never', secret: true },
 
+  // N10: 이미지 저장소 reconciliation
+  { key: 'IMAGE_RECONCILE_INTERVAL_MS', owner: 'storage', description: 'Image delete retry / orphan scan scheduler interval ms (0=disabled)', requiredIn: 'never', safeDefault: 3_600_000, secret: false },
+  { key: 'IMAGE_DELETE_MAX_ATTEMPTS', owner: 'storage', description: 'Max delete retry attempts before permanent-failure alert', requiredIn: 'never', safeDefault: 10, secret: false },
+
   { key: 'RUN_MIGRATIONS_ON_START', owner: 'deploy', description: 'Run prisma migrate on container start (local only)', requiredIn: 'never', safeDefault: 'false', secret: false, mockFlag: true, expiry: '2027-01-01' },
 
   { key: 'SOFT_DELETE_RETENTION_DAYS', owner: 'platform', description: 'Soft-delete retention days before purge', requiredIn: 'never', safeDefault: 30, secret: false },

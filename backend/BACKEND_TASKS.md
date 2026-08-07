@@ -763,12 +763,23 @@ Jest coverageThreshold를 반영했다.
 
 브랜치: `feature/image-storage-reconciliation`
 
-- [ ] 철회·탈퇴의 이미지 선삭제와 DB transaction 순서를 2단계 상태로 재설계
-- [ ] S3 삭제 실패 레코드 재시도 worker와 운영 지표
-- [ ] DB 메타데이터 없는 orphan 객체 탐지·정리 dry-run
-- [ ] 이미지 교체 시 이전 객체 정리 정책
-- [ ] 철회·탈퇴 삭제 실패 알림과 관리자 재처리 경로
-- [ ] S3 lifecycle rule과 보존 정책 정합성 문서화
+- [x] 철회·탈퇴의 이미지 선삭제와 DB transaction 순서를 2단계 상태로 재설계
+  - `DiagnosisImage.pendingDeleteAt` 기록 → S3 객체 삭제 → `deletedAt` 완료 마킹 (스키마+migration `20260810000000_n10_image_delete_lifecycle`)
+  - 삭제 의도는 DB에 먼저 기록되므로 프로세스가 중간에 죽어도 재시도 worker가 수렴
+- [x] S3 삭제 실패 레코드 재시도 worker와 운영 지표
+  - `ImageReconciliationScheduler`(기본 1시간, `IMAGE_RECONCILE_INTERVAL_MS`)가 `retryPendingDeletes()` 실행
+  - 시도 횟수(`deleteAttempts`)·마지막 오류(`lastDeleteError`) 기록, report 반환 + 구조화 로그 지표
+- [x] DB 메타데이터 없는 orphan 객체 탐지·정리 dry-run
+  - `ImageObjectStore.listObjects()`(S3 ListObjectsV2 페이징 / Memory) + `detectOrphans()`
+  - 기본 dry-run(탐지만), 실제 삭제는 ADMIN API `POST /admin/images/reconcile-orphans`(dryRun=false)로만
+- [x] 이미지 교체 시 이전 객체 정리 정책
+  - `storeDiagnosisImage`가 기존 객체를 교체할 때 이전 객체를 정리. 실패 시 orphan으로 남겨 reconciliation이 수렴
+- [x] 철회·탈퇴 삭제 실패 알림과 관리자 재처리 경로
+  - 최대 시도 초과(`IMAGE_DELETE_MAX_ATTEMPTS`, 기본 10) 시 `image.delete_permanent_failure` 감사 로그 + error 로그(모니터링 대상)
+  - ADMIN API: `POST /admin/images/retry-deletes`, `POST /admin/images/reconcile-orphans`
+- [x] S3 lifecycle rule과 보존 정책 정합성 문서화
+  - **권장 S3 lifecycle**: `diagnoses/` prefix에 1일 경과 미완료 멀티파트 업로드 abort + 표준(Standard) 90일 후 Standard-IA 전환(선택). **객체 자동 만료 규칙은 두지 않는다** — 이미지 삭제는 동의 철회/탈퇴 시 앱이 2단계로 수행하는 것이 원칙이고, lifecycle 만료가 있으면 재시도 worker·감사 로그와 상충한다. orphan cleanup은 `detectOrphans`(ADMIN)가 유일한 예외 경로다.
+  - 보존 정책: 동의 철회·탈퇴 = 즉시 물리 삭제(앱 주도), `DiagnosisImage.deletedAt` 완료 후 DB 메타는 감사 보존, 진단 점수는 N6 익명 보존과 별개로 유지
 
 완료 기준: 일시적인 S3/DB 장애 뒤에도 개인정보 이미지 객체와 DB 메타데이터가 자동으로 수렴한다.
 

@@ -14,6 +14,9 @@ export interface StoredImageRef {
 }
 
 export interface ImageObjectStore {
+  /** N10: orphan 탐지용 — 현재 store가 사용하는 bucket 식별자. */
+  readonly bucket: string;
+
   putObject(params: {
     key: string;
     body: Buffer;
@@ -31,6 +34,12 @@ export interface ImageObjectStore {
     key: string;
     expiresInSeconds: number;
   }): Promise<string>;
+
+  /**
+   * N10: bucket 내 객체 key 목록 반환(prefix 필터).
+   * DB 메타데이터 없는 orphan 객체 탐지·정리에 사용한다.
+   */
+  listObjects(params: { bucket: string; prefix?: string }): Promise<string[]>;
 }
 
 export const IMAGE_OBJECT_STORE = Symbol('IMAGE_OBJECT_STORE');
