@@ -178,9 +178,14 @@ export const api = {
     safePostJson<Recommendation[]>('/recommendations/generate', { diagnosisId }),
   getProducts: (category?: Product['category']) =>
     safeFetch<Product[]>(category ? `/products?category=${category}` : '/products'),
-  // 날씨 기반(A등급) 제품 추천: 오늘 날씨/대기질만으로 상황(세안 후/외출 전/외출 후)별 화장품을 Gemini에게 하나씩 추천받는다
-  generateWeatherProducts: (weather: WeatherSnapshot) =>
-    safePostJson<Product[]>('/products/weather-based', weather),
+  // 날씨 기반(A등급) 제품 추천 (N12): 클라이언트는 좌표만 보내고 서버가 오늘 날씨/대기질을
+  // 직접 조회해 상황(세안 후/외출 전/외출 후)별 화장품을 Gemini에게 하나씩 추천받는다.
+  // weather 본문을 보내지 않으므로 조작된 날씨로 추천을 왜곡할 수 없다.
+  generateWeatherProducts: (coords?: { latitude: number; longitude: number }) =>
+    safePostJson<Product[]>('/products/weather-based', {
+      lat: coords?.latitude,
+      lon: coords?.longitude,
+    }),
   // 가입/로그인 모두 이 두 개를 먼저 통과해야 한다 — 서버가 전화번호 본인확인(OTP)을 강제한다
   sendOtp: (phoneNumber: string, purpose: OtpPurpose) =>
     postJson<{ message: string }>('/otp/send', { phoneNumber, purpose }),

@@ -193,13 +193,44 @@ describe('API Response Contract (e2e)', () => {
     });
 
     it('POST /products/weather-based — MOCK_GEMINI=false + 키 없음 시 503', async () => {
+      // N12: 서버 소유 날씨 — 날씨 조회가 LIVE로 성공해야 Gemini 실패(503)까지 도달한다.
+      // 정부 API가 전부 null이면 UNAVAILABLE fallback 경로(스냅샷 없음 → 503)가 먼저 걸리므로
+      // 여기서는 값이 있는 응답으로 mock해 "Gemini 실패 → 503" 계약을 검증한다.
+      kmaClient.fetchUvIndex.mockResolvedValue({
+        current: 5,
+        peak: 7,
+        peakHour: 13,
+        observedAt: new Date('2026-08-04T06:00:00Z'),
+      });
+      airKoreaClient.fetchAirQuality.mockResolvedValue({
+        ozone: 0.03,
+        pm25: 12,
+        pm10: 25,
+        cai: 80,
+        no2: 0.02,
+        so2: 0.004,
+        co: 0.4,
+        observedAt: new Date('2026-08-04T06:00:00Z'),
+      });
+
       await request(app.getHttpServer())
         .post('/products/weather-based')
-        .send({ uvIndex: 5, pm25: 20 })
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ lat: 37.5665, lon: 126.978 })
         .expect(503)
         .then((res) => {
           expect(res.body.detail).toBeDefined();
         });
+    });
+
+    it('POST /products/weather-based — 조작된 weather 본문은 400 (N12)', async () => {
+      // N12: 서버가 날씨를 직접 구성하므로 클라이언트가 보낸 weather 필드는
+      // forbidNonWhitelisted ValidationPipe가 거부한다 (옛 계약 폐기 검증).
+      await request(app.getHttpServer())
+        .post('/products/weather-based')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ uvIndex: 5, pm25: 20 })
+        .expect(400);
     });
   });
 
@@ -233,6 +264,11 @@ describe('API Response Contract (e2e)', () => {
       await request(app.getHttpServer()).get('/diagnosis/latest').expect(401);
       await request(app.getHttpServer()).get('/diagnosis/pattern').expect(401);
       await request(app.getHttpServer()).get('/notifications/preferences').expect(401);
+      // N12: 날씨 기반 제품 추천도 인증 필요 (조작된 날씨로 추천 왜곡 방지)
+      await request(app.getHttpServer())
+        .post('/products/weather-based')
+        .send({ lat: 37.5665, lon: 126.978 })
+        .expect(401);
     });
 
     it('GET /recommendations 전역 템플릿 응답 스키마 (인증 불필요)', async () => {

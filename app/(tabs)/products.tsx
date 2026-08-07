@@ -32,8 +32,9 @@ export default function ProductsScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    const weather = await api.getWeather(coords ?? undefined);
-    const products = weather ? await api.generateWeatherProducts(weather) : null;
+    // N12: 날씨는 서버가 직접 조회한다. 클라이언트는 좌표만 전달하고 weather 본문을
+    // 보내지 않으므로 조작된 날씨로 추천을 왜곡할 수 없다.
+    const products = await api.generateWeatherProducts(coords ?? undefined);
     setWeatherProducts(products);
   }, [coords]);
 

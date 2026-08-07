@@ -5,6 +5,9 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
 import { GeminiClient } from '../src/modules/gemini/gemini.client';
+import { KmaClient } from '../src/modules/weather/clients/kma.client';
+import { AirKoreaClient } from '../src/modules/weather/clients/airkorea.client';
+import { StationClient } from '../src/modules/weather/clients/station.client';
 import { signupWithOtp, loginWithOtp } from './helpers/auth-flow';
 import { grantRecommendationTransfer } from './helpers/consent-flow';
 
@@ -74,6 +77,38 @@ describe('Recommendation & Product (e2e)', () => {
             ingredientTags: ['히알루론산'],
           },
         ]),
+      })
+      // N12: 서버 소유 날씨 — weather-based 제품 생성이 WeatherService를 거치므로
+      // 정부 API 경계를 고정값으로 mock해 LIVE 날씨를 결정적으로 만든다.
+      // (키가 없으면 실클라이언트가 전부 null → UNAVAILABLE → 스냅샷 의존이 되므로)
+      .overrideProvider(KmaClient)
+      .useValue({
+        fetchUvIndex: jest.fn().mockResolvedValue({
+          current: 5,
+          peak: 7,
+          peakHour: 13,
+          observedAt: new Date(),
+        }),
+      })
+      .overrideProvider(AirKoreaClient)
+      .useValue({
+        fetchAirQuality: jest.fn().mockResolvedValue({
+          ozone: 0.03,
+          pm25: 12,
+          pm10: 25,
+          cai: 80,
+          no2: 0.02,
+          so2: 0.004,
+          co: 0.4,
+          observedAt: new Date(),
+        }),
+      })
+      .overrideProvider(StationClient)
+      .useValue({
+        fetchNearestStation: jest.fn().mockResolvedValue({
+          stationName: '종로구',
+          cityName: '서울특별시',
+        }),
       })
       .compile();
 
@@ -217,10 +252,18 @@ describe('Recommendation & Product (e2e)', () => {
   });
 
   describe('POST /products/weather-based', () => {
+    it('인증 없이 호출 시 401', async () => {
+      await request(app.getHttpServer())
+        .post('/products/weather-based')
+        .send({ lat: 37.5665, lon: 126.978 })
+        .expect(401);
+    });
+
     it('날씨 기반 제품 3개 생성 — reason, timing 포함', async () => {
       const res = await request(app.getHttpServer())
         .post('/products/weather-based')
-        .send({ uvIndex: 5, pm25: 20, pm10: 40 })
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ lat: 37.5665, lon: 126.978 })
         .expect(200);
 
       expect(Array.isArray(res.body)).toBe(true);

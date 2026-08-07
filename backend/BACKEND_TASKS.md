@@ -816,13 +816,15 @@ Jest coverageThreshold를 반영했다.
 
 브랜치: `fix/server-owned-weather-contract`
 
-- [ ] `POST /products/weather-based`를 인증하고 사용자 입력 weather 전체를 신뢰하지 않도록 변경
-- [ ] 좌표/지역 식별자만 받아 WeatherService·최근 WeatherSnapshot에서 입력 구성
-- [ ] Redis·정부 API 실패 시 최근 DB snapshot fallback 구현
-- [ ] 프론트 요청 계약과 함께 단계적으로 migration
-- [ ] 비인증 호출·조작된 날씨·외부 API 실패 E2E 추가
+- [x] `POST /products/weather-based`를 인증하고 사용자 입력 weather 전체를 신뢰하지 않도록 변경
+- [x] 좌표/지역 식별자만 받아 WeatherService·최근 WeatherSnapshot에서 입력 구성
+- [x] Redis·정부 API 실패 시 최근 DB snapshot fallback 구현
+- [x] 프론트 요청 계약과 함께 단계적으로 migration
+- [x] 비인증 호출·조작된 날씨·외부 API 실패 E2E 추가
 
 완료 기준: 날씨 기반 제품 생성이 인증된 서버 데이터만 사용하고 외부 API 장애에도 명시적인 cached/unavailable 정책을 유지한다.
+
+> ✅ 완료 (PR #44, `fix/server-owned-weather-contract`): `JwtAuthGuard` 추가 + `WeatherBasedRequestDto`(lat/lon만) 도입. 서비스가 `WeatherService.getCurrentWeather` → LIVE/CACHED → UNAVAILABLE 시 최근 스냅샷(7일, 지역 우선, source=CACHED) → 없으면 503. 프론트 `api.generateWeatherProducts(coords)`로 마이그레이션. e2e: 비인증 401, Gemini 실패 503(날씨 LIVE mock), 생성 200 계약. 검증: tsc/test/build/lint/프론트 tsc 모두 통과.
 
 ### N13. inference-service 내부 경계 보호
 
