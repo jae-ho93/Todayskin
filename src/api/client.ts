@@ -1,5 +1,6 @@
 import Constants from 'expo-constants';
 import type {
+  CalendarDayHistory,
   ConsentPurpose,
   ConsentPurposeInfo,
   EvidenceGrade,
@@ -7,6 +8,7 @@ import type {
   OtpPurpose,
   Product,
   Recommendation,
+  ScoreSeries,
   SignupRequest,
   SkinScoreSnapshot,
   User,
@@ -137,6 +139,22 @@ export const api = {
     if (result.status === 'ok') return result.data;
     if (result.status === 'not_found') return [];
     return null;
+  },
+  // N8: 특정 날짜(Asia/Seoul)의 통합 히스토리 — 날씨·분석·추천 + 동의 시 이미지/랜드마크.
+  getHistoryByDate: async (date: string): Promise<CalendarDayHistory | null> => {
+    const result = await authFetch<CalendarDayHistory>(`/diagnosis/history/${date}`);
+    return result.status === 'ok' ? result.data : null;
+  },
+  // N8: overallScore 시계열 — 서버가 Asia/Seoul 기준으로 집계 (기본 최근 90일).
+  getScoreSeries: async (opts?: { from?: string; to?: string }): Promise<ScoreSeries | null> => {
+    const params = new URLSearchParams();
+    if (opts?.from) params.set('from', opts.from);
+    if (opts?.to) params.set('to', opts.to);
+    const qs = params.toString();
+    const result = await authFetch<ScoreSeries>(
+      `/diagnosis/score-series${qs ? `?${qs}` : ''}`,
+    );
+    return result.status === 'ok' ? result.data : null;
   },
   // 정면 촬영 1장을 서버로 전송해 진단을 생성·저장한다. 쓰기 요청이므로 실패 시 에러를 던진다.
   // wentOutside=true일 때만 서버가 날씨 스냅샷을 진단에 연결한다(실내에만 있었으면 날씨를 엮지 않음).

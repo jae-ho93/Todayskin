@@ -858,11 +858,11 @@ Jest coverageThreshold를 반영했다.
 
 브랜치: `feature/calendar-history-client`
 
-- [ ] 프론트 API client에 `history/:date`, `score-series` 추가
-- [ ] 날씨·진단·추천·image·landmarks 응답 타입 동기화
-- [ ] History 화면의 기존 목록/로컬 시계열을 N8 계약으로 migration
-- [ ] 저장 미동의와 presigned URL 만료 상태 처리
-- [ ] 로딩·빈 날짜·부분 데이터·재인증 UI 검증
+- [x] 프론트 API client에 `history/:date`, `score-series` 추가
+- [x] 날씨·진단·추천·image·landmarks 응답 타입 동기화
+- [x] History 화면의 기존 목록/로컬 시계열을 N8 계약으로 migration
+- [x] 저장 미동의와 presigned URL 만료 상태 처리
+- [x] 로딩·빈 날짜·부분 데이터·재인증 UI 검증
 
 완료 기준: 사용자가 날짜를 선택하면 N8 통합 히스토리를 실제 앱에서 조회하고 동의 상태에 맞는 이미지·landmarks를 확인할 수 있다.
 
