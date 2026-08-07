@@ -377,7 +377,7 @@ Recommendation(userId, diagnosisId, createdAt)
 - [x] hit/miss 처리
 - [x] Redis 장애 시 외부 API 또는 최근 DB fallback
 - [x] live/cached 출처 구분
-- [ ] 무효화·로그·metric 정책 결정 (→ N11 다중 인스턴스 운영 보강)
+- [x] 무효화·로그·metric 정책 결정 (→ N11 다중 인스턴스 운영 보강에서 완료)
 
 초기 Redis 범위는 날씨 캐시였으며, N4에서 추천·패턴·알림 BullMQ 작업 큐와 Inline fallback을 추가했다.
 
@@ -595,8 +595,11 @@ Refresh Token
 
 ## 다음 과정 (Next)
 
-> T0~~T14와 N0~~N8 구현은 완료. N9 이후는 운영 공개 전 필요한 후속 작업.
+> T0~~T14와 N0~~N22 구현은 완료. 남은 백엔드 작업은 N16(실제 AWS 리소스 프로비저닝·첫 배포)뿐이며,
+> 계정·시크릿·승인자가 준비된 뒤 진행한다.
 > 4개 핵심 결정(T2-03/T3-04/T3-05/T9-03)은 decision.md에서 2026-08-07 확정.
+> 프론트 범위 작업(N15 캘린더 프론트 연결, N18 세션 수명, N19 설정 화면, N23 EAS 배포)은
+> 백엔드 태스크 문서에서 제외하고 프론트 팀 문서에서 관리한다.
 
 ### N0. 운영 보안·HTTP 보호
 
@@ -628,7 +631,7 @@ Refresh Token
 - [x] 가입·새 디바이스 로그인 OTP 검증·소비 흐름
   - 개발: allowlisted test phone / mock OTP
   - 운영: 시도 횟수·만료·재전송 제한 적용
-- [ ] 실제 SMS 게이트웨이 HTTP 호출 (현재 `SmsOtpProvider`는 fail-closed placeholder)
+- [x] 실제 SMS 게이트웨이 HTTP 호출 (→ N9에서 알리고(Aligo) 연동 완료)
 - [x] OTP 발송 채널은 SMS로 결정
 - [x] JWT key rotation(kid) — DB active/verify-only 키와 기본 v1 호환
 - [x] 첫 ADMIN 운영 API + @Roles(Role.ADMIN) + 감사 로그
@@ -858,18 +861,6 @@ Jest coverageThreshold를 반영했다.
 
 > ✅ 완료 (PR, `refactor/external-call-idempotency`): `ai_call_reservations`(unique scopeKey) 테이블로 외부 AI 호출 **전에** in-flight 예약. 진단 `diagnosis:{userId}`(완료/실패 시 release — 순수 in-flight 가드, 동시 409), 추천 `recommendation:{diagnosisId}`(성공 시 COMPLETED 보존 → 동일 결과 재반환, 실패 시 release, 동시 409). PENDING lease 60s + FAILED/만료 takeover로 stuck 예약 회수. e2e: 같은 diagnosisId 동시 요청 2건 → Gemini 1회 호출 + 200/409 검증. unit: idempotency 10 + diagnosis 3 + recommendation 6케이스.
 
-### N15. 캘린더 히스토리 프론트 연결
-
-브랜치: `feature/calendar-history-client`
-
-- [x] 프론트 API client에 `history/:date`, `score-series` 추가
-- [x] 날씨·진단·추천·image·landmarks 응답 타입 동기화
-- [x] History 화면의 기존 목록/로컬 시계열을 N8 계약으로 migration
-- [x] 저장 미동의와 presigned URL 만료 상태 처리
-- [x] 로딩·빈 날짜·부분 데이터·재인증 UI 검증
-
-완료 기준: 사용자가 날짜를 선택하면 N8 통합 히스토리를 실제 앱에서 조회하고 동의 상태에 맞는 이미지·landmarks를 확인할 수 있다.
-
 ### N16. AWS 운영 리소스 프로비저닝·첫 배포
 
 브랜치: `chore/aws-production-bootstrap`
@@ -903,36 +894,15 @@ Jest coverageThreshold를 반영했다.
 > **PR #43 CI에서 `backend-build-test`(build→test→test:cov→test:e2e→lint→audit)와 `frontend-typecheck` 모두 초록 확인** (#25 이후 첫 초록).
 > 참고: 로컬에서 DB 없이 `npm run test:cov`를 돌리면 auth/prisma 스위트가 skip되어 `auth.service.ts` coverage threshold(60%)에 미달할 수 있다.
 
-### N18. 앱 세션 토큰 수명 관리
-
-브랜치: `feature/app-session-refresh`
-
-- [x] 프론트에 refresh token 회전 연동 (현재 `saveSession`은 accessToken만 저장, refresh 미사용)
-- [x] 401 응답 시 재로그인 유도 흐름 (현재는 "불러올 수 없어요"만 노출되고 로그인 화면으로 복귀하지 않음)
-- [x] access token(15m) 만료 후에도 앱이 조용히 갱신되거나 명확한 재인증 UX 제공
-
-완료 기준: 세션이 15분 이상 지속돼도 인증 API가 끊기지 않고, 토큰 무효 시 사용자가 로그인 화면으로 안내된다.
-
-### N19. 설정 화면 기능 연동
-
-브랜치: `feature/settings-integration`
-
-- [x] 알림 스위치를 `NotificationPreference` API에 연동 (현재 로컬 state만 변경, 서버 미저장)
-- [x] "안면 이미지 처리방침 확인" / "데이터 처리 동의 철회" 행에 consent 조회·철회 API 연결
-- [x] 탈퇴(withdraw) UI — 백엔드 `POST /auth/withdraw`(N6)는 구현돼 있으나 앱 진입점 없음
-- [ ] 구독(프리미엄) 화면 — 현재 정적 표시만, 결제·권한 로직 없음 (범위 별도 결정)
-
-완료 기준: 설정 화면의 모든 항목이 실제 API와 동기화되고 동의 철회·탈퇴가 사용자 흐름으로 동작한다.
-
 ### N20. 추천-제품 연결 데이터 구축
 
 브랜치: `fix/recommendation-product-links`
 
 - [x] `RecommendationDto.relatedProductIds`가 항상 빈 배열로 반환되는 문제 해결 (template/생성 추천 모두)
-- [x] seed에 `RecommendationProduct` 연결 데이터 추가
-- [x] 프론트 추천 상세의 "관련 제품" 섹션 활성화 (현재 `recommendation/[id]`에서 영영 빈 목록)
+- [x] seed에 `RecommendationProduct` 연결 데이터 추가 (템플릿·생성 추천 다형성)
 
-완료 기준: A/B/C 추천 상세에서 실제 관련 제품이 표시된다.
+완료 기준(백엔드): 추천 응답의 `relatedProductIds`가 DB 연결 데이터 기준으로 채워진다.
+> 프론트 "관련 제품" 섹션 표시는 프론트 범위로 별도 관리한다.
 
 ### N21. 패턴 분석 정확성·성능 개선
 
@@ -954,16 +924,6 @@ Jest coverageThreshold를 반영했다.
 - [x] SMS 게이트웨이 연동(N9) 시 발송 실패·재시도·모니터링 정책 확정 — N22
 
 완료 기준: SMS 게이트웨이 활성화 상태에서도 임의 번호 대상 OTP 도배가 불가능하다.
-
-### N23. 프론트 배포 준비 (EAS / 실기기)
-
-브랜치: `chore/expo-deploy-config`
-
-- [ ] `app.json`에 `ios.bundleIdentifier`·`android.package` 설정 (현재 없어 EAS 빌드 불가)
-- [ ] 운영 `EXPO_PUBLIC_API_BASE_URL` 주입과 `extra.apiBaseUrl`(localhost 고정) 환경화
-- [ ] 로컬 의존성 설치 상태 점검 — `npm ci`로 `expo-image-picker` 등 node_modules 갱신 (pull 후 미설치 상태 확인됨)
-
-완료 기준: `eas build`가 통과하고 실기기 빌드가 운영 API URL을 사용한다.
 
 ## 완료 정의
 

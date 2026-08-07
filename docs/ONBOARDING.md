@@ -14,7 +14,7 @@ Todayskin은 사용자의 피부 이미지를 분석하고 날씨·대기질을 
 | 캐시·비동기 | Redis, BullMQ, Inline fallback |
 | 운영 | GitHub Actions, ECR, ECS Fargate, RDS, S3, CloudWatch |
 
-T0~T14와 N0~N8 구현이 반영되어 있습니다. 운영 SMS OTP 게이트웨이 연결과 실제 AWS 리소스 프로비저닝은 아직 남아 있습니다.
+T0~T14와 N0~N22 구현이 반영되어 있습니다. 남은 백엔드 작업은 실제 AWS 리소스 프로비저닝·첫 배포(N16)뿐이며 계정·시크릿·승인자 준비 후 진행합니다.
 
 ## 2. 반드시 지킬 서버 경계
 
@@ -47,7 +47,7 @@ FastAPI에 인증·DB·추천 정책을 넣거나 NestJS에 모델을 직접 로
 - `backend/src/common/guards/`
 - `backend/src/common/strategies/jwt.strategy.ts`
 
-Refresh Token은 해시로 DB에 저장하고 회전합니다. 가입·로그인은 OTP 검증 기록을 소비하며 ADMIN API는 역할 가드와 감사 로그를 사용합니다. 운영 `SmsOtpProvider`의 실제 게이트웨이 호출은 미구현입니다.
+Refresh Token은 해시로 DB에 저장하고 회전합니다. 가입·로그인은 OTP 검증 기록을 소비하며 ADMIN API는 역할 가드와 감사 로그를 사용합니다. 운영 `SmsOtpProvider`는 알리고 게이트웨이로 실제 SMS를 발송하고, 번호별 일일 발송 한도·코드 해시 저장(N22)이 적용됩니다.
 
 ### 3) 동의와 이미지 수명주기
 

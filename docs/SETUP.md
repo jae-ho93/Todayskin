@@ -110,7 +110,7 @@ JWT secret은 각각 `openssl rand -base64 48`로 만들 수 있습니다.
 - `MOCK_GEMINI`, `MOCK_INFERENCE`는 개발·테스트 전용이며 운영에서는 사용할 수 없습니다.
 - 개발·테스트에서 `S3_BUCKET`이 비어 있으면 Memory image store를 사용합니다.
 - 운영에서는 `S3_BUCKET`이 필수이고 누락 시 서버가 시작되지 않습니다.
-- 운영 SMS OTP 게이트웨이 호출은 아직 미구현이므로 운영 공개 전 완료해야 합니다.
+- 운영 SMS OTP 게이트웨이(알리고) 호출은 구현되어 있으며, `SMS_API_KEY`·`SMS_USER_ID`·`SMS_SENDER`·`SMS_ENDPOINT`가 필요합니다. 개발·테스트는 `OTP_ALLOWLIST_PHONES`의 mock OTP를 사용합니다.
 
 ## 6. PostgreSQL과 Redis 실행
 
@@ -274,12 +274,12 @@ docker compose up -d
 
 ### OTP 발송 실패
 
-개발·테스트는 전화번호가 `OTP_ALLOWLIST_PHONES`에 있어야 mock OTP를 사용할 수 있습니다. 운영 `SmsOtpProvider`의 실제 외부 게이트웨이 호출은 후속 작업입니다.
+개발·테스트는 전화번호가 `OTP_ALLOWLIST_PHONES`에 있어야 mock OTP를 사용할 수 있습니다. 운영 `SmsOtpProvider`는 알리고 게이트웨이 설정(`SMS_API_KEY` 등)이 누락되면 fail-closed로 503을 반환하며, 설정이 정상이면 실제 SMS를 발송합니다. 번호별 일일 발송 한도(`OTP_DAILY_LIMIT_PER_PHONE`)와 재전송 쿨다운도 적용됩니다.
 
 ## 14. 운영 주의사항
 
 - `.env`, token, 개인정보, 얼굴 이미지, 로컬 DB를 커밋하지 않습니다.
 - 운영 mock flag는 모두 false입니다.
-- 운영은 RDS, Redis, S3, inference-service와 실제 SMS gateway를 준비합니다.
+- 운영은 RDS, Redis, S3, inference-service와 실제 SMS gateway(알리고)를 준비합니다.
 - 운영 migration은 앱 시작이 아니라 승인된 단일 release task에서 수행합니다.
 - 자세한 절차는 `backend/docker/DEPLOYMENT.md`를 따릅니다.

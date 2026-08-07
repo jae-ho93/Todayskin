@@ -2,7 +2,7 @@
 
 NestJS를 메인 백엔드로, `inference-service/`의 FastAPI를 이미지 추론 서버로 분리한 구조입니다. NestJS가 인증, 동의, 진단, 추천, 날씨, 데이터 영속화와 운영 정책을 담당하고 FastAPI는 추론 결과만 반환합니다.
 
-현재 T0~T14와 N0~N8이 반영되어 있습니다. 실제 SMS OTP 게이트웨이 연결과 AWS 계정 리소스 프로비저닝은 후속 작업입니다.
+현재 T0~T14와 N0~N22가 반영되어 있습니다. 남은 백엔드 작업은 AWS 계정 리소스 프로비저닝·첫 배포(N16)뿐이며 계정·시크릿·승인자 준비 후 진행합니다.
 
 ## 로컬 실행
 
@@ -84,7 +84,7 @@ backend/
 - Access/Refresh JWT를 분리하고 Refresh Token은 해시로 저장·회전합니다.
 - 가입과 로그인은 OTP 검증 기록을 소비합니다.
 - 개발·테스트는 allowlist 기반 mock OTP를 사용할 수 있습니다.
-- 운영 `SmsOtpProvider`의 실제 게이트웨이 HTTP 호출은 아직 구현되지 않았으므로 운영 공개 전 완료해야 합니다.
+- 운영 `SmsOtpProvider`는 알리고 게이트웨이로 실제 SMS를 발송하며, 번호별 일일 발송 한도(`OTP_DAILY_LIMIT_PER_PHONE`)와 코드 해시 저장(N22)이 적용됩니다.
 - ADMIN API는 `RolesGuard`와 감사 로그를 사용합니다.
 
 ### 이미지와 동의
@@ -153,6 +153,6 @@ GitHub Actions가 NestJS와 inference-service 이미지를 ECR에 push하고, �
 - `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`
 - `S3_BUCKET`, `INFERENCE_SERVICE_URL`
 - 외부 API와 관측성 설정
-- 실제 SMS 게이트웨이 설정(구현 완료 후)
+- 실제 SMS 게이트웨이 설정(`SMS_API_KEY`, `SMS_USER_ID`, `SMS_SENDER`, `SMS_ENDPOINT` — 알리고)
 
 환경변수 전체 목록은 `.env.example`, 정책은 `src/config/env.registry.ts`를 기준으로 합니다.

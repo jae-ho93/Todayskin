@@ -20,8 +20,9 @@
 ## 운영 공개 전 미완료 결정 이행
 
 - OTP 생성·검증·소비와 제한 정책은 구현되어 있다.
-- 운영 `SmsOtpProvider`의 실제 외부 게이트웨이 호출은 아직 placeholder이므로 N9 완료 전 운영 공개가 불가능하다.
-- 다중 ECS task의 HTTP Rate Limit은 현재 인스턴스 메모리 기준이다. Redis 기반 분산 저장소 전환은 N11에서 수행한다.
+- 운영 `SmsOtpProvider`는 N9에서 알리고 게이트웨이 HTTP 호출로 구현 완료되었고, N22에서 번호별 일일 발송 한도와 코드 해시 저장으로 강화했다.
+- HTTP Rate Limit은 N11에서 Redis 기반 분산 저장소(`RedisThrottlerStorage`)로 전환 완료했다.
+- 남은 것은 N16(실제 AWS 리소스 프로비저닝·첫 배포)뿐이며, 계정·시크릿·승인자가 준비된 뒤 진행한다.
 
 ## N6 Soft Delete / FK / Health / Pagination (2026-08-08 구현)
 
