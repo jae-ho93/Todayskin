@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   Logger,
+  ServiceUnavailableException,
   UnauthorizedException,
   HttpException,
   HttpStatus,
@@ -9,7 +10,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { randomInt } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
-import { OtpProvider } from './providers/otp-provider.interface';
+import { OtpGatewayError, OtpProvider } from './providers/otp-provider.interface';
 import { OtpPurpose } from './enums/otp-purpose.enum';
 
 /**
@@ -122,11 +123,19 @@ export class OtpService {
 
     try {
       await provider.send(phoneNumber, code);
-    } catch {
+    } catch (e) {
       // 발송 실패 시 생성한 코드를 폐기해 검증에 사용되지 않게 한다.
       await this.prisma.otpCode.deleteMany({
         where: { phoneNumber, purpose, code },
       });
+      // N9: 게이트웨이 자체 문제(설정 누락·HTTP 오류·네트워크 장애)는 서버 측 오류이므로
+      // 503으로 매핑한다 — 클라이언트 입력 문제(400)와 구분한다. 가짜 성공은 절대 금지.
+      if (e instanceof OtpGatewayError) {
+        this.logger.error(`OTP 발송 실패 (provider=${provider.name}): ${e.name}`);
+        throw new ServiceUnavailableException(
+          'OTP 발송 서비스에 문제가 있어요. 잠시 후 다시 시도해주세요.',
+        );
+      }
       this.logger.error(`OTP 발송 실패 (provider=${provider.name})`);
       throw new BadRequestException('OTP 발송에 실패했습니다');
     }

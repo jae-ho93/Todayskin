@@ -55,9 +55,14 @@ export const ENV_REGISTRY: EnvVarDefinition[] = [
   { key: 'OTP_MAX_PENDING_PER_PHONE', owner: 'auth', description: 'Max pending OTP per phone', requiredIn: 'never', safeDefault: 3, secret: false },
   { key: 'OTP_ALLOWLIST_PHONES', owner: 'auth', description: 'Dev allowlisted phones for mock OTP', requiredIn: 'never', safeDefault: '', secret: false, mockFlag: true, expiry: '2027-01-01' },
 
-  { key: 'SMS_API_KEY', owner: 'auth', description: 'SMS gateway API key', requiredIn: 'never', secret: true },
-  { key: 'SMS_SENDER', owner: 'auth', description: 'SMS sender id', requiredIn: 'never', secret: false },
-  { key: 'SMS_ENDPOINT', owner: 'auth', description: 'SMS gateway endpoint', requiredIn: 'never', secret: false },
+  // N9: 운영 SMS OTP 게이트웨이(알리고). production에서 누락 시 readiness 실패.
+  { key: 'SMS_API_KEY', owner: 'auth', description: 'SMS gateway API key (Aligo key)', requiredIn: ['production'], secret: true },
+  { key: 'SMS_USER_ID', owner: 'auth', description: 'SMS gateway user id (Aligo user_id)', requiredIn: ['production'], secret: false },
+  { key: 'SMS_SENDER', owner: 'auth', description: 'SMS sender id', requiredIn: ['production'], secret: false },
+  { key: 'SMS_ENDPOINT', owner: 'auth', description: 'SMS gateway endpoint', requiredIn: ['production'], secret: false },
+  { key: 'SMS_TESTMODE', owner: 'auth', description: 'Y면 testmode_yn 전송(과금 없음, 개발 전용)', requiredIn: 'never', safeDefault: '', secret: false },
+  { key: 'SMS_TIMEOUT_MS', owner: 'auth', description: 'SMS send request timeout ms', requiredIn: 'never', safeDefault: 10_000, secret: false },
+  { key: 'SMS_MAX_RETRIES', owner: 'auth', description: 'SMS network retry count (max 2)', requiredIn: 'never', safeDefault: 1, secret: false },
 
   { key: 'KMA_API_KEY', owner: 'weather', description: 'KMA API key', requiredIn: 'never', secret: true },
   { key: 'AIRKOREA_API_KEY', owner: 'weather', description: 'AirKorea API key', requiredIn: 'never', secret: true },

@@ -63,10 +63,19 @@ export const envValidationSchema = Joi.object({
   // 운영에서는 비활성화. 예: 01012345678,01099999999
   OTP_ALLOWLIST_PHONES: Joi.string().allow('').default(''),
 
-  // N2: SMS 게이트웨이 (운영용 SmsOtpProvider). 운영 공개 전 구현.
+  // N2/N9: SMS 게이트웨이 (운영용 SmsOtpProvider — 알리고 연동).
+  // 운영에서 누락 시 readiness가 실패한다(env.registry requiredIn production).
   SMS_API_KEY: Joi.string().allow('').optional(),
+  // 알리고 user_id (API key와 함께 form body에 전송)
+  SMS_USER_ID: Joi.string().allow('').optional(),
   SMS_SENDER: Joi.string().allow('').optional(),
   SMS_ENDPOINT: Joi.string().uri().allow('').optional(),
+  // Y면 testmode_yn=Y 전송 — 실제 과금/발송 없이 연동 테스트만 수행 (개발 전용 권장).
+  SMS_TESTMODE: Joi.string().valid('Y', 'N', '').allow('').default(''),
+  // 발송 요청 timeout(ms). 기본 10000.
+  SMS_TIMEOUT_MS: Joi.number().integer().min(100).default(10_000),
+  // 네트워크 오류 재시도 횟수. 기본 1 (최대 2).
+  SMS_MAX_RETRIES: Joi.number().integer().min(0).max(2).default(1),
 
   // 외부 API 키 — T5+에서 사용
   KMA_API_KEY: Joi.string().allow('').optional(),
