@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
@@ -29,23 +29,31 @@ export default function ProductsScreen() {
   // 피부 기반 / 날씨+피부 기반은 아직 이 화면에 연결하지 않아 구역만 둔다.
   const [weatherProducts, setWeatherProducts] = useState<Product[] | null>(null);
   const [weatherProductsLoading, setWeatherProductsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async () => {
+    const weather = await api.getWeather(coords ?? undefined);
+    const products = weather ? await api.generateWeatherProducts(weather) : null;
+    setWeatherProducts(products);
+  }, [coords]);
 
   useEffect(() => {
     if (locationLoading) return;
     let cancelled = false;
-    async function load() {
-      setWeatherProductsLoading(true);
-      const weather = await api.getWeather(coords ?? undefined);
-      const products = weather ? await api.generateWeatherProducts(weather) : null;
-      if (cancelled) return;
-      setWeatherProducts(products);
-      setWeatherProductsLoading(false);
-    }
-    load();
+    setWeatherProductsLoading(true);
+    load().then(() => {
+      if (!cancelled) setWeatherProductsLoading(false);
+    });
     return () => {
       cancelled = true;
     };
-  }, [locationLoading, coords]);
+  }, [locationLoading, load]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
 
   const filteredWeatherProducts = useMemo(() => {
     if (!weatherProducts) return weatherProducts;
@@ -53,7 +61,7 @@ export default function ProductsScreen() {
   }, [weatherProducts, category]);
 
   return (
-    <ScreenContainer>
+    <ScreenContainer refreshing={refreshing} onRefresh={handleRefresh}>
       <Text style={styles.title}>추천 제품/성분</Text>
 
       <View style={styles.filterRow}>

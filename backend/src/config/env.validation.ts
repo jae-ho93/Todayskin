@@ -112,6 +112,11 @@ export const envValidationSchema = Joi.object({
   SOFT_DELETE_RETENTION_DAYS: Joi.number().integer().min(1).default(30),
   SOFT_DELETE_PURGE_INTERVAL_MS: Joi.number().integer().min(0).default(3_600_000),
 
+  // 백그라운드 날씨 수집 스케줄러 간격(ms, 0=비활성). 기본 1시간.
+  // 개인 패턴 분석(T10)이 그날의 실제 최고 UV/오존/미세먼지에 가깝게 집계되도록,
+  // 사용자가 앱을 안 켜도 등록된 전체 지역(REGIONS)을 주기적으로 수집해둔다.
+  WEATHER_COLLECTION_INTERVAL_MS: Joi.number().integer().min(0).default(3_600_000),
+
   // N6: production unknown key 검사에 사용하는 선언 목록(선택)
   APP_ENV_KEYS: Joi.string().allow('').optional(),
 });

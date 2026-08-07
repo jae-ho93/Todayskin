@@ -34,10 +34,14 @@ const CORRELATION_OBS_NOTE = '이 관계는 통계적 관찰일 뿐 인과관계
 const LOCKED_MESSAGE = `패턴 분석에는 최소 ${MIN_SAMPLES}회의 진단 데이터가 필요해요.`;
 
 /**
- * 환경 지표 후보와 Prisma 필드 매핑. null 허용 필드만 후보로 삼는다.
+ * 환경 지표 후보와 EnvRow 필드 매핑. null 허용 필드만 후보로 삼는다.
+ *
+ * 진단은 항상 "자기 전"에 찍히므로, 그 순간의 스냅샷 값(예: 자정 무렵 UV=0)을 그대로 쓰면
+ * 실제 하루 노출량과 안 맞는다. 그래서 진단 시각이 아니라 "같은 지역·같은 날(KST) 중 최댓값"으로
+ * 상관분석을 한다 — collectDailyPeakEnv() 참고.
  */
 const ENV_METRICS: { key: string; field: keyof EnvRow }[] = [
-  { key: 'uvIndex', field: 'uvIndex' },
+  { key: 'uvIndexPeak', field: 'uvIndexPeak' },
   { key: 'pm25', field: 'pm25' },
   { key: 'pm10', field: 'pm10' },
   { key: 'ozonePpm', field: 'ozonePpm' },
@@ -45,12 +49,22 @@ const ENV_METRICS: { key: string; field: keyof EnvRow }[] = [
 ];
 
 type EnvRow = {
-  uvIndex: number | null;
+  uvIndexPeak: number | null;
   pm25: number | null;
   pm10: number | null;
   ozonePpm: number | null;
   caiValue: number | null;
 };
+
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+/** date가 속한 KST 달력일(00:00~24:00 KST)의 UTC 경계를 계산한다. */
+function kstDayBounds(date: Date): { start: Date; end: Date } {
+  const kst = new Date(date.getTime() + KST_OFFSET_MS);
+  const startUtcMs =
+    Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate()) - KST_OFFSET_MS;
+  return { start: new Date(startUtcMs), end: new Date(startUtcMs + 24 * 60 * 60 * 1000) };
+}
 
 /**
  * PatternService — 개인 시계열 상관 분석 (T10).
@@ -101,16 +115,19 @@ export class PatternService {
       };
     }
 
-    // 2) 시계열 구성. weatherSnapshot이 있는 진단만 사용.
-    const series = diagnoses
-      .filter((d) => d.weatherSnapshot !== null)
-      .map((d) => ({
+    // 2) 시계열 구성. weatherSnapshot이 있는 진단만 사용하고, 그 진단 시각의 스냅샷 값 대신
+    // 같은 지역·같은 날(KST)의 최댓값(그날 가장 심한 노출)을 환경 지표로 쓴다.
+    const withSnapshot = diagnoses.filter(
+      (d) => d.weatherSnapshot !== null,
+    ) as (typeof diagnoses[number] & { weatherSnapshot: NonNullable<(typeof diagnoses)[number]['weatherSnapshot']> })[];
+    const series: SeriesPoint[] = await Promise.all(
+      withSnapshot.map(async (d) => ({
         capturedAt: d.capturedAt,
         overallScore: d.overallScore,
         metrics: d.skinMetrics,
-        env: d.weatherSnapshot as EnvRow | null,
-      }))
-      .filter((s) => s.env !== null) as SeriesPoint[];
+        env: await this.collectDailyPeakEnv(d.weatherSnapshot.regionName, d.capturedAt),
+      })),
+    );
 
     // 3) 피부 지표 × 환경 지표 상관 계산.
     const correlations = this.computeCorrelations(series);
@@ -125,6 +142,26 @@ export class PatternService {
       observationalDisclaimer: CAUSALITY_DISCLAIMER,
       correlations,
       recommendationIds,
+    };
+  }
+
+  /**
+   * regionName·capturedAt이 속한 KST 달력일 동안 수집된 모든 WeatherSnapshot 중
+   * 지표별 최댓값(그날 가장 심한 노출)을 계산한다.
+   * 그날 수집된 스냅샷이 적을수록(앱을 그날 거의 안 켰을수록) 실제 최고치와의 오차가 커질 수 있다.
+   */
+  private async collectDailyPeakEnv(regionName: string, capturedAt: Date): Promise<EnvRow> {
+    const { start, end } = kstDayBounds(capturedAt);
+    const result = await this.prisma.weatherSnapshot.aggregate({
+      where: { regionName, observedAt: { gte: start, lt: end } },
+      _max: { uvIndexPeak: true, pm25: true, pm10: true, ozonePpm: true, caiValue: true },
+    });
+    return {
+      uvIndexPeak: result._max.uvIndexPeak,
+      pm25: result._max.pm25,
+      pm10: result._max.pm10,
+      ozonePpm: result._max.ozonePpm,
+      caiValue: result._max.caiValue,
     };
   }
 

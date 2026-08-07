@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../../src/api/client';
+import { clearPendingConsents, getPendingConsents } from '../../src/lib/pendingConsents';
 import { saveSession } from '../../src/lib/session';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type { Gender } from '../../src/types';
@@ -64,12 +65,17 @@ function toIsoDate(digits: string): string {
   return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
 }
 
-type Field = 'name' | 'phone' | 'birthDate';
+type Field = 'name' | 'phone' | 'otp' | 'birthDate';
 
 export default function SignupScreen() {
-  const [step, setStep] = useState(0); // 0: 이름만, 1: +전화번호, 2: +생년월일
+  const [step, setStep] = useState(0); // 0: 이름만, 1: +전화번호(+OTP), 2: +생년월일
   const [name, setName] = useState('');
   const [phoneDigits, setPhoneDigits] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [phoneVerified, setPhoneVerified] = useState(false);
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [birthDateDigits, setBirthDateDigits] = useState('');
   const [gender, setGender] = useState<Gender | null>(null); // 선택 입력이라 폼 유효성엔 영향 없음
   const [focusedField, setFocusedField] = useState<Field | null>('name');
@@ -77,13 +83,15 @@ export default function SignupScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   const phoneInputRef = useRef<TextInput>(null);
+  const otpInputRef = useRef<TextInput>(null);
   const birthDateInputRef = useRef<TextInput>(null);
 
   const trimmedName = name.trim();
   const isNameValid = trimmedName.length > 0 && trimmedName.length <= 20;
   const isPhoneValid = isValidPhoneDigits(phoneDigits);
+  const isOtpValid = otpCode.length === 6;
   const isBirthDateValid = isValidBirthDate(birthDateDigits);
-  const isValid = isNameValid && isPhoneValid && isBirthDateValid;
+  const isValid = isNameValid && isPhoneValid && phoneVerified && isBirthDateValid;
 
   const revealStep = (next: number) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -102,15 +110,51 @@ export default function SignupScreen() {
     if (step === 2) birthDateInputRef.current?.focus();
   }, [step]);
 
+  useEffect(() => {
+    if (otpSent) otpInputRef.current?.focus();
+  }, [otpSent]);
+
   // 각 필드는 타이핑 도중 자동으로 넘어가지 않고, 키보드의 "다음" 버튼(리턴키)을 눌러야만 다음 칸이 나타난다
   const handleNameSubmit = () => {
     if (!isNameValid) return;
     revealStep(1);
   };
 
-  const handlePhoneSubmit = () => {
-    if (!isPhoneValid) return;
-    revealStep(2);
+  // 번호를 다시 바꾸면 이전 인증은 무효 — 새 번호로 다시 인증번호를 받아야 한다
+  const handlePhoneChange = (v: string) => {
+    setPhoneDigits(v.replace(/[^0-9]/g, '').slice(0, 11));
+    setOtpSent(false);
+    setOtpCode('');
+    setPhoneVerified(false);
+  };
+
+  const handleSendOtp = async () => {
+    if (!isPhoneValid || sendingOtp) return;
+    setSendingOtp(true);
+    setError(null);
+    try {
+      await api.sendOtp(phoneDigits, 'signup');
+      setOtpSent(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '인증번호 발송에 실패했습니다.');
+    } finally {
+      setSendingOtp(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!isOtpValid || verifyingOtp) return;
+    setVerifyingOtp(true);
+    setError(null);
+    try {
+      await api.verifyOtp(phoneDigits, otpCode, 'signup');
+      setPhoneVerified(true);
+      revealStep(2);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '인증번호가 올바르지 않습니다.');
+    } finally {
+      setVerifyingOtp(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -125,6 +169,20 @@ export default function SignupScreen() {
         gender: gender ?? undefined,
       });
       await saveSession(user);
+
+      // 온보딩 동의 화면에서 고른 값을 이제 실제로 서버에 기록한다 — 로그인 전엔 인증이 필요한
+      // 동의 등록 API를 호출할 수 없어서 토큰이 생긴 지금(가입 직후) 처음 보낸다. 이미 만든
+      // 계정을 되돌릴 정도의 실패는 아니라 best-effort로만 처리하고 홈 진입은 막지 않는다.
+      const pendingConsents = getPendingConsents();
+      await Promise.all(
+        Object.entries(pendingConsents).map(([purpose, purposeAgreed]) =>
+          api.upsertConsent(purpose as Parameters<typeof api.upsertConsent>[0], purposeAgreed ?? false).catch(() => {
+            // best-effort — 개별 동의 등록 실패가 가입 자체를 막지 않는다
+          }),
+        ),
+      );
+      clearPendingConsents();
+
       router.replace('/(tabs)');
     } catch (e) {
       setError(e instanceof Error ? e.message : '가입에 실패했습니다. 다시 시도해주세요.');
@@ -178,24 +236,66 @@ export default function SignupScreen() {
                 placeholderTextColor={colors.gray300}
                 keyboardType="number-pad"
                 value={formatPhoneDisplay(phoneDigits)}
-                onChangeText={(v) => setPhoneDigits(v.replace(/[^0-9]/g, '').slice(0, 11))}
+                onChangeText={handlePhoneChange}
                 onFocus={() => setFocusedField('phone')}
                 onBlur={() => setFocusedField(null)}
                 maxLength={13}
+                editable={!phoneVerified}
               />
-              {/* number-pad 키보드는 iOS에 리턴키가 없어서, "다음" 버튼을 화면에 직접 둔다 */}
-              {step === 1 && (
+              {/* number-pad 키보드는 iOS에 리턴키가 없어서, 버튼을 화면에 직접 둔다 */}
+              {!otpSent && !phoneVerified && (
                 <Pressable
-                  onPress={handlePhoneSubmit}
-                  disabled={!isPhoneValid}
+                  onPress={handleSendOtp}
+                  disabled={!isPhoneValid || sendingOtp}
                   hitSlop={8}
                   style={styles.nextButton}
                 >
-                  <Text style={[styles.nextButtonText, !isPhoneValid && styles.nextButtonTextDisabled]}>
-                    다음 →
-                  </Text>
+                  {sendingOtp ? (
+                    <ActivityIndicator size="small" color={colors.sageDark} />
+                  ) : (
+                    <Text style={[styles.nextButtonText, !isPhoneValid && styles.nextButtonTextDisabled]}>
+                      인증번호 받기
+                    </Text>
+                  )}
                 </Pressable>
               )}
+            </View>
+          )}
+
+          {otpSent && !phoneVerified && (
+            <View style={styles.field}>
+              <Text style={styles.label}>인증번호</Text>
+              <TextInput
+                ref={otpInputRef}
+                style={[styles.input, focusedField === 'otp' && styles.inputFocused]}
+                placeholder="6자리 숫자"
+                placeholderTextColor={colors.gray300}
+                keyboardType="number-pad"
+                value={otpCode}
+                onChangeText={(v) => setOtpCode(v.replace(/[^0-9]/g, '').slice(0, 6))}
+                onFocus={() => setFocusedField('otp')}
+                onBlur={() => setFocusedField(null)}
+                maxLength={6}
+              />
+              <View style={styles.otpActionRow}>
+                <Pressable onPress={handleSendOtp} disabled={sendingOtp} hitSlop={8}>
+                  <Text style={styles.nextButtonText}>다시 받기</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleVerifyOtp}
+                  disabled={!isOtpValid || verifyingOtp}
+                  hitSlop={8}
+                  style={styles.nextButton}
+                >
+                  {verifyingOtp ? (
+                    <ActivityIndicator size="small" color={colors.sageDark} />
+                  ) : (
+                    <Text style={[styles.nextButtonText, !isOtpValid && styles.nextButtonTextDisabled]}>
+                      확인
+                    </Text>
+                  )}
+                </Pressable>
+              </View>
             </View>
           )}
 
@@ -310,6 +410,7 @@ const styles = StyleSheet.create({
   genderPillText: { ...typography.subtitle, color: colors.textSecondary },
   genderPillTextSelected: { color: colors.sageDark, fontWeight: '700' },
   nextButton: { alignSelf: 'flex-end', paddingVertical: spacing.sm },
+  otpActionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   nextButtonText: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },
   nextButtonTextDisabled: { color: colors.gray300 },
   error: { ...typography.bodySm, color: colors.coralDark },

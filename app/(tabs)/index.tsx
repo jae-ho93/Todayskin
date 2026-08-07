@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
@@ -25,66 +25,67 @@ export default function HomeDashboard() {
   // null = 아직 확인 중, false = 촬영 기록 없음(신규 유저), true = 촬영 기록 있음
   const [hasCaptured, setHasCaptured] = useState<boolean | null>(null);
   const [skinScoreUnavailable, setSkinScoreUnavailable] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     getSession().then((user) => setUserName(user?.name ?? null));
   }, []);
 
+  const load = useCallback(async () => {
+    setWeatherLoading(true);
+    setLoadingRecommendations(true);
+    setSkinScoreUnavailable(false);
+
+    const weatherSnapshot = await api.getWeather(coords ?? undefined);
+    setWeather(weatherSnapshot);
+    setWeatherLoading(false);
+
+    const skinResult = await api.getSkinScore();
+
+    if (skinResult.status === 'not_found') {
+      setHasCaptured(false);
+      setLoadingRecommendations(false);
+      return;
+    }
+    if (skinResult.status === 'error') {
+      setSkinScoreUnavailable(true);
+      setLoadingRecommendations(false);
+      return;
+    }
+
+    setHasCaptured(true);
+    setSkinScore(skinResult.data);
+
+    // A등급(공인 가이드라인)은 날씨만으로 즉시 판단, B등급은 진단 ID만 서버에
+    // 전달해 서버가 소유권을 확인한 뒤 저장된 피부·날씨 데이터를 사용한다.
+    const [aGrade, bGrade] = await Promise.all([
+      api.getRecommendations('A'),
+      api.generateRecommendations(skinResult.data.id),
+    ]);
+    if (aGrade === null && bGrade === null) {
+      setRecommendations(null);
+    } else {
+      setRecommendations([...(aGrade ?? []), ...(bGrade ?? [])]);
+    }
+    setLoadingRecommendations(false);
+  }, [coords]);
+
   useEffect(() => {
     // 위치 권한 응답(허용/거부)이 결정될 때까지 기다렸다가 조회 — 거부돼도 coords만 없을 뿐
     // getWeather가 서버 기본 지역(서울)으로 알아서 폴백하므로 화면은 그대로 진행된다
     if (locationLoading) return;
-
-    let cancelled = false;
-
-    async function load() {
-      setWeatherLoading(true);
-      const weatherSnapshot = await api.getWeather(coords ?? undefined);
-      if (cancelled) return;
-      setWeather(weatherSnapshot);
-      setWeatherLoading(false);
-
-      const skinResult = await api.getSkinScore();
-      if (cancelled) return;
-
-      if (skinResult.status === 'not_found') {
-        setHasCaptured(false);
-        setLoadingRecommendations(false);
-        return;
-      }
-      if (skinResult.status === 'error') {
-        setSkinScoreUnavailable(true);
-        setLoadingRecommendations(false);
-        return;
-      }
-
-      setHasCaptured(true);
-      setSkinScore(skinResult.data);
-
-      // A등급(공인 가이드라인)은 날씨만으로 즉시 판단, B등급은 진단 ID만 서버에
-      // 전달해 서버가 소유권을 확인한 뒤 저장된 피부·날씨 데이터를 사용한다.
-      const [aGrade, bGrade] = await Promise.all([
-        api.getRecommendations('A'),
-        api.generateRecommendations(skinResult.data.id),
-      ]);
-      if (cancelled) return;
-      if (aGrade === null && bGrade === null) {
-        setRecommendations(null);
-      } else {
-        setRecommendations([...(aGrade ?? []), ...(bGrade ?? [])]);
-      }
-      setLoadingRecommendations(false);
-    }
-
     load();
-    return () => {
-      cancelled = true;
-    };
-  }, [locationLoading, coords]);
+  }, [locationLoading, load]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
 
   return (
     <View style={styles.flex}>
-      <ScreenContainer style={styles.content}>
+      <ScreenContainer style={styles.content} refreshing={refreshing} onRefresh={handleRefresh}>
         <Text style={styles.greeting}>안녕하세요, {userName ?? '회원'}님</Text>
 
         {weather ? (

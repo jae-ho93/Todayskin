@@ -90,6 +90,8 @@ export interface HistoryEntry {
 
 export type Gender = 'male' | 'female';
 
+export type OtpPurpose = 'signup' | 'login';
+
 export interface SignupRequest {
   phoneNumber: string;
   name: string;
@@ -105,6 +107,22 @@ export interface User {
   gender?: Gender;
   createdAt: string;
   accessToken: string;
+}
+
+// ── 동의(consent) ──────────────────────────────
+
+export type ConsentPurpose =
+  | 'diagnosis_image_processing'
+  | 'diagnosis_image_storage'
+  | 'ai_recommendation_data_transfer';
+
+export interface ConsentPurposeInfo {
+  purpose: ConsentPurpose;
+  currentVersion: string;
+  required: boolean; // true면 이 동의 없이는 해당 기능 진입이 막힘
+  title: string;
+  description: string;
+  withdrawalPolicy: 'keep_results' | 'delete_images';
 }
 
 // ── 개인 패턴 분석 (T10) ──────────────────────────

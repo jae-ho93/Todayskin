@@ -18,6 +18,10 @@ import { WeatherSource } from '../../common/enums/weather-source.enum';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WeatherSnapshot } from '@prisma/client';
 
+// 지표가 하나라도 null인 degraded 결과의 캐시 TTL(초). 기본 TTL(5분)보다 훨씬 짧게 둬서
+// 일시적인 외부 API 실패(예: 에어코리아 504)가 "측정 불가"를 오래 재생시키지 않게 한다.
+const DEGRADED_CACHE_TTL_SECONDS = 30;
+
 /**
  * 영구 저장용으로 수집한 메타데이터. 응답용 DTO와 달리 지역/측정소/좌표를 포함한다.
  */
@@ -245,6 +249,10 @@ export class WeatherService {
   /**
    * 캐시 저장. LIVE/UNAVAILABLE 모두 캐싱해 외부 API 보호.
    * 저장 실패는 조용히 무시(다음 요청이 외부 API를 친다).
+   *
+   * 지표가 하나라도 null(예: 에어코리아만 일시적으로 504)인 결과는 기본 TTL(5분) 대신 짧은 TTL로
+   * 캐싱한다 — 그대로 두면 잠깐의 외부 API 오류 하나가 "측정 불가"를 5분 내내 그대로 재생시킨다.
+   * 완전히 성공한 결과만 기본 TTL을 그대로 쓴다.
    */
   private async saveCache(key: string, dto: WeatherSnapshotDto): Promise<void> {
     if (!this.redisService.isAvailable()) return;
@@ -252,7 +260,22 @@ export class WeatherService {
       dto: { ...dto },
       cachedAt: new Date().toISOString(),
     };
-    await this.redisService.setJson(key, payload);
+    const ttl = this.isDegraded(dto) ? DEGRADED_CACHE_TTL_SECONDS : undefined;
+    await this.redisService.setJson(key, payload, ttl);
+  }
+
+  /** 핵심 지표 중 하나라도 null이면 degraded로 본다(일부 외부 API만 실패한 경우 포함). */
+  private isDegraded(dto: WeatherSnapshotDto): boolean {
+    return (
+      dto.uvIndex === null ||
+      dto.uvIndex === undefined ||
+      dto.ozonePpm === null ||
+      dto.ozonePpm === undefined ||
+      dto.pm25 === null ||
+      dto.pm25 === undefined ||
+      dto.pm10 === null ||
+      dto.pm10 === undefined
+    );
   }
 
   /** 캐시에서 복원한 객체를 DTO 인스턴스로 복구하고 source를 CACHED로 override. */
