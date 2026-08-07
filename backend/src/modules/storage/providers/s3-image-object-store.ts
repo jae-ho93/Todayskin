@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
   ServerSideEncryption,
@@ -18,7 +19,7 @@ import {
  */
 export class S3ImageObjectStore implements ImageObjectStore {
   private readonly client: S3Client;
-  private readonly bucket: string;
+  private readonly bucketName: string;
   private readonly kmsKeyId?: string;
 
   constructor(opts: {
@@ -26,9 +27,13 @@ export class S3ImageObjectStore implements ImageObjectStore {
     region: string;
     kmsKeyId?: string;
   }) {
-    this.bucket = opts.bucket;
+    this.bucketName = opts.bucket;
     this.kmsKeyId = opts.kmsKeyId;
     this.client = new S3Client({ region: opts.region });
+  }
+
+  get bucket(): string {
+    return this.bucketName;
   }
 
   async putObject(params: {
@@ -88,5 +93,28 @@ export class S3ImageObjectStore implements ImageObjectStore {
     return getSignedUrl(this.client, command, {
       expiresIn: params.expiresInSeconds,
     });
+  }
+
+  /**
+   * N10: bucket 내 모든 객체 key를 나열한다(prefix 필터, 페이징 처리).
+   * orphan 객체 탐지 dry-run/정리에 사용.
+   */
+  async listObjects(params: { bucket: string; prefix?: string }): Promise<string[]> {
+    const keys: string[] = [];
+    let continuationToken: string | undefined;
+    do {
+      const resp = await this.client.send(
+        new ListObjectsV2Command({
+          Bucket: params.bucket,
+          Prefix: params.prefix,
+          ContinuationToken: continuationToken,
+        }),
+      );
+      for (const obj of resp.Contents ?? []) {
+        if (obj.Key) keys.push(obj.Key);
+      }
+      continuationToken = resp.IsTruncated ? resp.NextContinuationToken : undefined;
+    } while (continuationToken);
+    return keys;
   }
 }

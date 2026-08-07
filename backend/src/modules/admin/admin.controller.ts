@@ -12,6 +12,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { AdminService } from './admin.service';
 import { ChangeRoleDto } from './dto/change-role.dto';
+import { ReconcileImagesDto } from './dto/reconcile-images.dto';
 import {
   AdminUserItemDto,
   AdminUserListResponseDto,
@@ -69,5 +70,26 @@ export class AdminController {
   @HttpCode(200)
   async purge(@CurrentUser() user: JwtPayload) {
     return this.adminService.runPurge(user.sub);
+  }
+
+  @Post('images/retry-deletes')
+  @ApiOperation({
+    summary: '삭제 실패(미완료) 이미지 row 재시도 (ADMIN, N10)',
+  })
+  @HttpCode(200)
+  async retryImageDeletes(@CurrentUser() user: JwtPayload) {
+    return this.adminService.retryImageDeletes(user.sub);
+  }
+
+  @Post('images/reconcile-orphans')
+  @ApiOperation({
+    summary: 'orphan 이미지 객체 탐지/정리 (ADMIN, N10, 기본 dry-run)',
+  })
+  @HttpCode(200)
+  async reconcileOrphanImages(
+    @Body() dto: ReconcileImagesDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.adminService.reconcileOrphanImages(user.sub, dto);
   }
 }

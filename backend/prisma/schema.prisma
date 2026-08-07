@@ -247,10 +247,19 @@ model DiagnosisImage {
   storedAt       DateTime  @default(now()) @map("stored_at")
   deletedAt      DateTime? @map("deleted_at")
 
+  // N10: 삭제 수명주기 2단계 상태 (이미지 저장소 reconciliation)
+  // - pendingDeleteAt != null && deletedAt == null → S3 객체 삭제 대기(재시도 대상)
+  // - deletedAt != null → 객체 물리 삭제 완료(DB 메타는 감사 보존)
+  pendingDeleteAt DateTime? @map("pending_delete_at")
+  deleteAttempts  Int       @default(0) @map("delete_attempts")
+  lastDeleteError String?   @map("last_delete_error")
+
   diagnosis Diagnosis @relation(fields: [diagnosisId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, deletedAt])
+  // N10: 재시도 worker 스캔용 — 삭제 대기(미완료) row 조회
+  @@index([pendingDeleteAt, deletedAt])
   @@map("diagnosis_images")
 }
 

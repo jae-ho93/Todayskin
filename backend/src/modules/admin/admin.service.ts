@@ -12,7 +12,9 @@ import {
   AdminUserListResponseDto,
 } from './dto/admin-user-list.dto';
 import { ChangeRoleDto } from './dto/change-role.dto';
+import { ReconcileImagesDto } from './dto/reconcile-images.dto';
 import { SoftDeleteService } from '../../common/soft-delete/soft-delete.service';
+import { ImageStorageService } from '../storage/image-storage.service';
 
 /**
  * ADMIN 운영 서비스.
@@ -29,6 +31,7 @@ export class AdminService {
     private readonly prisma: PrismaService,
     private readonly auditLog: AuditLogService,
     private readonly softDelete: SoftDeleteService,
+    private readonly imageStorage: ImageStorageService,
   ) {}
 
   async listUsers(): Promise<AdminUserListResponseDto> {
@@ -114,6 +117,40 @@ export class AdminService {
       actorId,
       action: 'user.purge_triggered',
       targetType: 'User',
+      result: 'success',
+      metadata: { ...result },
+    });
+    return result;
+  }
+
+  /**
+   * N10: 삭제 실패(미완료) 이미지 row 재시도.
+   */
+  async retryImageDeletes(actorId: number) {
+    const result = await this.imageStorage.retryPendingDeletes();
+    await this.auditLog.log({
+      actorId,
+      action: 'image.retry_deletes_triggered',
+      targetType: 'DiagnosisImage',
+      result: 'success',
+      metadata: { ...result },
+    });
+    return result;
+  }
+
+  /**
+   * N10: orphan 객체 탐지/정리. dryRun=true(기본)면 탐지만.
+   */
+  async reconcileOrphanImages(actorId: number, dto: ReconcileImagesDto) {
+    const dryRun = dto.dryRun ?? true;
+    const result = await this.imageStorage.detectOrphans({
+      dryRun,
+      limit: dto.limit,
+    });
+    await this.auditLog.log({
+      actorId,
+      action: dryRun ? 'image.orphan_scan_triggered' : 'image.orphan_cleanup_triggered',
+      targetType: 'DiagnosisImage',
       result: 'success',
       metadata: { ...result },
     });
