@@ -2,24 +2,29 @@ import { SoftDeleteService } from './soft-delete.service';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 
 describe('SoftDeleteService', () => {
+  // $transaction 콜백이 초기화 중인 prisma를 참조하지 않도록 mock 함수를 먼저 추출한다.
+  const userUpdate = jest.fn();
+  const diagnosisUpdateMany = jest.fn();
+  const refreshSessionUpdateMany = jest.fn();
+
   const prisma = {
     user: {
       findFirst: jest.fn(),
       findMany: jest.fn(),
-      update: jest.fn(),
+      update: userUpdate,
       delete: jest.fn(),
     },
     diagnosis: {
       findMany: jest.fn(),
-      updateMany: jest.fn(),
+      updateMany: diagnosisUpdateMany,
       count: jest.fn(),
     },
-    refreshSession: { updateMany: jest.fn() },
+    refreshSession: { updateMany: refreshSessionUpdateMany },
     $transaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
       fn({
-        diagnosis: { updateMany: prisma.diagnosis.updateMany },
-        refreshSession: { updateMany: prisma.refreshSession.updateMany },
-        user: { update: prisma.user.update },
+        diagnosis: { updateMany: diagnosisUpdateMany },
+        refreshSession: { updateMany: refreshSessionUpdateMany },
+        user: { update: userUpdate },
       }),
     ),
   };

@@ -14,6 +14,8 @@ describe('PythonInferenceProvider', () => {
   const validResponse = {
     overallScore: 74,
     modelVersion: 'mobilenet_v3_large-todayskin-v1',
+    // N8: provider는 landmarks 필드를 항상 반환한다(값이 없으면 null).
+    landmarks: null,
     parts: [
       { part: 'forehead', label: '이마', grade: '보통', moisture: 63.6, elasticity: 59.6, note: null },
     ],

@@ -5,6 +5,7 @@ import { GeminiClient, GeminiUnavailable } from '../gemini/gemini.client';
 import { ConsentService } from '../consent/consent.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EvidenceGrade } from './enums/evidence-grade.enum';
+import { RecommendationDto } from './dto/recommendation.dto';
 
 /**
  * RecommendationService 단위 테스트.
@@ -78,8 +79,9 @@ describe('RecommendationService', () => {
   describe('listGlobal', () => {
     it('전역 템플릿 목록 반환 (grade 필터 없음)', async () => {
       prisma.recommendationTemplate.findMany.mockResolvedValue([templateRow()]);
-      const result = await service.listGlobal();
- expect(result).toHaveLength(1);
+      // limit 미지정이므로 배열 응답(비커서)이다.
+      const result = (await service.listGlobal()) as RecommendationDto[];
+      expect(result).toHaveLength(1);
       expect(result[0].id).toBe('rec-1');
       expect(result[0].grade).toBe(EvidenceGrade.A);
       expect(result[0].relatedProductIds).toEqual([]);

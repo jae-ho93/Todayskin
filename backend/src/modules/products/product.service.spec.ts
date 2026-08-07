@@ -5,6 +5,7 @@ import { GeminiClient, GeminiUnavailable } from '../gemini/gemini.client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ProductCategory } from './enums/product-category.enum';
 import { EvidenceGrade } from '../recommendations/enums/evidence-grade.enum';
+import { ProductDto } from './dto/product.dto';
 
 /**
  * ProductService 단위 테스트.
@@ -54,7 +55,8 @@ describe('ProductService', () => {
   describe('list', () => {
     it('카탈로그 전체 반환 (category 필터 없음)', async () => {
       prisma.product.findMany.mockResolvedValue([productRow()]);
-      const result = await service.list();
+      // limit 미지정이므로 배열 응답(비커서)이다.
+      const result = (await service.list()) as ProductDto[];
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe('prod-1');
       expect(result[0].matchedGrade).toBe(EvidenceGrade.A);

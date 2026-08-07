@@ -1,7 +1,16 @@
 import { Test } from '@nestjs/testing';
 import { PrismaService } from './prisma.service';
 
-describe('PrismaService', () => {
+/**
+ * PrismaService 테스트 — 실제 PostgreSQL test DB(todayskin_test)에 연결한다.
+ *
+ * DB 필요 조건: CI는 postgres service가 제공되어 항상 실행된다. 로컬에서 실행하려면
+ * postgres를 띄우고 TEST_DATABASE_URL(또는 docker compose의 기본 test DB)을 사용한다.
+ * DB가 없으면 로컬 `npm test`가 끊기지 않도록 스위트 전체를 skip한다.
+ */
+const describeWithDb =
+  process.env.CI || process.env.TEST_DATABASE_URL ? describe : describe.skip;
+describeWithDb('PrismaService', () => {
   let service: PrismaService;
 
   beforeAll(async () => {

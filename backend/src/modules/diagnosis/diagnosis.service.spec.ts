@@ -15,6 +15,7 @@ import { WeatherService } from '../weather/weather.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ConsentService } from '../consent/consent.service';
 import { ImageStorageService } from '../storage/image-storage.service';
+import { HistoryEntryDto } from './dto/history-entry.dto';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -27,7 +28,11 @@ describe('DiagnosisService', () => {
   let inferenceProvider: { infer: jest.Mock };
   let weatherService: { getOrCreateSnapshot: jest.Mock };
   let consentService: { requireActive: jest.Mock; hasActive: jest.Mock };
-  let imageStorage: { storeDiagnosisImage: jest.Mock; deleteAllForUser: jest.Mock };
+  let imageStorage: {
+    storeDiagnosisImage: jest.Mock;
+    deleteAllForUser: jest.Mock;
+    getPresignedUrlForDiagnosis: jest.Mock;
+  };
   let prisma: Record<string, any>;
 
   const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0x00]);
@@ -118,7 +123,8 @@ describe('DiagnosisService', () => {
     });
 
     it('정상 제출 — Diagnosis + SkinMetric transaction 저장 후 스냅샷 반환', async () => {
-      const result = await service.submit(1, validImages);
+      // wentOutside=true면 좌표가 없어도 기본 지역으로 날씨 스냅샷을 확보한다.
+      const result = await service.submit(1, validImages, { wentOutside: true });
       expect(result.id).toBe('snap-abc');
       expect(result.overallScore).toBe(78);
       expect(result.parts).toHaveLength(6);
@@ -201,7 +207,11 @@ describe('DiagnosisService', () => {
 
     it('날씨 스냅샷 확보 실패해도 진단은 진행(weatherSnapshotId null)', async () => {
       weatherService.getOrCreateSnapshot.mockRejectedValue(new Error('api down'));
-      const result = await service.submit(1, validImages, { lat: 37.5, lon: 126.9 });
+      const result = await service.submit(1, validImages, {
+        lat: 37.5,
+        lon: 126.9,
+        wentOutside: true,
+      });
       expect(result.id).toBe('snap-abc');
     });
 
@@ -232,7 +242,11 @@ describe('DiagnosisService', () => {
         };
         return cb(tx);
       });
-      const result = await service.submit(1, validImages, { lat: 37.5, lon: 126.9 });
+      const result = await service.submit(1, validImages, {
+        lat: 37.5,
+        lon: 126.9,
+        wentOutside: true,
+      });
       expect(captured.data.weatherSnapshotId).toBe('ws-1');
       expect(result.id).toBe('snap-ws');
     });
@@ -271,7 +285,7 @@ describe('DiagnosisService', () => {
         { id: 'snap-2', capturedAt: new Date('2026-08-05T00:00:00.000Z'), overallScore: 80, thumbnailUri: null },
         { id: 'snap-1', capturedAt: new Date('2026-08-04T00:00:00.000Z'), overallScore: 75, thumbnailUri: null },
       ]);
-      const result = await service.getHistory(1);
+      const result = (await service.getHistory(1)) as HistoryEntryDto[];
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe('snap-2');
     });

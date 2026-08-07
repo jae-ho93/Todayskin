@@ -879,12 +879,17 @@ Jest coverageThreshold를 반영했다.
 > 2026-08-07 오디트 기준: main의 `backend-build-test → npm test`가 실패 중(2 suites / 3 tests).
 > 원인은 N8/#37 이후 구현이 바뀌었는데 테스트 기대값이 갱신되지 않은 드리프트다.
 
-- [ ] `diagnosis.service.spec.ts` 2건 — N8 이후 `submit()`이 `wentOutside=true`일 때만 날씨 스냅샷을 연결하도록 바뀐 것을 테스트에 반영
-- [ ] `python-inference.provider.spec.ts` 1건 — N8 landmarks 필드가 provider 출력에 추가된 것을 mock fixture에 반영(`landmarks: null`)
-- [ ] spec 파일 TS 타입 에러 정리 — `soft-delete.service.spec`(implicit any), `diagnosis.service.spec`/`weather.service.spec`(mock에 `getPresignedUrlForDiagnosis`/`$executeRaw` 누락), `product`/`recommendation.service.spec`(`CursorPageDto` 인덱싱)
-- [ ] 로컬 단위 테스트가 DB 없이도 동작하도록 mock 보강 또는 DB 필요 조건 문서화 (`auth`/`prisma` service spec이 실 DB 의존)
+- [x] `diagnosis.service.spec.ts` 2건 — N8 이후 `submit()`이 `wentOutside=true`일 때만 날씨 스냅샷을 연결하도록 바뀐 것을 테스트에 반영
+- [x] `python-inference.provider.spec.ts` 1건 — N8 landmarks 필드가 provider 출력에 추가된 것을 mock fixture에 반영(`landmarks: null`)
+- [x] spec 파일 TS 타입 에러 정리 — `soft-delete.service.spec`(implicit any), `diagnosis.service.spec`/`weather.service.spec`(mock에 `getPresignedUrlForDiagnosis`/`$executeRaw` 누락), `product`/`recommendation.service.spec`(`CursorPageDto` 인덱싱)
+- [x] 로컬 단위 테스트가 DB 없이도 동작하도록 mock 보강 또는 DB 필요 조건 문서화 — `auth`/`prisma` service spec은 실 DB 연동이 목적이므로 CI/TEST_DATABASE_URL 설정 시에만 실행되는 조건부 스위트로 전환하고 주석으로 DB 필요 조건 문서화
+- [x] `npm audit --audit-level=high` CI 게이트 복구 — `@nestjs/swagger@11.4.6`(js-yaml 5.x 계열)으로 올리고 `js-yaml@5.2.3` override 적용 (CVE-2026-59870 / GHSA-pm4m-ph32-ghv5 회피)
 
 완료 기준: `npm test`가 CI·로컬에서 모두 초록이고 main CI가 복구된다.
+
+> 2026-08-07 완료: 로컬 `npm test` 190 passed(+13 skipped=DB 스위트), `tsc --noEmit` 클린, `npm run build`/`lint` 통과, `npm audit --audit-level=high` 0 vulnerabilities.
+> `test:cov`(coverage threshold)·`test:e2e`는 로컬 postgres 부재로 미실행 — 다음 CI 런에서 검증한다.
+> 참고: 로컬에서 DB 없이 `npm run test:cov`를 돌리면 auth/prisma 스위트가 skip되어 `auth.service.ts` coverage threshold(60%)에 미달할 수 있다.
 
 ### N18. 앱 세션 토큰 수명 관리
 
