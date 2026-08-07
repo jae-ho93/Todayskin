@@ -51,3 +51,17 @@ export interface OtpProvider {
  * DI 토큰. 인터페이스는 런타임 값이 아니므로 Symbol 토큰으로 주입한다.
  */
 export const OTP_PROVIDER = Symbol('OTP_PROVIDER');
+
+/**
+ * SMS 게이트웨이 자체의 장애/거부를 나타내는 오류.
+ *
+ * 발송 서비스(설정 누락·HTTP 오류·API 거부·네트워크 장애) 문제를 호출부가
+ * 클라이언트 입력 오류(400)와 구분해 5xx로 응답하도록 하기 위한 타입이다.
+ * 전화번호·OTP 코드·API key는 절대 message에 포함하지 않는다.
+ */
+export class OtpGatewayError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'OtpGatewayError';
+  }
+}

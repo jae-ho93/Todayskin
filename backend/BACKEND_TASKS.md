@@ -746,11 +746,16 @@ Jest coverageThreshold를 반영했다.
 
 브랜치: `feature/production-sms-otp`
 
-- [ ] SMS provider를 확정하고 실제 HTTP 발송 구현
-- [ ] 요청 timeout·제한 재시도·provider 오류 매핑
-- [ ] 전화번호·OTP·API key 로그 금지 검증
-- [ ] 운영에서 `SMS_API_KEY`, `SMS_SENDER`, `SMS_ENDPOINT` 누락 시 readiness 실패
-- [ ] provider 계약 단위 테스트와 가입·로그인 E2E 갱신
+- [x] SMS provider 확정 — **알리고(Aligo)** (건당 10원대 저비용 + 국내 실무 표준, `apis.aligo.in/send/`)
+- [x] 실제 HTTP 발송 구현 (`SmsOtpProvider.send` — form-encoded POST, `result_code>0` 성공 판별)
+- [x] 요청 timeout(`SMS_TIMEOUT_MS`)·제한 재시도(`SMS_MAX_RETRIES`, 네트워크 오류 한정 — HTTP/API 거부는 중복 발송 방지로 재시도 없음)
+- [x] provider 오류 매핑 — 게이트웨이 문제는 `OtpGatewayError` → 503, 클라이언트 입력 오류는 400 유지
+- [x] 전화번호·OTP·API key 로그 금지 검증 (에러 메시지·로거에 미포함, 단위 테스트로 고정)
+- [x] 운영에서 `SMS_API_KEY`, `SMS_USER_ID`, `SMS_SENDER`, `SMS_ENDPOINT` 누락 시 readiness 실패 (env.registry `requiredIn: ['production']`)
+- [x] provider 계약 단위 테스트 (`sms-otp.provider.spec.ts` — 성공/거부/HTTP오류/재시도/마스킹) + 기존 가입·로그인 E2E 유지 확인
+
+참고: `SMS_USER_ID`(알리고 user_id)와 `SMS_TESTMODE`(testmode_yn=Y) 환경변수 추가. `testmode_yn=Y`면 과금 없이 연동 테스트만 수행.
+개발/테스트는 기존 `MockOtpProvider` 유지.
 
 완료 기준: 운영 환경의 OTP가 실제 SMS로 발송되고, 설정 누락이나 provider 장애가 가짜 성공으로 처리되지 않는다.
 
