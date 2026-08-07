@@ -10,6 +10,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes, randomInt } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { maskSensitiveData } from '../../common/logging/redact.logger';
 import { OtpGatewayError, OtpProvider } from './providers/otp-provider.interface';
 import { OtpPurpose } from './enums/otp-purpose.enum';
 
@@ -191,8 +192,13 @@ export class OtpService {
         data: { phoneNumber, purpose, sentAt: now },
       });
     } catch (logErr) {
+      // 발송 로그 기록 실패는 발송 자체를 실패로 만들지 않는다.
+      // 실패 원인(DB 오류 등)을 남겨 일일 한도 집계 누락을 디버깅할 수 있게 하되,
+      // 전화번호 등 민감정보가 로그에 남지 않도록 마스킹한다 (N9 로그 정책).
       this.logger.warn(
-        `OTP 발송 로그 기록 실패 (provider=${provider.name}) — 일일 한도 집계 누락 가능`,
+        `OTP 발송 로그 기록 실패 (provider=${provider.name}) — 일일 한도 집계 누락 가능: ${maskSensitiveData(
+          logErr instanceof Error ? logErr.message : String(logErr),
+        )}`,
       );
     }
   }
