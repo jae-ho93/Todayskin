@@ -112,6 +112,19 @@ describe('Migration & Seed (e2e)', () => {
         create: { ...p },
       });
     }
+    // N20: 템플릿-제품 연결도 시드 로직과 동일하게 재현한다.
+    // (beforeAll이 템플릿/제품을 삭제하면 링크가 Cascade로 함께 지워지므로,
+    //  재시드로 복원하지 않으면 이후 e2e의 관련 제품 단언이 실패한다.)
+    await prisma.recommendationProduct.upsert({
+      where: { templateId_productId: { templateId: 'rec-1', productId: 'prod-1' } },
+      update: {},
+      create: {
+        templateId: 'rec-1',
+        recommendationId: null,
+        productId: 'prod-1',
+        displayOrder: 0,
+      },
+    });
   }
 
   describeOrSkip('스키마 무결성', () => {
@@ -167,12 +180,14 @@ describe('Migration & Seed (e2e)', () => {
   });
 
   describeOrSkip('Seed 멱등성', () => {
-    it('첫 seed 실행 후 템플릿 1개, 제품 4개가 존재한다', async () => {
+    it('첫 seed 실행 후 템플릿 1개, 제품 4개, 링크 1개가 존재한다', async () => {
       await runSeedInline();
       const templateCount = await prisma.recommendationTemplate.count();
       const productCount = await prisma.product.count();
+      const linkCount = await prisma.recommendationProduct.count();
       expect(templateCount).toBe(1);
       expect(productCount).toBe(4);
+      expect(linkCount).toBe(1);
     });
 
     it('두 번째 seed 실행 후에도 row 수가 동일하다 (upsert 중복 방지)', async () => {

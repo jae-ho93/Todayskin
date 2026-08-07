@@ -30,6 +30,8 @@ describe('OTP (e2e)', () => {
     process.env.ALLOWED_ORIGINS = '';
     process.env.OTP_ALLOWLIST_PHONES = '01011111111,01022222222,01000000000';
     process.env.OTP_RESEND_COOLDOWN_SECONDS = '1';
+    // N22: 번호별 일일 발송 한도(allowlist 밖 번호만 적용) — 테스트용으로 작게 설정.
+    process.env.OTP_DAILY_LIMIT_PER_PHONE = '3';
 
     const moduleRef: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -50,16 +52,23 @@ describe('OTP (e2e)', () => {
   });
 
   afterAll(async () => {
-    await prisma.otpCode.deleteMany({ where: { phoneNumber: { in: [phone, '01022222222', '01000000000'] } } });
+    await prisma.otpCode.deleteMany({
+      where: { phoneNumber: { in: [phone, '01022222222', '01000000000', '01099999999'] } },
+    });
+    // N22: 일일 한도 집계용 발송 로그도 정리 — 재실행 간 누적 방지.
+    await prisma.otpSendLog.deleteMany({
+      where: { phoneNumber: { in: [phone, '01022222222', '01000000000', '01099999999'] } },
+    });
     await prisma.refreshSession.deleteMany({});
     await prisma.user.deleteMany({
-      where: { phoneNumber: { in: [phone, '01022222222', '01000000000'] } },
+      where: { phoneNumber: { in: [phone, '01022222222', '01000000000', '01099999999'] } },
     });
     await app.close();
   });
 
   beforeEach(async () => {
     await prisma.otpCode.deleteMany({});
+    await prisma.otpSendLog.deleteMany({});
     await prisma.refreshSession.deleteMany({});
     await prisma.user.deleteMany({
       where: { phoneNumber: { in: [phone, '01022222222', '01000000000'] } },
@@ -117,6 +126,36 @@ describe('OTP (e2e)', () => {
       .post('/otp/verify')
       .send({ phoneNumber: phone, purpose: 'signup', code: '123456' })
       .expect(401);
+  });
+
+  it('N22: 번호별 일일 발송 한도 초과 시 429 (allowlisted 번호는 예외)', async () => {
+    const spamPhone = '01099999999'; // allowlist 밖 — 한도 3회 적용
+    // 재전송 쿨다운(1초)과 겹치지 않도록 발송 사이 대기한다.
+    const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+    // 한도(3회)까지는 성공.
+    for (let i = 0; i < 3; i++) {
+      if (i > 0) await sleep(1100);
+      await request(app.getHttpServer())
+        .post('/otp/send')
+        .send({ phoneNumber: spamPhone, purpose: 'signup' })
+        .expect(200);
+    }
+
+    // 4회째는 일일 한도 429 — IP가 바뀌어도 번호 기준으로 막힌다.
+    // (쿨다운을 넘겨 일일 한도 응답임을 확인한다)
+    await sleep(1100);
+    const res = await request(app.getHttpServer())
+      .post('/otp/send')
+      .send({ phoneNumber: spamPhone, purpose: 'signup' })
+      .expect(429);
+    expect(res.body.detail).toContain('초과');
+
+    // allowlisted 개발 번호는 글로벌 제한에서 예외 — 계속 발송 가능.
+    await request(app.getHttpServer())
+      .post('/otp/send')
+      .send({ phoneNumber: phone, purpose: 'signup' })
+      .expect(200);
   });
 
   it('재전송 대기 시간 내 재전송 → 429', async () => {
