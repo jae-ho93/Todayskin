@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
 import { api } from '../../src/api/client';
@@ -18,18 +18,28 @@ export default function HistoryScreen() {
   // null = 로딩 중이거나 불러오기 실패 — loading으로 둘을 구분한다
   const [history, setHistory] = useState<HistoryEntry[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async () => {
+    const result = await api.getHistory();
+    setHistory(result);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    api.getHistory().then((result) => {
-      if (cancelled) return;
-      setHistory(result);
-      setLoading(false);
+    load().then(() => {
+      if (!cancelled) setLoading(false);
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [load]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
 
   const scores = [...(history ?? [])].reverse();
   const width = 300;
@@ -43,7 +53,7 @@ export default function HistoryScreen() {
     .join(' ');
 
   return (
-    <ScreenContainer>
+    <ScreenContainer refreshing={refreshing} onRefresh={handleRefresh}>
       <Text style={styles.title}>마이 히스토리</Text>
 
       {scores.length > 0 && (

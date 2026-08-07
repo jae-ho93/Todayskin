@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../src/api/client';
+import { useUserLocation } from '../src/hooks/useUserLocation';
 import { colors, radius, shadow, spacing, typography } from '../src/theme';
 
 const GUIDE_TEXT = '정면을 맞춰주세요';
@@ -18,26 +20,52 @@ const TIPS = [
 
 // 화면 3: 얼굴 촬영 가이드
 export default function CameraGuideScreen() {
-  const [phase, setPhase] = useState<'intro' | 'capture'>('intro');
+  const [phase, setPhase] = useState<'intro' | 'capture' | 'analyzing'>('intro');
   const [permission, requestPermission] = useCameraPermissions();
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [wentOutside, setWentOutside] = useState<boolean | null>(null);
   const cameraRef = useRef<CameraView>(null);
+  const { coords } = useUserLocation();
 
-  const handleCapture = async () => {
-    if (submitting) return;
-    const photo = await cameraRef.current?.takePictureAsync({ quality: 0.5 });
-    if (!photo) return;
-
-    setSubmitting(true);
+  const submitPhoto = async (uri: string) => {
+    const originPhase = phase;
+    setPhase('analyzing');
     setError(null);
     try {
-      await api.submitDiagnosis({ front: photo.uri });
+      await api.submitDiagnosis({
+        front: uri,
+        wentOutside: wentOutside ?? false,
+        coords: wentOutside ? (coords ?? undefined) : undefined,
+      });
       router.replace('/diagnosis-result');
     } catch (e) {
       setError(e instanceof Error ? e.message : '진단 저장에 실패했습니다. 다시 시도해주세요.');
-      setSubmitting(false);
+      setPhase(originPhase);
     }
+  };
+
+  const handleCapture = async () => {
+    if (phase !== 'capture') return;
+    const photo = await cameraRef.current?.takePictureAsync({ quality: 0.5 });
+    if (!photo) return;
+    await submitPhoto(photo.uri);
+  };
+
+  const handlePickFromLibrary = async () => {
+    if (phase === 'analyzing' || wentOutside === null) return;
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      setError('사진첩 접근 권한이 필요해요.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.5,
+      allowsEditing: true,
+      aspect: [3, 4],
+    });
+    if (result.canceled || !result.assets[0]) return;
+    await submitPhoto(result.assets[0].uri);
   };
 
   if (phase === 'intro') {
@@ -47,7 +75,11 @@ export default function CameraGuideScreen() {
           <Ionicons name="close" size={22} color={colors.textPrimary} />
         </Pressable>
 
-        <View style={styles.introBody}>
+        <ScrollView
+          contentContainerStyle={styles.introBody}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.introIllustration}>
             <Ionicons name="person-outline" size={72} color={colors.sageDark} />
           </View>
@@ -64,12 +96,78 @@ export default function CameraGuideScreen() {
               </View>
             ))}
           </View>
-        </View>
 
-        <Pressable style={styles.introCta} onPress={() => setPhase('capture')}>
+          <View style={styles.outsideQuestion}>
+            <Text style={styles.outsideQuestionLabel}>사진 찍기 전에 외출을 하셨나요?</Text>
+            <Text style={styles.outsideQuestionHint}>
+              외출하셨다면 오늘 날씨를 피부 상태와 함께 기록해요
+            </Text>
+            <View style={styles.outsideOptionRow}>
+              {(
+                [
+                  { value: true, label: '예' },
+                  { value: false, label: '아니오' },
+                ] as const
+              ).map((option) => {
+                const selected = wentOutside === option.value;
+                return (
+                  <Pressable
+                    key={String(option.value)}
+                    onPress={() => setWentOutside(option.value)}
+                    style={[styles.outsideOption, selected && styles.outsideOptionSelected]}
+                  >
+                    <Text
+                      style={[
+                        styles.outsideOptionText,
+                        selected && styles.outsideOptionTextSelected,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        </ScrollView>
+
+        {error && <Text style={styles.introErrorText}>{error}</Text>}
+
+        <Pressable
+          style={[styles.introCta, wentOutside === null && styles.introCtaDisabled]}
+          onPress={() => setPhase('capture')}
+          disabled={wentOutside === null}
+        >
           <Text style={styles.introCtaText}>촬영 시작하기</Text>
         </Pressable>
+        <Pressable
+          style={[styles.introSecondaryCta, wentOutside === null && styles.introSecondaryCtaDisabled]}
+          onPress={handlePickFromLibrary}
+          disabled={wentOutside === null}
+        >
+          <Ionicons name="images-outline" size={18} color={wentOutside === null ? colors.gray300 : colors.sageDark} />
+          <Text
+            style={[
+              styles.introSecondaryCtaText,
+              wentOutside === null && styles.introSecondaryCtaTextDisabled,
+            ]}
+          >
+            사진첩에서 선택하기
+          </Text>
+        </Pressable>
       </SafeAreaView>
+    );
+  }
+
+  if (phase === 'analyzing') {
+    return (
+      <View style={styles.analyzingWrap}>
+        <View style={styles.analyzingIconWrap}>
+          <ActivityIndicator size="large" color={colors.sageDark} />
+        </View>
+        <Text style={styles.analyzingTitle}>분석 중입니다</Text>
+        <Text style={styles.analyzingBody}>AI가 피부 상태를 분석하고 있어요.{'\n'}잠시만 기다려주세요.</Text>
+      </View>
     );
   }
 
@@ -110,15 +208,13 @@ export default function CameraGuideScreen() {
       <SafeAreaView style={styles.bottomBar}>
         <Text style={styles.timingHint}>외출 후·자기 전, 세안을 마친 뒤 촬영하면 더 정확해요</Text>
         {error && <Text style={styles.errorText}>{error}</Text>}
-        {/* 좌측에 X 버튼과 같은 너비의 빈 공간을 둬서 셔터 버튼이 화면 중앙에 오도록 맞춘다 */}
+        {/* 좌측엔 사진첩 버튼, 우측엔 X 버튼을 같은 너비로 둬서 셔터 버튼이 화면 중앙에 오도록 맞춘다 */}
         <View style={styles.shutterRow}>
-          <View style={styles.closeButtonSpacer} />
-          <Pressable style={styles.shutter} onPress={handleCapture} disabled={submitting}>
-            {submitting ? (
-              <ActivityIndicator color={colors.textPrimary} />
-            ) : (
-              <View style={styles.shutterInner} />
-            )}
+          <Pressable onPress={handlePickFromLibrary} hitSlop={12} style={styles.closeButton}>
+            <Ionicons name="images-outline" size={22} color={colors.textInverse} />
+          </Pressable>
+          <Pressable style={styles.shutter} onPress={handleCapture}>
+            <View style={styles.shutterInner} />
           </Pressable>
           <Pressable onPress={() => router.back()} hitSlop={12} style={styles.closeButton}>
             <Ionicons name="close" size={22} color={colors.textInverse} />
@@ -135,7 +231,7 @@ const styles = StyleSheet.create({
   // 촬영 전 안내 화면
   introSafeArea: { flex: 1, backgroundColor: colors.background, padding: spacing.xl },
   introCloseButton: { alignSelf: 'flex-end' },
-  introBody: { flex: 1, justifyContent: 'center', gap: spacing.xl },
+  introBody: { flexGrow: 1, justifyContent: 'center', gap: spacing.xl, paddingVertical: spacing.lg },
   introIllustration: {
     alignSelf: 'center',
     width: 140,
@@ -169,13 +265,49 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tipText: { ...typography.body, color: colors.textPrimary, flex: 1 },
+  outsideQuestion: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    gap: spacing.sm,
+    ...shadow.card,
+  },
+  outsideQuestionLabel: { ...typography.subtitle, color: colors.textPrimary },
+  outsideQuestionHint: { ...typography.bodySm, color: colors.textSecondary },
+  outsideOptionRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
+  outsideOption: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderColor: colors.border,
+  },
+  outsideOptionSelected: {
+    borderColor: colors.sage,
+    backgroundColor: colors.sageLight,
+  },
+  outsideOptionText: { ...typography.subtitle, color: colors.textSecondary },
+  outsideOptionTextSelected: { color: colors.sageDark, fontWeight: '700' },
   introCta: {
     backgroundColor: colors.sage,
     borderRadius: radius.md,
     paddingVertical: spacing.lg,
     alignItems: 'center',
   },
+  introCtaDisabled: { backgroundColor: colors.gray200 },
   introCtaText: { ...typography.headline, color: colors.textInverse },
+  introSecondaryCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+  },
+  introSecondaryCtaDisabled: { opacity: 0.5 },
+  introSecondaryCtaText: { ...typography.subtitle, color: colors.sageDark },
+  introSecondaryCtaTextDisabled: { color: colors.gray300 },
+  introErrorText: { ...typography.caption, color: colors.coral, textAlign: 'center' },
 
   // 촬영 권한 요청 화면
   permissionWrap: {
@@ -268,5 +400,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  closeButtonSpacer: { width: 44, height: 44 },
+
+  // 분석 중 화면
+  analyzingWrap: {
+    flex: 1,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.md,
+    padding: spacing.xl,
+  },
+  analyzingIconWrap: {
+    width: 96,
+    height: 96,
+    borderRadius: radius.full,
+    backgroundColor: colors.sageLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+  },
+  analyzingTitle: { ...typography.displaySm, color: colors.textPrimary },
+  analyzingBody: { ...typography.body, color: colors.textSecondary, textAlign: 'center' },
 });

@@ -87,6 +87,8 @@ export const ENV_REGISTRY: EnvVarDefinition[] = [
 
   { key: 'SOFT_DELETE_RETENTION_DAYS', owner: 'platform', description: 'Soft-delete retention days before purge', requiredIn: 'never', safeDefault: 30, secret: false },
   { key: 'SOFT_DELETE_PURGE_INTERVAL_MS', owner: 'platform', description: 'Purge scheduler interval ms (0=disabled)', requiredIn: 'never', safeDefault: 3_600_000, secret: false },
+
+  { key: 'WEATHER_COLLECTION_INTERVAL_MS', owner: 'platform', description: 'Background weather collection scheduler interval ms (0=disabled)', requiredIn: 'never', safeDefault: 3_600_000, secret: false },
 ];
 
 const REGISTRY_BY_KEY = new Map(ENV_REGISTRY.map((d) => [d.key, d]));

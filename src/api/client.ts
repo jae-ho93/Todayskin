@@ -1,7 +1,10 @@
 import Constants from 'expo-constants';
 import type {
+  ConsentPurpose,
+  ConsentPurposeInfo,
   EvidenceGrade,
   HistoryEntry,
+  OtpPurpose,
   Product,
   Recommendation,
   SignupRequest,
@@ -105,6 +108,19 @@ async function safePostJson<T>(path: string, body: unknown, timeoutMs = 20000): 
   }
 }
 
+// 인증이 필요한 쓰기 요청(동의 등록 등). 실패를 숨기면 안 되므로 에러를 그대로 던진다.
+async function authPostJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    body: JSON.stringify(body),
+    signal: timeoutSignal(8000),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(extractErrorMessage(data, res.status));
+  return data as T;
+}
+
 export const api = {
   // 기상청/에어코리아 등 외부 정부 API를 순차 호출하다 보니 응답이 0.5~16초까지 들쭉날쭉하다
   // (백엔드 자체 타임아웃 예산이 최대 약 16초). 기본 2.5초 타임아웃으로는 정상 응답도 자주 잘려서
@@ -123,13 +139,23 @@ export const api = {
     return null;
   },
   // 정면 촬영 1장을 서버로 전송해 진단을 생성·저장한다. 쓰기 요청이므로 실패 시 에러를 던진다.
-  submitDiagnosis: async (photos: { front: string }) => {
+  // wentOutside=true일 때만 서버가 날씨 스냅샷을 진단에 연결한다(실내에만 있었으면 날씨를 엮지 않음).
+  submitDiagnosis: async (photo: {
+    front: string;
+    wentOutside: boolean;
+    coords?: { latitude: number; longitude: number };
+  }) => {
     const formData = new FormData();
     formData.append(
       'front',
-      { uri: photos.front, name: 'front.jpg', type: 'image/jpeg' } as unknown as Blob,
+      { uri: photo.front, name: 'front.jpg', type: 'image/jpeg' } as unknown as Blob,
     );
-    const res = await fetch(`${API_BASE_URL}/diagnosis`, {
+    const params = new URLSearchParams({ wentOutside: String(photo.wentOutside) });
+    if (photo.coords) {
+      params.set('lat', String(photo.coords.latitude));
+      params.set('lon', String(photo.coords.longitude));
+    }
+    const res = await fetch(`${API_BASE_URL}/diagnosis?${params.toString()}`, {
       method: 'POST',
       headers: await authHeaders(),
       body: formData,
@@ -155,8 +181,18 @@ export const api = {
   // 날씨 기반(A등급) 제품 추천: 오늘 날씨/대기질만으로 상황(세안 후/외출 전/외출 후)별 화장품을 Gemini에게 하나씩 추천받는다
   generateWeatherProducts: (weather: WeatherSnapshot) =>
     safePostJson<Product[]>('/products/weather-based', weather),
+  // 가입/로그인 모두 이 두 개를 먼저 통과해야 한다 — 서버가 전화번호 본인확인(OTP)을 강제한다
+  sendOtp: (phoneNumber: string, purpose: OtpPurpose) =>
+    postJson<{ message: string }>('/otp/send', { phoneNumber, purpose }),
+  verifyOtp: (phoneNumber: string, code: string, purpose: OtpPurpose) =>
+    postJson<{ message: string }>('/otp/verify', { phoneNumber, code, purpose }),
   signup: (payload: SignupRequest) => postJson<User>('/auth/signup', payload),
   login: (phoneNumber: string) => postJson<User>('/auth/login', { phoneNumber }),
+  // 동의 목적/버전 registry. 인증 불필요 — 가입 전(온보딩) 화면에서도 조회 가능.
+  getConsentRegistry: () => safeFetch<ConsentPurposeInfo[]>('/consents/registry'),
+  // 동의/철회 upsert. 로그인 상태에서만 호출 가능 — 온보딩에서는 가입 성공 직후(토큰 발급 후)에 호출한다.
+  upsertConsent: (purpose: ConsentPurpose, agreed: boolean) =>
+    authPostJson<{ purpose: string; agreed: boolean }>('/consents', { purpose, agreed }),
   // 서버 토큰 무효화는 최선 노력만 하고, 실패해도 로컬 세션 정리는 항상 진행되도록 에러를 삼킨다
   logout: async () => {
     try {

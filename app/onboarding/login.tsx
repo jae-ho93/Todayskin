@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
@@ -26,24 +26,52 @@ function isValidPhoneDigits(digits: string): boolean {
   return digits.length === 11 && /^01[016789]/.test(digits);
 }
 
+// 화면: 로그인 — 전화번호 입력 후 OTP(인증번호) 확인을 거쳐야 로그인된다 (서버가 강제)
 export default function LoginScreen() {
   const [phoneDigits, setPhoneDigits] = useState('');
-  const [focused, setFocused] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [focused, setFocused] = useState<'phone' | 'otp' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sendingOtp, setSendingOtp] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const isValid = isValidPhoneDigits(phoneDigits);
+  const otpInputRef = useRef<TextInput>(null);
+  const isPhoneValid = isValidPhoneDigits(phoneDigits);
+  const isOtpValid = otpCode.length === 6;
 
-  // 휴대폰 번호를 형식에 맞게 다 입력하면 자동으로 키보드를 내려 로그인 버튼이 바로 보이게 한다
   useEffect(() => {
-    if (isValid) Keyboard.dismiss();
-  }, [isValid]);
+    if (otpSent) otpInputRef.current?.focus();
+  }, [otpSent]);
+
+  // 번호를 다시 바꾸면 이전 인증은 무효 — 새 번호로 다시 인증번호를 받아야 한다
+  const handlePhoneChange = (v: string) => {
+    setPhoneDigits(v.replace(/[^0-9]/g, '').slice(0, 11));
+    setOtpSent(false);
+    setOtpCode('');
+    setError(null);
+  };
+
+  const handleSendOtp = async () => {
+    if (!isPhoneValid || sendingOtp) return;
+    setSendingOtp(true);
+    setError(null);
+    try {
+      await api.sendOtp(phoneDigits, 'login');
+      setOtpSent(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '인증번호 발송에 실패했습니다.');
+    } finally {
+      setSendingOtp(false);
+    }
+  };
 
   const handleSubmit = async () => {
-    if (!isValid || submitting) return;
+    if (!isOtpValid || submitting) return;
     setSubmitting(true);
     setError(null);
     try {
+      await api.verifyOtp(phoneDigits, otpCode, 'login');
       const user = await api.login(phoneDigits);
       await saveSession(user);
       router.replace('/(tabs)');
@@ -69,20 +97,60 @@ export default function LoginScreen() {
           <View style={styles.field}>
             <Text style={styles.label}>휴대폰 번호</Text>
             <TextInput
-              style={[styles.input, focused && styles.inputFocused]}
+              style={[styles.input, focused === 'phone' && styles.inputFocused]}
               placeholder="010-1234-5678"
               placeholderTextColor={colors.gray300}
               keyboardType="number-pad"
               value={formatPhoneDisplay(phoneDigits)}
-              onChangeText={(v) => setPhoneDigits(v.replace(/[^0-9]/g, '').slice(0, 11))}
-              onFocus={() => setFocused(true)}
-              onBlur={() => setFocused(false)}
+              onChangeText={handlePhoneChange}
+              onFocus={() => setFocused('phone')}
+              onBlur={() => setFocused(null)}
               maxLength={13}
+              editable={!otpSent}
               returnKeyType="done"
               onSubmitEditing={() => Keyboard.dismiss()}
               autoFocus
             />
+            {!otpSent && (
+              <Pressable
+                onPress={handleSendOtp}
+                disabled={!isPhoneValid || sendingOtp}
+                hitSlop={8}
+                style={styles.nextButton}
+              >
+                {sendingOtp ? (
+                  <ActivityIndicator size="small" color={colors.sageDark} />
+                ) : (
+                  <Text style={[styles.nextButtonText, !isPhoneValid && styles.nextButtonTextDisabled]}>
+                    인증번호 받기
+                  </Text>
+                )}
+              </Pressable>
+            )}
           </View>
+
+          {otpSent && (
+            <View style={styles.field}>
+              <Text style={styles.label}>인증번호</Text>
+              <TextInput
+                ref={otpInputRef}
+                style={[styles.input, focused === 'otp' && styles.inputFocused]}
+                placeholder="6자리 숫자"
+                placeholderTextColor={colors.gray300}
+                keyboardType="number-pad"
+                value={otpCode}
+                onChangeText={(v) => setOtpCode(v.replace(/[^0-9]/g, '').slice(0, 6))}
+                onFocus={() => setFocused('otp')}
+                onBlur={() => setFocused(null)}
+                maxLength={6}
+                returnKeyType="done"
+                onSubmitEditing={() => Keyboard.dismiss()}
+              />
+              <Pressable onPress={handleSendOtp} disabled={sendingOtp} hitSlop={8} style={styles.nextButton}>
+                <Text style={styles.nextButtonText}>인증번호 다시 받기</Text>
+              </Pressable>
+            </View>
+          )}
 
           {error && <Text style={styles.error}>{error}</Text>}
         </View>
@@ -90,11 +158,11 @@ export default function LoginScreen() {
         <View style={styles.footer}>
           <Pressable
             onPress={handleSubmit}
-            disabled={!isValid || submitting}
+            disabled={!isOtpValid || submitting}
             style={({ pressed }) => [
               styles.cta,
-              (!isValid || submitting) && styles.ctaDisabled,
-              pressed && isValid && !submitting && styles.ctaPressed,
+              (!isOtpValid || submitting) && styles.ctaDisabled,
+              pressed && isOtpValid && !submitting && styles.ctaPressed,
             ]}
           >
             {submitting ? (
@@ -152,4 +220,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
+  nextButton: { alignSelf: 'flex-end', paddingVertical: spacing.sm },
+  nextButtonText: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },
+  nextButtonTextDisabled: { color: colors.gray300 },
 });

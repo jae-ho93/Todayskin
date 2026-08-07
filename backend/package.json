@@ -145,5 +145,12 @@
         "statements": 50
       }
     }
+  },
+  "allowScripts": {
+    "@prisma/engines@7.9.1": true,
+    "@scarf/scarf@1.4.0": true,
+    "esbuild@0.28.1": true,
+    "msgpackr-extract@3.0.4": true,
+    "prisma@7.9.1": true
   }
 }

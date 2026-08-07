@@ -133,12 +133,14 @@ export class DiagnosisService {
    * 좌표가 없으면 WeatherService가 기본 지역을 사용한다. getOrCreateSnapshot 실패
    * 또는 UNAVAILABLE(null)이면 weatherSnapshotId를 null로 두고 진단을 완료한다
    * (환경 데이터 부재가 진단을 막지 않는다).
+   * wentOutside가 false(기본값)면 그날 외부 환경 노출이 없었다는 뜻이므로 날씨 스냅샷을
+   * 아예 연결하지 않는다 — 실내에만 있었는데 그 시각 날씨를 엮으면 개인 패턴 분석에 노이즈가 된다.
    * 단, InferenceProvider 실패는 진단 자체를 실패시킨다(503).
    */
   async submit(
     userId: number,
     images: InferenceImages,
-    opts?: { lat?: number; lon?: number },
+    opts?: { lat?: number; lon?: number; wentOutside?: boolean },
   ): Promise<SkinScoreSnapshotDto> {
     // 0. N3: 진단 이미지 처리 동의 필수 (version registry).
     await this.consentService.requireActive(
@@ -170,17 +172,20 @@ export class DiagnosisService {
     // 4. 추론 결과 범위 검증.
     this.validateInference(inference.overallScore, inference.parts);
 
-    // 5. 날씨 스냅샷 확보. 좌표가 없으면 WeatherService가 기본 지역으로 조회한다.
+    // 5. 날씨 스냅샷 확보. wentOutside가 true일 때만 연결한다 — 실내에만 있었다면
+    // 그 시각 날씨를 엮을 이유가 없다. 좌표가 없으면 WeatherService가 기본 지역으로 조회한다.
     // 실패해도 진단 자체는 진행한다.
     let weatherSnapshotId: string | null = null;
-    try {
-      const snapshot = await this.weatherService.getOrCreateSnapshot(
-        opts?.lat,
-        opts?.lon,
-      );
-      weatherSnapshotId = snapshot?.id ?? null;
-    } catch (e) {
-      this.logger.warn(`Weather snapshot unavailable, continuing without: ${errorName(e)}`);
+    if (opts?.wentOutside) {
+      try {
+        const snapshot = await this.weatherService.getOrCreateSnapshot(
+          opts?.lat,
+          opts?.lon,
+        );
+        weatherSnapshotId = snapshot?.id ?? null;
+      } catch (e) {
+        this.logger.warn(`Weather snapshot unavailable, continuing without: ${errorName(e)}`);
+      }
     }
 
     // 6. transaction 저장 — Diagnosis + SkinMetric을 원자적으로 기록.

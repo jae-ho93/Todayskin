@@ -35,6 +35,12 @@
         {
           "locationWhenInUsePermissionDescription": "우리 동네 날씨·대기질 정보를 보여드리기 위해 위치 정보를 사용합니다."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "사진첩에서 얼굴 사진을 선택하기 위해 접근 권한이 필요합니다. 원본 이미지는 저장되지 않습니다."
+        }
       ]
     ],
     "extra": {

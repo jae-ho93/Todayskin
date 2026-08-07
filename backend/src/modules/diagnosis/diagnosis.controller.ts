@@ -137,6 +137,7 @@ export class DiagnosisController {
     return this.diagnosisService.submit(user.sub, images, {
       lat: query.lat,
       lon: query.lon,
+      wentOutside: query.wentOutside ?? false,
     });
   }
 }
