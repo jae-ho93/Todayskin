@@ -129,6 +129,29 @@ export interface ConsentPurposeInfo {
   withdrawalPolicy: 'keep_results' | 'delete_images';
 }
 
+// GET /consents 응답 — 내 동의 상태 (N19 설정 화면 철회 UI용)
+export interface ConsentRecord {
+  purpose: ConsentPurpose;
+  agreed: boolean;
+  version: string;
+  source?: string | null;
+  revokedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** 현재 registry version과 일치하는 활성 동의인지 */
+  active: boolean;
+}
+
+// GET/PUT /notifications/preferences 응답 (N19 설정 화면 알림 스위치 연동)
+export interface NotificationPreferences {
+  userId: number;
+  pushEnabled: boolean;
+  uvAlertEnabled: boolean;
+  dustAlertEnabled: boolean;
+  morningReminder: boolean;
+  updatedAt?: string;
+}
+
 // ── 캘린더 히스토리 (N8) ──────────────────────────
 // GET /diagnosis/history/:date 응답 계약.
 // 날씨·진단 분석·추천이 항상 오고, image/landmarks는 저장 동의 + 데이터 존재 시에만 채워진다.
