@@ -354,6 +354,7 @@ model RecommendationTemplate {
   createdAt        DateTime      @default(now()) @map("created_at")
 
   recommendations Recommendation[]
+  products         RecommendationProduct[]
 
   @@map("recommendation_templates")
 }
@@ -407,18 +408,24 @@ model Product {
   @@map("products")
 }
 
-// 추천-제품 중간 테이블
+// 추천-제품 중간 테이블 (N20: 템플릿 A등급과 생성 추천 B/C를 모두 연결하는 다형성 링크)
+// 정확히 하나의 타깃만 채운다 — CHECK 제약은 마이그레이션에서 관리(Prisma 스키마 표현 불가).
 model RecommendationProduct {
   id               Int      @id @default(autoincrement())
-  recommendationId String   @map("recommendation_id")
+  recommendationId String?  @map("recommendation_id")
+  templateId       String?  @map("template_id")
   productId        String   @map("product_id")
   displayOrder     Int      @default(0) @map("display_order")
   createdAt        DateTime @default(now()) @map("created_at")
 
-  recommendation Recommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
-  product        Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  recommendation Recommendation?       @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  template        RecommendationTemplate? @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  product         Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([recommendationId, productId])
+  @@unique([templateId, productId])
+  @@index([recommendationId])
+  @@index([templateId])
   @@index([productId])
   @@map("recommendation_products")
 }

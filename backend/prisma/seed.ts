@@ -158,6 +158,31 @@ async function main(): Promise<void> {
     });
   }
 
+  console.log('Seeding recommendation-product links...');
+  // N20: 템플릿(전역 A등급)과 관련 제품을 연결한다.
+  // rec-1(자외선 차단) ↔ prod-1(UV 디펜스 선크림 — 징크옥사이드 매칭)
+  const LINKS: {
+    templateId: string;
+    productId: string;
+    displayOrder: number;
+  }[] = [
+    { templateId: 'rec-1', productId: 'prod-1', displayOrder: 0 },
+  ];
+  for (const l of LINKS) {
+    await prisma.recommendationProduct.upsert({
+      where: {
+        templateId_productId: { templateId: l.templateId, productId: l.productId },
+      },
+      update: { displayOrder: l.displayOrder },
+      create: {
+        templateId: l.templateId,
+        recommendationId: null,
+        productId: l.productId,
+        displayOrder: l.displayOrder,
+      },
+    });
+  }
+
   console.log('Seed complete.');
 }
 

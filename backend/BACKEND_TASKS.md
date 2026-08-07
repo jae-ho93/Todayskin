@@ -928,9 +928,9 @@ Jest coverageThreshold를 반영했다.
 
 브랜치: `fix/recommendation-product-links`
 
-- [ ] `RecommendationDto.relatedProductIds`가 항상 빈 배열로 반환되는 문제 해결 (template/생성 추천 모두)
-- [ ] seed에 `RecommendationProduct` 연결 데이터 추가
-- [ ] 프론트 추천 상세의 "관련 제품" 섹션 활성화 (현재 `recommendation/[id]`에서 영영 빈 목록)
+- [x] `RecommendationDto.relatedProductIds`가 항상 빈 배열로 반환되는 문제 해결 (template/생성 추천 모두)
+- [x] seed에 `RecommendationProduct` 연결 데이터 추가
+- [x] 프론트 추천 상세의 "관련 제품" 섹션 활성화 (현재 `recommendation/[id]`에서 영영 빈 목록)
 
 완료 기준: A/B/C 추천 상세에서 실제 관련 제품이 표시된다.
 

@@ -54,6 +54,14 @@ describe('RecommendationService', () => {
         findUnique: jest.fn(),
         createMany: jest.fn(),
       },
+      // N20: 관련 제품 연결 — 기본은 링크 없음(빈 배열).
+      recommendationProduct: {
+        findMany: jest.fn().mockResolvedValue([]),
+        createMany: jest.fn(),
+      },
+      product: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       diagnosis: {
         findUnique: jest.fn(),
         findFirst: jest.fn(),
@@ -106,6 +114,22 @@ describe('RecommendationService', () => {
       expect(result[0].relatedProductIds).toEqual([]);
     });
 
+    it('N20: 템플릿별 관련 제품 id를 일괄 조회해 채운다', async () => {
+      prisma.recommendationTemplate.findMany.mockResolvedValue([templateRow()]);
+      prisma.recommendationProduct.findMany.mockResolvedValue([
+        { templateId: 'rec-1', productId: 'prod-1' },
+        { templateId: 'rec-1', productId: 'prod-3' },
+      ]);
+      const result = (await service.listGlobal()) as RecommendationDto[];
+      expect(result[0].relatedProductIds).toEqual(['prod-1', 'prod-3']);
+      // displayOrder 정렬 옵션이 전달된다.
+      expect(prisma.recommendationProduct.findMany).toHaveBeenCalledWith({
+        where: { templateId: { in: ['rec-1'] } },
+        select: { templateId: true, productId: true },
+        orderBy: { displayOrder: 'asc' },
+      });
+    });
+
     it('grade 필터 전달', async () => {
       prisma.recommendationTemplate.findMany.mockResolvedValue([]);
       await service.listGlobal(EvidenceGrade.B);
@@ -137,6 +161,52 @@ describe('RecommendationService', () => {
       expect(result[0].grade).toBe(EvidenceGrade.B);
       expect(result[0].timing).toBe('외출 후');
       expect(prisma.recommendation.createMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('N20: 생성 추천의 성분 태그와 매칭되는 제품을 연결한다', async () => {
+      geminiClient.generateRecommendations.mockResolvedValue([
+        {
+          title: '세라마이드 보습 추천',
+          explanation: '보습에 도움될 수 있어요.',
+          ingredientTags: ['세라마이드'],
+          timing: '자기 전',
+        },
+      ]);
+      // 카탈로그에 세라마이드 제품 1건 존재 → 연결되어야 한다.
+      prisma.product.findMany.mockResolvedValue([
+        {
+          id: 'prod-4',
+          name: '세라마이드 리페어 밤',
+          brand: 'Greenfield',
+          imageUri: null,
+          matchedGrade: 'B',
+          matchedIngredients: ['세라마이드', '시어버터'],
+          category: 'moisture',
+          reason: null,
+          timing: null,
+          createdAt: new Date(),
+        },
+      ]);
+      // attachProductIds가 방금 생성한 추천 id로 조회하므로, 조회된 id에 맞춰 응답한다.
+      prisma.recommendationProduct.findMany.mockImplementation(
+        async (args: { where: { recommendationId: { in: string[] } } }) => {
+          const id = args.where.recommendationId.in[0];
+          return [{ recommendationId: id, productId: 'prod-4' }];
+        },
+      );
+
+      const result = await service.generate(1, {
+        skinScore: { id: 'snap-1', overallScore: 70 },
+        weather: { uvIndex: 5 },
+      });
+
+      // 매칭된 제품이 RecommendationProduct로 연결되고 응답에도 반영된다.
+      expect(prisma.recommendationProduct.createMany).toHaveBeenCalledWith({
+        data: expect.arrayContaining([
+          expect.objectContaining({ productId: 'prod-4', displayOrder: 0 }),
+        ]),
+      });
+      expect(result[0].relatedProductIds).toEqual(['prod-4']);
     });
 
     it('Gemini 실패 시 503 ServiceUnavailable', async () => {

@@ -83,7 +83,13 @@ export class RecommendationService {
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       take: take ? take + 1 : undefined,
     });
-    const items = templates.map((row) => this.templateToDto(row));
+    // N20: 관련 제품 id를 일괄 조회해 N+1 없이 채운다.
+    const productIdsByTemplate = await this.fetchProductIdsByTemplate(
+      templates.map((t) => t.id),
+    );
+    const items = templates.map((row) =>
+      this.templateToDto(row, productIdsByTemplate.get(row.id) ?? []),
+    );
     if (!take) return items;
     return buildCursorPage(items, take, (row) => {
       const raw = templates.find((x) => x.id === row.id);
@@ -174,7 +180,7 @@ export class RecommendationService {
       });
       if (existing.length > 0) {
         this.logger.debug(`Recommendations already exist for diagnosis ${diagnosisId}, returning existing`);
-        return existing.map((r) => this.modelToDto(r));
+        return this.attachProductIds(existing);
       }
     }
 
@@ -197,7 +203,7 @@ export class RecommendationService {
           orderBy: { createdAt: 'desc' },
         });
         if (existing.length > 0) {
-          return existing.map((r) => this.modelToDto(r));
+          return this.attachProductIds(existing);
         }
         // 예약만 남고 결과가 정리된 경우 → 재시도 진행.
         // 다른 요청이 먼저 retake했다면(false) in-flight로 보고 409 (이중 Gemini 방지).
@@ -244,6 +250,12 @@ export class RecommendationService {
         };
       });
 
+      // N20: 관련 제품 매칭용 카탈로그 — 추천의 성분 태그와 제품의
+      // matchedIngredients 교집합으로 연결한다. (제품 수가 적어 메모리 매칭)
+      // 제품 카탈로그는 seed/관리자만 수정하는 정적 데이터이므로 transaction 밖
+      // 조회와 저장 사이에 제품이 추가되는 경쟁은 무시할 만하다.
+      const catalog = await this.prisma.product.findMany();
+
       const persisted = await this.prisma.$transaction(async (tx) => {
         // 같은 진단에 대한 동시 요청은 DB advisory lock으로 직렬화한다.
         // lock은 transaction 종료 시 자동 해제되므로 별도 unlock 누락이 없다.
@@ -260,6 +272,26 @@ export class RecommendationService {
         }
 
         await tx.recommendation.createMany({ data });
+
+        // N20: 생성된 추천마다 성분 기반 관련 제품을 연결한다.
+        const links: {
+          recommendationId: string;
+          productId: string;
+          displayOrder: number;
+        }[] = [];
+        data.forEach((row, i) => {
+          const tags = items[i]?.ingredientTags ?? [];
+          const matched = catalog
+            .filter((p) => tags.some((tag) => p.matchedIngredients.includes(tag)))
+            .map((p) => p.id);
+          matched.forEach((pid, order) =>
+            links.push({ recommendationId: row.id, productId: pid, displayOrder: order }),
+          );
+        });
+        if (links.length > 0) {
+          await tx.recommendationProduct.createMany({ data: links });
+        }
+
         // 응답에 필요한 값은 모두 서버가 생성한 data에 있으므로 저장 직후
         // 같은 row를 다시 조회하는 불필요한 DB round-trip을 만들지 않는다.
         return data.map((row) => ({ ...row, createdAt }));
@@ -270,7 +302,8 @@ export class RecommendationService {
         await this.idempotency.complete(reservationScope);
       }
 
-      return persisted.map((r) => this.modelToDto(r as RecommendationModel));
+      // 방금 저장한 추천들에도 관련 제품 id를 채운다.
+      return this.attachProductIds(persisted as RecommendationModel[]);
     } catch (e) {
       // N14: 실패(503/저장 오류) 시 예약을 해제해 재시도가 가능하게 한다.
       if (reservationScope) {
@@ -299,7 +332,9 @@ export class RecommendationService {
       if (record.userId !== null && record.userId !== userId) {
         throw new ForbiddenException('해당 추천에 대한 접근 권한이 없습니다');
       }
-      return this.modelToDto(record);
+      // N20: 연결된 관련 제품 id를 함께 반환한다.
+      const productIds = await this.fetchProductIdsByRecommendation(record.id);
+      return this.modelToDto(record, productIds);
     }
 
     // 2. 전역 템플릿(RecommendationTemplate) 조회
@@ -307,7 +342,8 @@ export class RecommendationService {
       where: { id },
     });
     if (template) {
-      return this.templateToDto(template);
+      const productIds = await this.fetchProductIdsByTemplate([template.id]);
+      return this.templateToDto(template, productIds.get(template.id) ?? []);
     }
 
     throw new NotFoundException('추천을 찾을 수 없습니다');
@@ -315,7 +351,67 @@ export class RecommendationService {
 
   // ── 매핑 헬퍼 ──────────────────────────────────
 
-  private templateToDto(t: RecommendationTemplate): RecommendationDto {
+  /**
+   * N20: 생성 추천 목록에 관련 제품 id를 일괄 조회해 붙인다.
+   * (existing 재반환·completed 재반환·방금 생성한 추천 공용)
+   */
+  private async attachProductIds(
+    recs: RecommendationModel[],
+  ): Promise<RecommendationDto[]> {
+    const ids = recs.map((r) => r.id);
+    const links = ids.length
+      ? await this.prisma.recommendationProduct.findMany({
+          where: { recommendationId: { in: ids } },
+          select: { recommendationId: true, productId: true },
+          orderBy: { displayOrder: 'asc' },
+        })
+      : [];
+    const byId = new Map<string, string[]>();
+    for (const l of links) {
+      if (!l.recommendationId) continue;
+      const arr = byId.get(l.recommendationId) ?? [];
+      arr.push(l.productId);
+      byId.set(l.recommendationId, arr);
+    }
+    return recs.map((r) => this.modelToDto(r, byId.get(r.id) ?? []));
+  }
+
+  /** N20: 템플릿 id 목록별 관련 제품 id Map (N+1 방지 일괄 조회). */
+  private async fetchProductIdsByTemplate(
+    templateIds: string[],
+  ): Promise<Map<string, string[]>> {
+    const map = new Map<string, string[]>();
+    if (templateIds.length === 0) return map;
+    const links = await this.prisma.recommendationProduct.findMany({
+      where: { templateId: { in: templateIds } },
+      select: { templateId: true, productId: true },
+      orderBy: { displayOrder: 'asc' },
+    });
+    for (const l of links) {
+      if (!l.templateId) continue;
+      const arr = map.get(l.templateId) ?? [];
+      arr.push(l.productId);
+      map.set(l.templateId, arr);
+    }
+    return map;
+  }
+
+  /** N20: 생성 추천 1건의 관련 제품 id 목록. */
+  private async fetchProductIdsByRecommendation(
+    recommendationId: string,
+  ): Promise<string[]> {
+    const links = await this.prisma.recommendationProduct.findMany({
+      where: { recommendationId },
+      select: { productId: true },
+      orderBy: { displayOrder: 'asc' },
+    });
+    return links.map((l) => l.productId);
+  }
+
+  private templateToDto(
+    t: RecommendationTemplate,
+    relatedProductIds: string[] = [],
+  ): RecommendationDto {
     return {
       id: t.id,
       title: t.title,
@@ -324,12 +420,15 @@ export class RecommendationService {
       explanation: t.explanation,
       observationalNote: t.observationalNote,
       ingredientTags: t.ingredientTags,
-      relatedProductIds: [],
+      relatedProductIds,
       timing: (t.timing as RecommendationTiming | null) ?? null,
     };
   }
 
-  private modelToDto(r: RecommendationModel): RecommendationDto {
+  private modelToDto(
+    r: RecommendationModel,
+    relatedProductIds: string[] = [],
+  ): RecommendationDto {
     return {
       id: r.id,
       title: r.title,
@@ -338,7 +437,7 @@ export class RecommendationService {
       explanation: r.explanation,
       observationalNote: r.observationalNote,
       ingredientTags: r.ingredientTags,
-      relatedProductIds: [],
+      relatedProductIds,
       timing: (r.timing as RecommendationTiming | null) ?? null,
     };
   }
