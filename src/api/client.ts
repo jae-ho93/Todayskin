@@ -3,8 +3,10 @@ import type {
   CalendarDayHistory,
   ConsentPurpose,
   ConsentPurposeInfo,
+  ConsentRecord,
   EvidenceGrade,
   HistoryEntry,
+  NotificationPreferences,
   OtpPurpose,
   Product,
   Recommendation,
@@ -202,6 +204,19 @@ async function authPostJson<T>(path: string, body: unknown): Promise<T> {
   return data as T;
 }
 
+// 인증이 필요한 PUT 요청(알림 설정 부분 갱신 등). 실패를 숨기면 안 되므로 에러를 그대로 던진다.
+async function authPutJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetchWithAuth(path, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+    timeoutMs: 8000,
+    contentType: 'application/json',
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(extractErrorMessage(data, res.status));
+  return data as T;
+}
+
 export const api = {
   // 기상청/에어코리아 등 외부 정부 API를 순차 호출하다 보니 응답이 0.5~16초까지 들쭉날쭉하다
   // (백엔드 자체 타임아웃 예산이 최대 약 16초). 기본 2.5초 타임아웃으로는 정상 응답도 자주 잘려서
@@ -295,6 +310,26 @@ export const api = {
   // 동의/철회 upsert. 로그인 상태에서만 호출 가능 — 온보딩에서는 가입 성공 직후(토큰 발급 후)에 호출한다.
   upsertConsent: (purpose: ConsentPurpose, agreed: boolean) =>
     authPostJson<{ purpose: string; agreed: boolean }>('/consents', { purpose, agreed }),
+  // N19: 내 동의 상태 목록 (설정 화면 철회 UI).
+  getMyConsents: async (): Promise<ConsentRecord[] | null> => {
+    const result = await authFetch<ConsentRecord[]>('/consents');
+    return result.status === 'ok' ? result.data : null;
+  },
+  // N19: 알림 설정 조회 — DB에 row가 없어도 기본값을 반환한다(404 아님).
+  getNotificationPreferences: async (): Promise<NotificationPreferences | null> => {
+    const result = await authFetch<NotificationPreferences>('/notifications/preferences');
+    return result.status === 'ok' ? result.data : null;
+  },
+  // N19: 알림 설정 부분 갱신 — 전달된 필드만 저장된다.
+  updateNotificationPreferences: (patch: {
+    pushEnabled?: boolean;
+    uvAlertEnabled?: boolean;
+    dustAlertEnabled?: boolean;
+    morningReminder?: boolean;
+  }) => authPutJson<NotificationPreferences>('/notifications/preferences', patch),
+  // N19: 회원 탈퇴 (N6 soft delete — PII 스크럽, purgeAfter 후 물리 삭제).
+  withdrawAccount: () =>
+    authPostJson<{ deletedAt: string; purgeAfter: string }>('/auth/withdraw', {}),
   // 서버 토큰 무효화는 최선 노력만 하고, 실패해도 로컬 세션 정리는 항상 진행되도록 에러를 삼킨다
   logout: async () => {
     try {
