@@ -17,7 +17,7 @@ import { OtpPurpose } from './enums/otp-purpose.enum';
 /**
  * OTP 발송·검증 서비스.
  *
- * OTP policy: 결정에 따른 정책:
+ * OTP policy:
  * - 가입·새 디바이스 로그인에 OTP 필수 (운영 공개 전)
  * - 개발: allowlisted test phone / mock OTP
  * - 운영: 실제 OTP + 시도 횟수·만료·재전송 제한
