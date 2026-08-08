@@ -20,7 +20,8 @@
 <p align="center">
   <img src="https://img.shields.io/badge/T0--T14-완료-38A169?style=flat-square" alt="T0-T14 done">
   <img src="https://img.shields.io/badge/N0--N22-완료-38A169?style=flat-square" alt="N0-N22 done">
-  <img src="https://img.shields.io/badge/N16-AWS%20첫%20배포만%20남음-D69E2E?style=flat-square" alt="N16 AWS deploy pending">
+  <img src="https://img.shields.io/badge/N24--N34-버그픽스·제품-D69E2E?style=flat-square" alt="N24-N34 bugfix wave">
+  <img src="https://img.shields.io/badge/N16-AWS%20첫%20배포%20별도-D69E2E?style=flat-square" alt="N16 AWS deploy separate">
 </p>
 
 ---
@@ -57,9 +58,11 @@ flowchart LR
 
 - ✅ **T0~T14** — 초기 구조(NestJS/Prisma/인증/진단/추천 등 MVP 기능) 완료
 - ✅ **N0~N22** — 운영 보안·SMS OTP·S3 동의·BullMQ·ECS 배포·Soft Delete·캘린더·서버 소유 날씨 계약·inference 경계 보호·외부 AI 멱등성·세션·OTP 남용 방지 등 완료
-- ⏳ **N16** — AWS 운영 리소스 프로비저닝 및 첫 배포 (계정·시크릿·승인자 준비 후 진행)
+- 🚧 **N24~N34** — 실기기 버그픽스·실제품 카탈로그·`rec-fast-path`·소셜 로그인·설정 계약 (상세: [`docs/BACKEND_TASKS.md`](docs/BACKEND_TASKS.md))
+- ⏳ **N16** — AWS 운영 리소스 프로비저닝 및 첫 배포 (계정·시크릿·승인자 준비 후, 위 웨이브와 별도)
 
-프론트 범위에서 완료된 작업(N15 캘린더 연결, N18 세션 수명, N19 설정 화면)의 기록은 `backend/BACKEND_TASKS.md`의 `프론트 범위 완료 기록`에 보존하고, 미완료 프론트 작업(N23 EAS 배포)은 프론트 팀 문서에서 관리한다.
+프론트 작업 보드: [`docs/FRONTEND_TASKS.md`](docs/FRONTEND_TASKS.md) · FE 복붙 프롬프트: [`docs/FE_HANDOFF_PROMPT.md`](docs/FE_HANDOFF_PROMPT.md).  
+프론트에서 이미 끝난 N15/N18/N19 기록은 `docs/BACKEND_TASKS.md`의 `프론트 범위 완료 기록`에 있다. EAS(N23)·구독 결제는 보류.
 
 ## 문서
 
@@ -67,7 +70,9 @@ flowchart LR
 - [온보딩](docs/ONBOARDING.md)
 - [백엔드 아키텍처](docs/ARCHITECTURE.md)
 - [백엔드 실행과 API 개요](backend/README.md)
-- [백엔드 작업 현황과 다음 과정](backend/BACKEND_TASKS.md)
+- [백엔드 작업 현황과 다음 과정](docs/BACKEND_TASKS.md)
+- [프론트 작업 보드](docs/FRONTEND_TASKS.md)
+- [FE 핸드오프 프롬프트](docs/FE_HANDOFF_PROMPT.md)
 - [설계 결정](backend/decision.md)
 - [협업 규칙](CONTRIBUTING.md)
 
