@@ -88,7 +88,7 @@ NestJS가 호출하고 결과를 영속화합니다. 원칙: [`docs/ARCHITECTURE
 
 배포 절차: [`backend/docker/DEPLOYMENT.md`](backend/docker/DEPLOYMENT.md)
 
-### Product · 협업 (PM / 전 역할)
+### 협업 · 프로젝트 매니저 (PM)
 
 | | |
 |---|---|
@@ -166,9 +166,9 @@ npm run start:dev
 | 누구나 / 새로 합류 | 이 README → [SETUP](docs/SETUP.md) → [CONTRIBUTING](CONTRIBUTING.md) |
 | 프론트 | [FRONTEND_TASKS](docs/FRONTEND_TASKS.md) · [FE_HANDOFF](docs/FE_HANDOFF_PROMPT.md) · `app/`, `src/` |
 | 백엔드 | [ARCHITECTURE](docs/ARCHITECTURE.md) · [backend/README](backend/README.md) · [BACKEND_TASKS](docs/BACKEND_TASKS.md) |
-| PM · 일정 | FE/BE Task 보드 · CONTRIBUTING (브랜치·PR 규칙) |
+| 프로젝트 매니저 (PM) | FE/BE Task 보드 · CONTRIBUTING (브랜치·PR 규칙) |
 | 인프라 | [DEPLOYMENT](backend/docker/DEPLOYMENT.md) |
 
 ---
 
-<p align="center"><sub>Todayskin — weather-aware skincare, built by FE · BE · PM together</sub></p>
+<p align="center"><sub>Todayskin — weather-aware skincare, built by FE · BE · Project Manager together</sub></p>
