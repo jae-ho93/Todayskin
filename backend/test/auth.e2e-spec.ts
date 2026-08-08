@@ -425,10 +425,12 @@ describe('AuthController (e2e)', () => {
       expect(res.body.detail).toBeDefined();
     });
 
-    it('빈 토큰 → 401 (mock 검증 실패 매핑)', async () => {
+    it('유효하지 않은 토큰 → 401 (mock 검증 실패 매핑)', async () => {
+      // 빈 문자열은 DTO @IsNotEmpty가 400으로 거부하므로, mock 검증 실패 경로를
+      // 타려면 3자 미만의 형식상 유효한 문자열을 보낸다 (mock은 length<3 거부).
       const res = await request(app.getHttpServer())
         .post('/auth/social')
-        .send({ provider: 'kakao', accessToken: '' })
+        .send({ provider: 'kakao', accessToken: 'ab' })
         .expect(401);
       expect(res.body.detail).toBeDefined();
     });
