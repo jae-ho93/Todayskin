@@ -6,7 +6,8 @@ Expo SDK 54 기준. 백엔드 규칙은 `docs/BACKEND_TASKS.md`, 협업은 `CONT
 ## 운영 (이 웨이브)
 
 - BE가 실제품·`rec-fast-path`·필요 API(N24~N34 해당분)를 `main`에 올린 뒤에만 FE 시작.
-- **Task 하나 = 브랜치 하나 = PR 하나 = squash merge 후 `main` pull → 다음 Task.**
+- **Task 하나 = 브랜치 하나 = PR 하나 = squash merge 후 `main` pull → 다음 Task(새 브랜치).**
+- `main`에서 작업·커밋 금지. merge 후 브랜치 삭제 금지 (`--delete-branch` 금지).
 - `backend/` 수정 금지. API를 새로 만들지 말 것. 이 문서·Swagger에 적힌 계약만 사용.
 - 리뷰어 1명 강제 없음. **일하는 FE(또는 FE AI)가 자기 PR을 squash merge.**
 - 비밀번호·아이디/비번 찾기·이름+생일 찾기 UI **신설 금지**.
