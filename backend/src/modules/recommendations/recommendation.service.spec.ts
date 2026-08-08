@@ -10,6 +10,9 @@ import { GeminiClient, GeminiUnavailable } from '../gemini/gemini.client';
 import { ConsentService } from '../consent/consent.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { IdempotencyService } from '../idempotency/idempotency.service';
+import { RedisService } from '../../redis/redis.service';
+import { JobService } from '../jobs/job.service';
+import { JobStatus } from '../jobs/enums/job-status.enum';
 import { EvidenceGrade } from './enums/evidence-grade.enum';
 import { RecommendationDto } from './dto/recommendation.dto';
 
@@ -27,6 +30,9 @@ describe('RecommendationService', () => {
     release: jest.Mock;
     retake: jest.Mock;
   };
+  // N32: Redis SWR 캐시 + LIVE job enqueue mock.
+  let redis: { getJson: jest.Mock; setJson: jest.Mock };
+  let jobService: { enqueue: jest.Mock };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let prisma: Record<string, any>;
 
@@ -42,6 +48,15 @@ describe('RecommendationService', () => {
       complete: jest.fn().mockResolvedValue(undefined),
       release: jest.fn().mockResolvedValue(undefined),
       retake: jest.fn().mockResolvedValue(true),
+    };
+    redis = {
+      getJson: jest.fn().mockResolvedValue(null),
+      setJson: jest.fn().mockResolvedValue(true),
+    };
+    jobService = {
+      enqueue: jest
+        .fn()
+        .mockResolvedValue({ jobId: 'job-1', status: JobStatus.PENDING }),
     };
 
     prisma = {
@@ -66,6 +81,10 @@ describe('RecommendationService', () => {
         findUnique: jest.fn(),
         findFirst: jest.fn(),
       },
+      // N32: 빠른 경로 job dedup 조회.
+      asyncJob: {
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
       $transaction: jest.fn(),
     };
 
@@ -76,6 +95,8 @@ describe('RecommendationService', () => {
         { provide: ConsentService, useValue: consentService },
         { provide: IdempotencyService, useValue: idempotency },
         { provide: PrismaService, useValue: prisma },
+        { provide: RedisService, useValue: redis },
+        { provide: JobService, useValue: jobService },
       ],
     }).compile();
 
@@ -371,6 +392,201 @@ describe('RecommendationService', () => {
       expect(idempotency.acquire).not.toHaveBeenCalled();
       expect(idempotency.complete).not.toHaveBeenCalled();
       expect(prisma.recommendation.createMany).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('generateFast (N32/N29 빠른 경로)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const diagnosisRow = (): any => ({
+      id: 'diag-fast',
+      userId: 1,
+      capturedAt: new Date(),
+      overallScore: 70,
+      thumbnailUri: null,
+      skinMetrics: [{ part: 'cheek', label: '볼', grade: '양호', moisture: 70, elasticity: 65, note: null }],
+      weatherSnapshot: null,
+    });
+
+    const recRow = (id = 'gemini-done') => ({
+      id,
+      userId: 1,
+      diagnosisId: 'diag-fast',
+      title: 'LIVE 추천',
+      grade: 'B',
+      sourceLabel: 'AI 종합 분석 · 피부과학 일반 지식 기반',
+      explanation: '...',
+      observationalNote: null,
+      ingredientTags: ['세라마이드'],
+      timing: '외출 후',
+      createdAt: new Date(),
+    });
+
+    beforeEach(() => {
+      prisma.diagnosis.findFirst.mockResolvedValue(diagnosisRow());
+      prisma.asyncJob.findFirst.mockResolvedValue(null);
+      redis.getJson.mockResolvedValue(null);
+    });
+
+    it('DB에 완료 추천이 있으면 source: LIVE로 즉시 반환 (job enqueue 없음)', async () => {
+      prisma.recommendation.findMany.mockResolvedValue([recRow()]);
+
+      const result = await service.generateFast(1, { diagnosisId: 'diag-fast' });
+      expect(result.source).toBe('LIVE');
+      expect(result.recommendations[0].id).toBe('gemini-done');
+      expect(jobService.enqueue).not.toHaveBeenCalled();
+      expect(redis.getJson).not.toHaveBeenCalled();
+    });
+
+    it('miss → 규칙 기반 실제품 FALLBACK 즉시 반환 + LIVE job enqueue', async () => {
+      prisma.recommendation.findMany.mockResolvedValue([]);
+      // 규칙 선택이 결정적으로 동작하도록 실제 카탈로그를 준비한다.
+      prisma.product.findMany.mockResolvedValue([
+        {
+          id: 'prod-11', name: '1025 독도 클렌저', brand: '라운드랩', imageUri: null,
+          matchedGrade: 'B', matchedIngredients: ['약산성 클렌저'],
+          category: 'barrier', reason: null, timing: null, createdAt: new Date(),
+        },
+        {
+          id: 'prod-13', name: '다이브인 히알루론산 세럼', brand: '토리든', imageUri: null,
+          matchedGrade: 'B', matchedIngredients: ['히알루론산'],
+          category: 'moisture', reason: null, timing: null, createdAt: new Date(),
+        },
+      ]);
+
+      const result = await service.generateFast(1, { diagnosisId: 'diag-fast' });
+      expect(result.source).toBe('FALLBACK');
+      expect(result.jobId).toBe('job-1');
+      expect(result.recommendations).toHaveLength(3);
+      expect(jobService.enqueue).toHaveBeenCalledWith(
+        1,
+        'RECOMMENDATION_GENERATE',
+        expect.objectContaining({ diagnosisId: 'diag-fast' }),
+      );
+      for (const r of result.recommendations) {
+        // N31: FALLBACK도 실제 카탈로그 제품만 연결하고 가상 id를 쓰지 않는다.
+        expect(r.id).not.toMatch(/^gemini-/);
+        expect(Array.isArray(r.relatedProductIds)).toBe(true);
+        expect(
+          r.relatedProductIds.every((pid) => pid.startsWith('prod-')),
+        ).toBe(true);
+      }
+      // 카탈로그 2건(barrier+moisture)이 첫 슬롯(외출 후)에 모두 연결된다.
+      expect(result.recommendations[0].relatedProductIds).toHaveLength(2);
+      expect(result.recommendations[0].sourceLabel).toContain('규칙 기반');
+    });
+
+    it('Redis SWR hit → source: CACHED (신선하면 재검증 job 없음)', async () => {
+      prisma.recommendation.findMany.mockResolvedValue([]);
+      redis.getJson.mockResolvedValue({
+        recommendations: [
+          {
+            id: 'gemini-cached', userId: 1, diagnosisId: 'diag-fast',
+            title: '캐시 추천', grade: 'B', sourceLabel: 'AI',
+            explanation: '...', observationalNote: null,
+            ingredientTags: [], timing: '외출 후', createdAt: new Date(),
+          },
+        ],
+        generatedAt: new Date().toISOString(),
+      });
+
+      const result = await service.generateFast(1, { diagnosisId: 'diag-fast' });
+      expect(result.source).toBe('CACHED');
+      expect(result.generatedAt).toBeDefined();
+      expect(result.jobId).toBeUndefined();
+      expect(jobService.enqueue).not.toHaveBeenCalled();
+    });
+
+    it('CACHED가 stale이면 재검증 job을 enqueue하고 jobId를 함께 반환한다 (SWR)', async () => {
+      prisma.recommendation.findMany.mockResolvedValue([]);
+      redis.getJson.mockResolvedValue({
+        recommendations: [],
+        generatedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      });
+
+      const result = await service.generateFast(1, { diagnosisId: 'diag-fast' });
+      expect(result.source).toBe('CACHED');
+      expect(result.jobId).toBe('job-1');
+      expect(jobService.enqueue).toHaveBeenCalledTimes(1);
+    });
+
+    it('진행 중 job이 있으면 재사용 — 같은 jobId + FALLBACK (중복 enqueue 방지)', async () => {
+      prisma.recommendation.findMany.mockResolvedValue([]);
+      prisma.asyncJob.findFirst.mockResolvedValue({
+        id: 'job-pending',
+        status: JobStatus.PENDING,
+        result: null,
+        finishedAt: null,
+      });
+
+      const result = await service.generateFast(1, { diagnosisId: 'diag-fast' });
+      expect(result.source).toBe('FALLBACK');
+      expect(result.jobId).toBe('job-pending');
+      expect(jobService.enqueue).not.toHaveBeenCalled();
+      // 같은 진단 키로 조회한다.
+      expect(prisma.asyncJob.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            type: 'RECOMMENDATION_GENERATE',
+            payload: { path: ['diagnosisId'], equals: 'diag-fast' },
+          }),
+        }),
+      );
+    });
+
+    it('FAILED job이 cooldown 안이면 같은 jobId 재사용 (job 스팸 방지)', async () => {
+      prisma.recommendation.findMany.mockResolvedValue([]);
+      prisma.asyncJob.findFirst.mockResolvedValue({
+        id: 'job-failed',
+        status: JobStatus.FAILED,
+        finishedAt: new Date(),
+        result: null,
+      });
+
+      const result = await service.generateFast(1, { diagnosisId: 'diag-fast' });
+      expect(result.source).toBe('FALLBACK');
+      expect(result.jobId).toBe('job-failed');
+      expect(jobService.enqueue).not.toHaveBeenCalled();
+    });
+
+    it('COMPLETED job 결과가 있으면 source: LIVE로 반환하고 캐시에 기록한다', async () => {
+      prisma.recommendation.findMany.mockResolvedValue([]);
+      prisma.asyncJob.findFirst.mockResolvedValue({
+        id: 'job-done',
+        status: JobStatus.COMPLETED,
+        finishedAt: new Date('2026-08-16T02:00:00Z'),
+        result: {
+          recommendations: [
+            {
+              id: 'gemini-job', userId: 1, diagnosisId: 'diag-fast',
+              title: 'job 추천', grade: 'B', sourceLabel: 'AI',
+              explanation: '...', observationalNote: null,
+              ingredientTags: [], timing: '외출 후', createdAt: new Date(),
+            },
+          ],
+        },
+      });
+
+      const result = await service.generateFast(1, { diagnosisId: 'diag-fast' });
+      expect(result.source).toBe('LIVE');
+      expect(result.jobId).toBe('job-done');
+      expect(result.generatedAt).toBe('2026-08-16T02:00:00.000Z');
+      expect(jobService.enqueue).not.toHaveBeenCalled();
+      // LIVE 결과가 Redis SWR에 기록된다.
+      expect(redis.setJson).toHaveBeenCalledWith(
+        'rec:fast:1:diag-fast',
+        expect.objectContaining({ recommendations: expect.any(Array) }),
+        expect.any(Number),
+      );
+    });
+
+    it('동의가 없으면 401 대상 예외(동의 게이트)를 던진다', async () => {
+      consentService.requireActive.mockRejectedValue(
+        new Error('required consent missing'),
+      );
+      await expect(
+        service.generateFast(1, { diagnosisId: 'diag-fast' }),
+      ).rejects.toThrow('required consent missing');
+      expect(jobService.enqueue).not.toHaveBeenCalled();
     });
   });
 

@@ -1023,23 +1023,36 @@ Jest coverageThreshold를 반영했다.
 
 #### N31. 실제품만 추천 경로 — P0
 
-- [ ] weather/diagnosis 추천이 DB 실제품만 사용
-- [ ] 가상 weather 제품·`gemini-product-*` 경로 제거/차단
-- [ ] 응답 제품에 `purchaseUrl` 포함
+- [x] weather/diagnosis 추천이 DB 실제품만 사용
+- [x] 가상 weather 제품·`gemini-product-*` 경로 제거/차단
+- [x] 응답 제품에 `purchaseUrl` 포함
 
 #### N32. Redis SWR + 규칙 FALLBACK — P0
 
-- [ ] Redis SWR: hit → `source: CACHED` 즉시 실제품
-- [ ] miss → 규칙 기반 실제품 `source: FALLBACK` 즉시 반환 (빈 화면·긴 동기 Gemini 대기 금지)
-- [ ] stale/갱신 중 메타는 FE가 표시할 수 있게
+- [x] Redis SWR: hit → `source: CACHED` 즉시 실제품
+- [x] miss → 규칙 기반 실제품 `source: FALLBACK` 즉시 반환 (빈 화면·긴 동기 Gemini 대기 금지)
+- [x] stale/갱신 중 메타는 FE가 표시할 수 있게
 
 #### N29. 비동기 LIVE 교체 — P0
 
-- [ ] FALLBACK/CACHED 응답과 함께 job enqueue (기존 jobs 모듈 활용)
-- [ ] 완료 시 `source: LIVE`로 교체 가능한 결과
-- [ ] `GET /jobs/:id` 계약 유지·문서화. 동기 `POST /recommendations/generate` 의존 제거는 FE(F1)와 freeze 시 합의
+- [x] FALLBACK/CACHED 응답과 함께 job enqueue (기존 jobs 모듈 활용)
+- [x] 완료 시 `source: LIVE`로 교체 가능한 결과
+- [x] `GET /jobs/:id` 계약 유지·문서화. 동기 `POST /recommendations/generate` 의존 제거는 FE(F1)와 freeze 시 합의
 
 완료 기준(epic): 첫 응답에 실제품이 즉시 오고, 이후 LIVE로 갱신되며, 가상 제품이 없다.
+
+> ✅ 완료 (PR, `feature/rec-fast-path` — N31+N32+N29 한 PR):
+> - **N31**: weather/diagnosis 추천·FALLBACK 응답 모두 DB 실제품(+`purchaseUrl`)만 사용. 가상 `gemini-product-*`
+>   경로는 N27에 제거 + 이 에픽에서 FALLBACK 생성기도 실제품만(단위/e2e로 고정).
+> - **N32**: Redis SWR — `rec:fast:{userId}:{diagnosisId}` / `prod:weather:{지역}:{KST날짜}` 키.
+>   hit → `source: CACHED` 즉시, stale(30분) → 재검증 job enqueue + jobId. miss → 규칙 기반 실제품
+>   `source: FALLBACK` 즉시 반환(빈 화면·긴 동기 Gemini 대기 금지). `generatedAt` 메타로 FE stale 표시 지원.
+> - **N29**: `POST /recommendations/generate/fast` 신설 — FALLBACK/CACHED 응답과 함께 기존 jobs 모듈로
+>   `RECOMMENDATION_GENERATE` enqueue, 완료 시 `GET /jobs/:id`에서 `{ recommendations }`(LIVE) 교체.
+>   weather-based도 동일 패턴 — 신규 `WEATHER_PRODUCTS_GENERATE` job(AsyncJobType + migration), job 완료 시
+>   `{ products }` + Redis SWR 갱신. job dedup(진행 중/완료 job 재사용)으로 중복 enqueue 방지.
+> - 동기 `POST /recommendations/generate` 의존 제거는 FE(F1)와 freeze 시 합의. 검증: 242 passed(unit),
+>   tsc/lint/build 통과. e2e는 CI 검증 예정(로컬 Postgres 미기동).
 
 ### N33. 소셜 로그인 (Kakao · Google · Apple) — P1
 

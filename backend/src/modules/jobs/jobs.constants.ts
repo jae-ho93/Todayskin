@@ -34,6 +34,13 @@ export const JOB_POLICIES: Record<
     attempts: 3,
     backoffDelayMs: 2_000,
   },
+  // N31/N29: 날씨 기반 제품 LIVE 생성 — 추천과 같은 큐(우선순위 동일).
+  [JobType.WEATHER_PRODUCTS_GENERATE]: {
+    queueName: QUEUE_RECOMMENDATION,
+    priority: 1,
+    attempts: 3,
+    backoffDelayMs: 2_000,
+  },
   [JobType.PATTERN_ANALYZE]: {
     queueName: QUEUE_PATTERN,
     priority: 5,

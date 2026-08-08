@@ -19,6 +19,7 @@ import type { JwtPayload } from '../../common/strategies/jwt.strategy';
 import { JobService } from '../jobs/job.service';
 import { JobType } from '../jobs/enums/job-type.enum';
 import { EnqueueJobResponseDto } from '../jobs/dto/job-response.dto';
+import { RecommendationFastResponseDto } from './dto/recommendation-fast-response.dto';
 
 /**
  * RecommendationController — 기존 FastAPI /recommendations 이식.
@@ -59,6 +60,24 @@ export class RecommendationController {
     @Body() dto: GenerateRecommendationDto,
   ): Promise<RecommendationDto[]> {
     return this.recommendationService.generate(user.sub, dto);
+  }
+
+  @Post('generate/fast')
+  @ApiOperation({
+    summary: 'B등급 추천 빠른 경로 (N32/N29) — 즉시 실제품 + LIVE job',
+    description:
+      '첫 응답에 실제품이 즉시 온다. source: CACHED(Redis SWR) | FALLBACK(규칙 기반 실제품) | LIVE(저장 완료). ' +
+      'CACHED/FALLBACK이면 jobId가 함께 반환되고 GET /jobs/:id polling으로 LIVE 결과로 교체한다. ' +
+      'Gemini 실패는 503이 아니라 비동기 job FAILED로 처리된다 (빈 화면·긴 동기 대기 금지).',
+  })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(200)
+  async generateFast(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: GenerateRecommendationDto,
+  ): Promise<RecommendationFastResponseDto> {
+    return this.recommendationService.generateFast(user.sub, dto);
   }
 
   @Post('generate/async')
