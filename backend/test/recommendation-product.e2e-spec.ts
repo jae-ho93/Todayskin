@@ -10,6 +10,8 @@ import { AirKoreaClient } from '../src/modules/weather/clients/airkorea.client';
 import { StationClient } from '../src/modules/weather/clients/station.client';
 import { signupWithOtp, loginWithOtp } from './helpers/auth-flow';
 import { grantRecommendationTransfer } from './helpers/consent-flow';
+import { waitForJob } from './helpers/job-polling';
+import { JobStatus } from '../src/modules/jobs/enums/job-status.enum';
 import { PRODUCTS } from '../prisma/seed-data';
 
 /**
@@ -139,6 +141,8 @@ describe('Recommendation & Product (e2e)', () => {
     await grantRecommendationTransfer(app, accessToken);
   });
 
+  // N4/Inline dispatcher job polling 헬퍼 — test/helpers/job-polling.ts 공용.
+
   afterAll(async () => {
     // N27: 이 suite가 시드한 실제품을 정리한다 (RecommendationProduct는 Cascade로 함께 삭제).
     await prisma.product.deleteMany({
@@ -263,7 +267,7 @@ describe('Recommendation & Product (e2e)', () => {
     });
   });
 
-  describe('POST /products/weather-based', () => {
+  describe('POST /products/weather-based (N32/N29 빠른 경로)', () => {
     it('인증 없이 호출 시 401', async () => {
       await request(app.getHttpServer())
         .post('/products/weather-based')
@@ -271,17 +275,20 @@ describe('Recommendation & Product (e2e)', () => {
         .expect(401);
     });
 
-    it('날씨 기반 제품 3개 생성 — reason, timing 포함', async () => {
+    it('FALLBACK 실제품 3개 즉시 반환 + jobId, job 완료 시 LIVE로 교체', async () => {
       const res = await request(app.getHttpServer())
         .post('/products/weather-based')
         .set('Authorization', `Bearer ${accessToken}`)
         .send({ lat: 37.5665, lon: 126.978 })
         .expect(200);
 
-      expect(Array.isArray(res.body)).toBe(true);
-      expect(res.body).toHaveLength(3);
+      // 첫 응답이 배열이 아니라 { source, jobId, items } 래퍼 계약이다.
+      expect(res.body.source).toBe('FALLBACK');
+      expect(res.body.jobId).toBeDefined();
+      expect(Array.isArray(res.body.items)).toBe(true);
+      expect(res.body.items).toHaveLength(3);
       // 각 제품은 실제 카탈로그 제품(reason, timing, grade=A, purchaseUrl)이어야 한다
-      for (const p of res.body) {
+      for (const p of res.body.items) {
         expect(p.matchedGrade).toBe('A');
         expect(p.reason).toBeDefined();
         expect(p.timing).toBeDefined();
@@ -292,10 +299,89 @@ describe('Recommendation & Product (e2e)', () => {
         expect(p.id).not.toMatch(/^gemini-product-/);
       }
       // timing이 세 상황 모두 포함
-      const timings = (res.body as Array<{ timing: string }>)
+      const timings = (res.body.items as Array<{ timing: string }>)
         .map((p) => p.timing)
         .sort();
       expect(timings).toEqual(['세안 후', '외출 전', '외출 후']);
+
+      // job 완료 후 LIVE 결과도 실제품 + purchaseUrl (가상 제품 없음)
+      const final = await waitForJob(app, accessToken, res.body.jobId);
+      expect(final.status).toBe(JobStatus.COMPLETED);
+      const liveResult = final.result as { products: Array<Record<string, unknown>> };
+      expect(liveResult.products).toHaveLength(3);
+      for (const p of liveResult.products) {
+        expect(p.purchaseUrl).toBeDefined();
+        expect(String(p.id)).not.toMatch(/^gemini-product-/);
+      }
+    });
+  });
+
+  describe('POST /recommendations/generate/fast (N32/N29 빠른 경로)', () => {
+    it('인증 없이 호출 시 401', async () => {
+      await request(app.getHttpServer())
+        .post('/recommendations/generate/fast')
+        .send({ diagnosisId: 'diag-e2e-fast' })
+        .expect(401);
+    });
+
+    it('FALLBACK 즉시 반환 + jobId → job 완료 후 LIVE로 교체 (가상 제품 없음)', async () => {
+      const diagnosis = await prisma.diagnosis.create({
+        data: {
+          id: 'diag-e2e-fast',
+          userId,
+          capturedAt: new Date(),
+          overallScore: 71,
+          status: 'COMPLETED',
+        },
+      });
+
+      try {
+        // 1) 첫 요청 — DB/Redis에 결과가 없으므로 규칙 기반 FALLBACK + jobId.
+        const res = await request(app.getHttpServer())
+          .post('/recommendations/generate/fast')
+          .set('Authorization', `Bearer ${accessToken}`)
+          .send({ diagnosisId: diagnosis.id })
+          .expect(200);
+
+        expect(res.body.source).toBe('FALLBACK');
+        expect(res.body.jobId).toBeDefined();
+        expect(Array.isArray(res.body.recommendations)).toBe(true);
+        expect(res.body.recommendations.length).toBeGreaterThan(0);
+        for (const r of res.body.recommendations) {
+          // N31: FALLBACK도 가상 추천 id가 아니고 실제 카탈로그 제품만 연결한다.
+          expect(String(r.id)).not.toMatch(/^gemini-/);
+          expect(
+            (r.relatedProductIds as string[]).every((pid) =>
+              pid.startsWith('prod-'),
+            ),
+          ).toBe(true);
+        }
+
+        // 2) job 완료 → LIVE 추천 (DB 저장 결과).
+        const final = await waitForJob(app, accessToken, res.body.jobId);
+        expect(final.status).toBe(JobStatus.COMPLETED);
+        const liveRecs = (final.result as { recommendations: Array<Record<string, unknown>> })
+          .recommendations;
+        expect(liveRecs.length).toBeGreaterThan(0);
+        expect(String(liveRecs[0].id)).toMatch(/^gemini-/);
+
+        // 3) 재호출 — 저장된 LIVE 추천을 즉시 반환한다 (Gemini 재호출 없음).
+        const second = await request(app.getHttpServer())
+          .post('/recommendations/generate/fast')
+          .set('Authorization', `Bearer ${accessToken}`)
+          .send({ diagnosisId: diagnosis.id })
+          .expect(200);
+        expect(second.body.source).toBe('LIVE');
+        expect(second.body.recommendations.length).toBeGreaterThan(0);
+      } finally {
+        await prisma.recommendation.deleteMany({
+          where: { diagnosisId: diagnosis.id },
+        });
+        await prisma.aiCallReservation.deleteMany({
+          where: { scopeKey: `recommendation:${diagnosis.id}` },
+        });
+        await prisma.diagnosis.delete({ where: { id: diagnosis.id } }).catch(() => undefined);
+      }
     });
   });
 

@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { HttpException } from '@nestjs/common';
 import { RecommendationService } from '../../recommendations/recommendation.service';
+import { ProductService } from '../../products/product.service';
 import { PatternService } from '../../pattern/pattern.service';
 import { NotificationService } from '../../notifications/notification.service';
 import { JobHandlerRegistry } from './job-handler.registry';
@@ -17,6 +18,7 @@ export class DomainJobHandlers implements OnModuleInit {
   constructor(
     private readonly registry: JobHandlerRegistry,
     private readonly recommendationService: RecommendationService,
+    private readonly productService: ProductService,
     private readonly patternService: PatternService,
     private readonly notificationService: NotificationService,
   ) {}
@@ -32,6 +34,23 @@ export class DomainJobHandlers implements OnModuleInit {
             weather: payload.weather as object | undefined,
           });
           return { recommendations: items };
+        } catch (e) {
+          throw toJobError(e);
+        }
+      },
+    );
+
+    // N31/N29: 날씨 기반 제품 LIVE 생성 — FALLBACK/CACHED 응답의 교체 결과를 생산한다.
+    // 완료 시 { products }를 job result로 저장하고, ProductService가 Redis SWR에도 캐시한다.
+    this.registry.register(
+      JobType.WEATHER_PRODUCTS_GENERATE,
+      async (_jobId, _userId, payload) => {
+        try {
+          const products = await this.productService.generateWeatherBased({
+            lat: payload.lat as number | undefined,
+            lon: payload.lon as number | undefined,
+          });
+          return { products, source: 'LIVE' };
         } catch (e) {
           throw toJobError(e);
         }

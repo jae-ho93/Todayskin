@@ -52,9 +52,14 @@ N33 미머지면 F15는 건너뛰고 보고 (환각 OAuth 금지)
 
 ## API 계약 (freeze)
 
-- 추천 빠른 경로: 즉시 실제품 응답에 `source`: `CACHED` | `FALLBACK` | `LIVE`, 필요 시 jobId → `GET /jobs/:id`
-- `POST /recommendations/generate/async` { diagnosisId } → { jobId } (202) — 에픽 계약과 병행 시 Swagger 따름
-- weather/products 동일 패턴 (가상 `gemini-product-*` 없음, purchaseUrl 있는 실제품만)
+- 추천 빠른 경로: `POST /recommendations/generate/fast` { diagnosisId } (또는 호환: skinScore+weather) →
+  `{ source: 'CACHED' | 'FALLBACK' | 'LIVE', jobId?, generatedAt?, recommendations[] }`
+  - `CACHED`(Redis SWR) / `FALLBACK`(규칙 기반 실제품)이면 `jobId`로 `GET /jobs/:id` polling → LIVE 교체
+  - `LIVE`는 저장 완료 결과. `generatedAt`은 stale 표시용 메타 (FE: `jobId` 있으면 "갱신 중" 표시)
+  - FALLBACK 추천의 `sourceLabel`: `규칙 기반 빠른 응답 · AI 분석 전` (AI 문구 금지)
+- `POST /recommendations/generate/async` { diagnosisId } → { jobId } (202) — 기존 유지
+- **`POST /products/weather-based` 응답 형태 변경 (F6 대상)**: `ProductDto[]` → `{ source: 'CACHED'|'FALLBACK'|'LIVE', jobId?, generatedAt?, items[] }`
+  - items는 전부 DB 실제품 + purchaseUrl, 가상 `gemini-product-*` 없음. LIVE job type: `WEATHER_PRODUCTS_GENERATE`
 - `Product.purchaseUrl`: string (노출 제품)
 - `GET /auth/me`, `PATCH /auth/me` { name?, gender? }
 - `GET`/`POST /consents` (기존)

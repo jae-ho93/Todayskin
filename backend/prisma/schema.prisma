@@ -474,6 +474,8 @@ model NotificationPreference {
 // status 계약: PENDING → COMPLETED | FAILED
 enum AsyncJobType {
   RECOMMENDATION_GENERATE
+  // N31/N29: 날씨 기반 제품 LIVE 생성 — rec-fast-path 에픽에서 추가.
+  WEATHER_PRODUCTS_GENERATE
   PATTERN_ANALYZE
   NOTIFICATION_SEND
 }

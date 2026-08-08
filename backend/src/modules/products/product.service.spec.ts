@@ -3,6 +3,10 @@ import { ServiceUnavailableException } from '@nestjs/common';
 import { ProductService } from './product.service';
 import { GeminiClient, GeminiUnavailable } from '../gemini/gemini.client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RedisService } from '../../redis/redis.service';
+import { JobService } from '../jobs/job.service';
+import { JobStatus } from '../jobs/enums/job-status.enum';
+import { IdempotencyService } from '../idempotency/idempotency.service';
 import { WeatherService } from '../weather/weather.service';
 import { WeatherSource } from '../../common/enums/weather-source.enum';
 import { ProductCategory } from './enums/product-category.enum';
@@ -18,9 +22,17 @@ describe('ProductService', () => {
   let service: ProductService;
   let geminiClient: { generateWeatherProducts: jest.Mock };
   let weatherService: { getCurrentWeather: jest.Mock };
+  let redis: { getJson: jest.Mock; setJson: jest.Mock };
+  let jobService: { enqueue: jest.Mock };
+  let idempotency: {
+    acquire: jest.Mock;
+    complete: jest.Mock;
+    release: jest.Mock;
+  };
   let prisma: {
     product: { findMany: jest.Mock };
     weatherSnapshot: { findFirst: jest.Mock };
+    asyncJob: { findFirst: jest.Mock };
   };
 
   beforeEach(async () => {
@@ -28,12 +40,30 @@ describe('ProductService', () => {
       generateWeatherProducts: jest.fn(),
     };
     weatherService = { getCurrentWeather: jest.fn() };
+    redis = {
+      getJson: jest.fn().mockResolvedValue(null),
+      setJson: jest.fn().mockResolvedValue(true),
+    };
+    jobService = {
+      enqueue: jest
+        .fn()
+        .mockResolvedValue({ jobId: 'job-weather-1', status: JobStatus.PENDING }),
+    };
+    // N31/N29: enqueue 전 in-flight 가드 (동시 중복 enqueue 방지).
+    idempotency = {
+      acquire: jest.fn().mockResolvedValue({ outcome: 'acquired' }),
+      complete: jest.fn().mockResolvedValue(undefined),
+      release: jest.fn().mockResolvedValue(undefined),
+    };
     prisma = {
       product: {
         findMany: jest.fn(),
       },
       weatherSnapshot: {
         findFirst: jest.fn(),
+      },
+      asyncJob: {
+        findFirst: jest.fn().mockResolvedValue(null),
       },
     };
 
@@ -43,6 +73,9 @@ describe('ProductService', () => {
         { provide: GeminiClient, useValue: geminiClient },
         { provide: WeatherService, useValue: weatherService },
         { provide: PrismaService, useValue: prisma },
+        { provide: RedisService, useValue: redis },
+        { provide: JobService, useValue: jobService },
+        { provide: IdempotencyService, useValue: idempotency },
       ],
     }).compile();
 
@@ -323,6 +356,162 @@ describe('ProductService', () => {
       await expect(service.generateWeatherBased({})).rejects.toThrow(
         ServiceUnavailableException,
       );
+    });
+  });
+
+  describe('generateWeatherBasedFast (N32/N29 빠른 경로)', () => {
+    beforeEach(() => {
+      weatherService.getCurrentWeather.mockResolvedValue(liveWeather());
+      prisma.product.findMany.mockResolvedValue(catalogRows());
+      prisma.asyncJob.findFirst.mockResolvedValue(null);
+      redis.getJson.mockResolvedValue(null);
+    });
+
+    it('miss → 규칙 기반 실제품 FALLBACK 즉시 반환 + LIVE job enqueue', async () => {
+      const result = await service.generateWeatherBasedFast(1, {
+        lat: 37.5,
+        lon: 126.9,
+      });
+
+      expect(result.source).toBe('FALLBACK');
+      expect(result.jobId).toBe('job-weather-1');
+      expect(result.items).toHaveLength(3);
+      // Gemini를 동기 호출하지 않는다 (첫 응답 지연 금지).
+      expect(geminiClient.generateWeatherProducts).not.toHaveBeenCalled();
+      // N31: FALLBACK도 실제 카탈로그 제품만, purchaseUrl 포함, 가상 id 없음.
+      for (const p of result.items) {
+        expect(p.id).not.toMatch(/^gemini-product-/);
+        expect(p.purchaseUrl).toBeDefined();
+        expect(p.timing).toBeDefined();
+      }
+      expect(jobService.enqueue).toHaveBeenCalledWith(
+        1,
+        'WEATHER_PRODUCTS_GENERATE',
+        expect.objectContaining({ regionKey: '서울특별시', lat: 37.5, lon: 126.9 }),
+      );
+    });
+
+    it('Redis SWR hit → source: CACHED (신선하면 재검증 job 없음)', async () => {
+      redis.getJson.mockResolvedValue({
+        items: [
+          {
+            id: 'prod-11', name: '1025 독도 클렌저', brand: '라운드랩', imageUri: null,
+            purchaseUrl: 'https://example.com/p', matchedGrade: 'A',
+            matchedIngredients: ['약산성 클렌저'], category: 'barrier',
+            recommendationId: null, reason: 'R', timing: '세안 후',
+          },
+        ],
+        generatedAt: new Date().toISOString(),
+      });
+
+      const result = await service.generateWeatherBasedFast(1, {});
+      expect(result.source).toBe('CACHED');
+      expect(result.generatedAt).toBeDefined();
+      expect(result.jobId).toBeUndefined();
+      expect(jobService.enqueue).not.toHaveBeenCalled();
+    });
+
+    it('CACHED가 stale이면 재검증 job enqueue + jobId 포함 (SWR)', async () => {
+      redis.getJson.mockResolvedValue({
+        items: [],
+        generatedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      });
+
+      const result = await service.generateWeatherBasedFast(1, {});
+      expect(result.source).toBe('CACHED');
+      expect(result.jobId).toBe('job-weather-1');
+      expect(jobService.enqueue).toHaveBeenCalledTimes(1);
+    });
+
+    it('진행 중 job이 있으면 재사용 — 같은 jobId + FALLBACK (중복 enqueue 방지)', async () => {
+      prisma.asyncJob.findFirst.mockResolvedValue({
+        id: 'job-pending',
+        status: JobStatus.PENDING,
+        result: null,
+        finishedAt: null,
+      });
+
+      const result = await service.generateWeatherBasedFast(1, {});
+      expect(result.source).toBe('FALLBACK');
+      expect(result.jobId).toBe('job-pending');
+      expect(jobService.enqueue).not.toHaveBeenCalled();
+      expect(prisma.asyncJob.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            type: 'WEATHER_PRODUCTS_GENERATE',
+            payload: { path: ['regionKey'], equals: '서울특별시' },
+          }),
+        }),
+      );
+    });
+
+    it('FAILED job이 cooldown 안이면 같은 jobId 재사용 (job 스팸 방지)', async () => {
+      prisma.asyncJob.findFirst.mockResolvedValue({
+        id: 'job-failed',
+        status: JobStatus.FAILED,
+        finishedAt: new Date(),
+        result: null,
+      });
+
+      const result = await service.generateWeatherBasedFast(1, {});
+      expect(result.source).toBe('FALLBACK');
+      expect(result.jobId).toBe('job-failed');
+      expect(jobService.enqueue).not.toHaveBeenCalled();
+    });
+
+    it('FAILED가 cooldown(5분)을 지나면 새 job을 enqueue한다', async () => {
+      // dedup 창(10분) 안이면서 cooldown(5분)을 지난 6분 전 FAILED job → 새 enqueue.
+      prisma.asyncJob.findFirst.mockResolvedValue({
+        id: 'job-old-failed',
+        status: JobStatus.FAILED,
+        finishedAt: new Date(Date.now() - 6 * 60 * 1000),
+        result: null,
+      });
+
+      const result = await service.generateWeatherBasedFast(1, {});
+      expect(result.source).toBe('FALLBACK');
+      expect(result.jobId).toBe('job-weather-1');
+      expect(jobService.enqueue).toHaveBeenCalledTimes(1);
+    });
+
+    it('COMPLETED job 결과가 있으면 source: LIVE로 반환', async () => {
+      prisma.asyncJob.findFirst.mockResolvedValue({
+        id: 'job-done',
+        status: JobStatus.COMPLETED,
+        finishedAt: new Date('2026-08-16T02:00:00Z'),
+        result: {
+          products: [
+            {
+              id: 'prod-2', name: '자작나무 수분 선크림', brand: '라운드랩', imageUri: null,
+              purchaseUrl: 'https://example.com/p', matchedGrade: 'A',
+              matchedIngredients: ['징크옥사이드'], category: 'barrier',
+              recommendationId: null, reason: 'R', timing: '외출 전',
+            },
+          ],
+        },
+      });
+
+      const result = await service.generateWeatherBasedFast(1, {});
+      expect(result.source).toBe('LIVE');
+      expect(result.jobId).toBe('job-done');
+      expect(result.generatedAt).toBe('2026-08-16T02:00:00.000Z');
+      expect(jobService.enqueue).not.toHaveBeenCalled();
+    });
+
+    it('날씨 조회 불가(UNAVAILABLE + 스냅샷 없음)면 503 — 가짜 추천 금지 (N12)', async () => {
+      weatherService.getCurrentWeather.mockResolvedValue({
+        source: WeatherSource.UNAVAILABLE,
+        observedAt: new Date().toISOString(),
+        regionName: '서울특별시',
+        uvIndex: null,
+      });
+      prisma.weatherSnapshot.findFirst.mockResolvedValue(null);
+
+      await expect(service.generateWeatherBasedFast(1, {})).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      expect(jobService.enqueue).not.toHaveBeenCalled();
+      expect(geminiClient.generateWeatherProducts).not.toHaveBeenCalled();
     });
   });
 });

@@ -8,18 +8,25 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RedisService } from '../../redis/redis.service';
 import { GeminiClient, GeminiUnavailable } from '../gemini/gemini.client';
 import { ConsentService } from '../consent/consent.service';
 import { ConsentPurpose } from '../consent/enums/consent-purpose.enum';
 import { IdempotencyService } from '../idempotency/idempotency.service';
+import { JobService } from '../jobs/job.service';
+import { JobType } from '../jobs/enums/job-type.enum';
+import { JobStatus } from '../jobs/enums/job-status.enum';
 import { EvidenceGrade } from './enums/evidence-grade.enum';
 import { RecommendationDto, RecommendationTiming } from './dto/recommendation.dto';
+import { RecommendationFastResponseDto } from './dto/recommendation-fast-response.dto';
+import { ProductCategory } from '../products/enums/product-category.enum';
 import {
   Product,
   RecommendationTemplate,
   Recommendation as RecommendationModel,
+  AsyncJobType,
 } from '@prisma/client';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   buildCursorPage,
   CursorPageDto,
@@ -34,16 +41,37 @@ import { notDeletedWhere } from '../../common/soft-delete/soft-delete.policy';
 const B_GRADE_SOURCE_LABEL = 'AI 종합 분석 · 피부과학 일반 지식 기반';
 
 /**
- * RecommendationService — 전역 추천 템플릿 목록, B등급 생성, 상세 조회.
+ * N32 rec-fast-path: 규칙 기반 빠른 응답(FALLBACK)의 정직한 출처 표기.
+ * AI가 만든 결과가 아님을 명시해 LIVE 교체 전까지 오해를 막는다.
+ */
+const FALLBACK_SOURCE_LABEL = '규칙 기반 빠른 응답 · AI 분석 전';
+
+/** N32: Redis SWR 캐시 TTL(초). */
+const REC_FAST_CACHE_TTL_S = 6 * 60 * 60;
+
+/** N32: CACHED 항목이 이 시간보다 오래되면 재검증(LIVE) job을 enqueue한다(SWR). */
+const REC_FAST_REVALIDATE_MS = 30 * 60 * 1000;
+
+/** N32: 중복 enqueue 방지 job 조회 창 — 이 시간 안의 PENDING/COMPLETED/FAILED job을 재사용 후보로 본다. */
+const FAST_JOB_DEDUP_WINDOW_MS = 10 * 60 * 1000;
+
+/** N32: FAILED job이 이 시간 안이면 재사용(FALLBACK + 같은 jobId)하고, 지나면 새 job을 enqueue한다. */
+const FAST_FAILED_COOLDOWN_MS = 5 * 60 * 1000;
+
+/**
+ * RecommendationService — 전역 추천 템플릿 목록, B등급 생성, 빠른 경로, 상세 조회.
  *
- * 설계 기준 (BACKEND_TASKS.md T7/T8):
+ * 설계 기준 (BACKEND_TASKS.md T7/T8 + N32/N29):
  * - 전역 A등급 템플릿과 사용자별 생성 추천을 분리한다.
  * - grade/sourceLabel은 서버가 고정하고 LLM이 결정하지 않는다.
  * - 추천 생성은 diagnosisId 중심(최종 계약)을 지원하되, 기존 프론트의
  *   skinScore+weather 직접 전송도 호환한다(contract migration 전까지).
  * - 동일 진단에 대한 중복 생성을 방지한다.
  * - 추천 상세 조회 시 사용자 소유권을 검사한다.
- * - Gemini 실패 시 503을 반환하고 가짜 추천으로 대체하지 않는다.
+ * - Gemini 실패 시 503을 반환하고 가짜 추천으로 대체하지 않는다 (동기 경로).
+ * - **N32/N29**: `generateFast`는 DB LIVE → job dedup → Redis SWR(CACHED) →
+ *   규칙 기반 실제품(FALLBACK) + LIVE job enqueue 순서로 첫 응답을 즉시 반환한다.
+ *   FALLBACK/CACHED 응답에는 항상 jobId가 붙어 FE가 GET /jobs/:id로 LIVE로 교체한다.
  */
 @Injectable()
 export class RecommendationService {
@@ -54,6 +82,8 @@ export class RecommendationService {
     private readonly geminiClient: GeminiClient,
     private readonly consentService: ConsentService,
     private readonly idempotency: IdempotencyService,
+    private readonly redis: RedisService,
+    private readonly jobService: JobService,
   ) {}
 
   /**
@@ -105,6 +135,8 @@ export class RecommendationService {
    * 호환: diagnosisId 없이 skinScore+weather를 직접 받는 기존 프론트도 지원한다.
    *
    * 동일 진단에 대해 이미 생성된 추천이 있으면 중복 생성 대신 기존 것을 반환한다.
+   * N32: 성공한 LIVE 결과를 Redis SWR에 캐시해 다음 빠른 경로가 source: CACHED로
+   * 즉시 응답할 수 있게 한다.
    */
   async generate(
     userId: number,
@@ -114,63 +146,14 @@ export class RecommendationService {
       weather?: object;
     },
   ): Promise<RecommendationDto[]> {
-    if (!payload.diagnosisId && (!payload.skinScore || !payload.weather)) {
-      throw new BadRequestException(
-        'diagnosisId 또는 skinScore와 weather를 함께 보내야 합니다',
-      );
-    }
-
     // N3: Gemini 등 외부 AI로 피부/날씨 데이터를 보내려면 전송 동의 필수.
     await this.consentService.requireActive(
       userId,
       ConsentPurpose.AI_RECOMMENDATION_DATA_TRANSFER,
     );
 
-    let skinInput: Record<string, unknown>;
-    let weatherInput: Record<string, unknown>;
-    let diagnosisId: string | undefined = payload.diagnosisId;
-
-    if (diagnosisId) {
-      // 최종 계약 — 서버가 diagnosis 소유권 확인 후 DB에서 측정값/날씨를 조회한다.
-      const diagnosis = await this.prisma.diagnosis.findFirst({
-        where: notDeletedWhere({ id: diagnosisId }),
-        include: {
-          skinMetrics: true,
-          weatherSnapshot: true,
-        },
-      });
-      if (!diagnosis) {
-        throw new NotFoundException('진단을 찾을 수 없습니다');
-      }
-      if (diagnosis.userId !== userId) {
-        throw new ForbiddenException('해당 진단에 대한 접근 권한이 없습니다');
-      }
-
-      skinInput = {
-        id: diagnosis.id,
-        capturedAt: diagnosis.capturedAt,
-        overallScore: diagnosis.overallScore,
-        thumbnailUri: diagnosis.thumbnailUri,
-        parts: diagnosis.skinMetrics.map((m) => ({
-          part: m.part,
-          label: m.label,
-          grade: m.grade,
-          moisture: m.moisture,
-          elasticity: m.elasticity,
-          note: m.note,
-        })),
-      };
-      weatherInput = diagnosis.weatherSnapshot
-        ? this.snapshotToInput(diagnosis.weatherSnapshot)
-        : {};
-    } else {
-      // 호환 — 기존 프론트가 skinScore+weather를 직접 보내는 경우.
-      // diagnosisId가 없으면 진단 연결 없이 생성한다 (user에만 연결).
-      skinInput = payload.skinScore ?? {};
-      weatherInput = payload.weather
-        ? { ...(payload.weather as Record<string, unknown>) }
-        : {};
-    }
+    const { diagnosisId, skinInput, weatherInput } =
+      await this.resolveGenerateInputs(userId, payload);
 
     // 동일 진단에 대한 중복 생성 방지.
     // diagnosisId가 있고 이미 추천이 존재하면 기존 것을 반환한다.
@@ -320,7 +303,14 @@ export class RecommendationService {
       }
 
       // 방금 저장한 추천들에도 관련 제품 id를 채운다.
-      return this.attachProductIds(persisted as RecommendationModel[]);
+      const dtos = await this.attachProductIds(persisted as RecommendationModel[]);
+
+      // N32: LIVE 생성 결과를 Redis SWR에 캐시한다 — 다음 빠른 경로가 source: CACHED.
+      if (diagnosisId) {
+        await this.cacheFastRecommendations(userId, diagnosisId, dtos);
+      }
+
+      return dtos;
     } catch (e) {
       // N14: 실패(503/저장 오류) 시 예약을 해제해 재시도가 가능하게 한다.
       if (reservationScope) {
@@ -328,6 +318,125 @@ export class RecommendationService {
       }
       throw e;
     }
+  }
+
+  /**
+   * N32/N29: 빠른 경로 추천 — 첫 응답에 실제품이 즉시 온다.
+   *
+   * 응답 우선순위:
+   * 1. diagnosisId 모드에서 저장된 추천이 이미 있으면 `source: LIVE`로 즉시 반환.
+   * 2. 같은 진단의 진행 중/완료 job이 있으면 그 job을 재사용 (중복 enqueue 방지).
+   * 3. Redis SWR hit → `source: CACHED` (오래됐으면 재검증 job enqueue, jobId 포함).
+   * 4. miss → 규칙 기반 실제품 `source: FALLBACK` 즉시 반환 + LIVE job enqueue.
+   *
+   * Gemini 실패는 이 경로에서 503을 만들지 않는다 — job이 비동기로 FAILED가 되고
+   * FE는 FALLBACK을 유지한다 (빈 화면·긴 동기 Gemini 대기 금지, N32).
+   */
+  async generateFast(
+    userId: number,
+    payload: {
+      diagnosisId?: string;
+      skinScore?: Record<string, unknown>;
+      weather?: object;
+    },
+  ): Promise<RecommendationFastResponseDto> {
+    // N3: Gemini 전송 동의 — LIVE job이 Gemini를 호출하므로 동일하게 게이트한다.
+    await this.consentService.requireActive(
+      userId,
+      ConsentPurpose.AI_RECOMMENDATION_DATA_TRANSFER,
+    );
+
+    const { diagnosisId, skinInput, weatherInput } =
+      await this.resolveGenerateInputs(userId, payload);
+
+    // 1) DB LIVE — 완료된 추천이 있으면 가장 정확하고 빠른 결과.
+    if (diagnosisId) {
+      const existing = await this.prisma.recommendation.findMany({
+        where: { diagnosisId, userId },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (existing.length > 0) {
+        return {
+          source: 'LIVE',
+          recommendations: await this.attachProductIds(existing),
+        };
+      }
+
+      // 2) job dedup — 같은 진단의 진행 중/완료/최근 실패 job을 재사용한다.
+      //    (FAILED도 cooldown 안이면 같은 jobId로 재사용해 job 스팸을 막는다 — N32)
+      const job = await this.findRecentJob(
+        userId,
+        AsyncJobType.RECOMMENDATION_GENERATE,
+        'diagnosisId',
+        diagnosisId,
+      );
+      if (job) {
+        if (job.status === JobStatus.COMPLETED) {
+          const result = job.result as { recommendations?: RecommendationDto[] } | null;
+          const recs = result?.recommendations ?? [];
+          if (recs.length > 0) {
+            await this.cacheFastRecommendations(userId, diagnosisId, recs);
+            return {
+              source: 'LIVE',
+              jobId: job.id,
+              generatedAt: job.finishedAt?.toISOString(),
+              recommendations: recs,
+            };
+          }
+        } else if (this.isRecentlyFailed(job)) {
+          // Gemini 실패 직후 — 같은 jobId(FE가 FAILED를 볼 수 있게) + FALLBACK 유지.
+          return {
+            source: 'FALLBACK',
+            jobId: job.id,
+            recommendations: await this.buildRuleRecommendations(
+              skinInput,
+              weatherInput,
+            ),
+          };
+        } else if (job.status === JobStatus.PENDING) {
+          // PENDING — 같은 job을 그대로 알려주고 규칙 FALLBACK을 먼저 보여준다.
+          return {
+            source: 'FALLBACK',
+            jobId: job.id,
+            recommendations: await this.buildRuleRecommendations(
+              skinInput,
+              weatherInput,
+            ),
+          };
+        }
+        // FAILED가 cooldown을 지났으면 아래로 내려가 새 job을 enqueue한다.
+      }
+    }
+
+    // 3) Redis SWR hit → CACHED.
+    const cacheKey = this.fastCacheKey(userId, diagnosisId, skinInput, weatherInput);
+    const cached = await this.readFastCache(cacheKey);
+    if (cached) {
+      const stale =
+        Date.now() - new Date(cached.generatedAt).getTime() >
+        REC_FAST_REVALIDATE_MS;
+      let jobId: string | undefined;
+      if (stale) {
+        // SWR: 낡은 데이터를 먼저 보여주고, 뒤에서 LIVE로 재검증한다.
+        jobId = await this.enqueueLiveJob(userId, diagnosisId, skinInput, weatherInput);
+      }
+      return {
+        source: 'CACHED',
+        jobId,
+        generatedAt: cached.generatedAt,
+        recommendations: cached.recommendations,
+      };
+    }
+
+    // 4) miss → 규칙 기반 실제품 FALLBACK 즉시 반환 + LIVE job enqueue.
+    const fallback = await this.buildRuleRecommendations(skinInput, weatherInput);
+    const jobId = await this.enqueueLiveJob(
+      userId,
+      diagnosisId,
+      skinInput,
+      weatherInput,
+    );
+    return { source: 'FALLBACK', jobId, recommendations: fallback };
   }
 
   /**
@@ -364,6 +473,263 @@ export class RecommendationService {
     }
 
     throw new NotFoundException('추천을 찾을 수 없습니다');
+  }
+
+  // ── N32 빠른 경로 헬퍼 ──────────────────────────────
+
+  /**
+   * 추천 입력 해석 — diagnosisId(최종 계약) 또는 skinScore+weather(호환)를
+   * (diagnosisId, skinInput, weatherInput)으로 정규화한다. 소유권 검사 포함.
+   */
+  private async resolveGenerateInputs(
+    userId: number,
+    payload: {
+      diagnosisId?: string;
+      skinScore?: Record<string, unknown>;
+      weather?: object;
+    },
+  ): Promise<{
+    diagnosisId: string | undefined;
+    skinInput: Record<string, unknown>;
+    weatherInput: Record<string, unknown>;
+  }> {
+    if (!payload.diagnosisId && (!payload.skinScore || !payload.weather)) {
+      throw new BadRequestException(
+        'diagnosisId 또는 skinScore와 weather를 함께 보내야 합니다',
+      );
+    }
+
+    if (payload.diagnosisId) {
+      // 최종 계약 — 서버가 diagnosis 소유권 확인 후 DB에서 측정값/날씨를 조회한다.
+      const diagnosis = await this.prisma.diagnosis.findFirst({
+        where: notDeletedWhere({ id: payload.diagnosisId }),
+        include: {
+          skinMetrics: true,
+          weatherSnapshot: true,
+        },
+      });
+      if (!diagnosis) {
+        throw new NotFoundException('진단을 찾을 수 없습니다');
+      }
+      if (diagnosis.userId !== userId) {
+        throw new ForbiddenException('해당 진단에 대한 접근 권한이 없습니다');
+      }
+
+      const skinInput: Record<string, unknown> = {
+        id: diagnosis.id,
+        capturedAt: diagnosis.capturedAt,
+        overallScore: diagnosis.overallScore,
+        thumbnailUri: diagnosis.thumbnailUri,
+        parts: diagnosis.skinMetrics.map((m) => ({
+          part: m.part,
+          label: m.label,
+          grade: m.grade,
+          moisture: m.moisture,
+          elasticity: m.elasticity,
+          note: m.note,
+        })),
+      };
+      const weatherInput = diagnosis.weatherSnapshot
+        ? this.snapshotToInput(diagnosis.weatherSnapshot)
+        : {};
+      return { diagnosisId: payload.diagnosisId, skinInput, weatherInput };
+    }
+
+    // 호환 — 기존 프론트가 skinScore+weather를 직접 보내는 경우.
+    // diagnosisId가 없으면 진단 연결 없이 생성한다 (user에만 연결).
+    return {
+      diagnosisId: undefined,
+      skinInput: payload.skinScore ?? {},
+      weatherInput: payload.weather
+        ? { ...(payload.weather as Record<string, unknown>) }
+        : {},
+    };
+  }
+
+  /** 같은 payload JSON 경로 키를 가진 최근 PENDING/COMPLETED/FAILED job 조회 (중복 enqueue 방지). */
+  private async findRecentJob(
+    userId: number,
+    type: AsyncJobType,
+    key: string,
+    value: string,
+  ) {
+    return this.prisma.asyncJob.findFirst({
+      where: {
+        userId,
+        type,
+        status: {
+          in: [JobStatus.PENDING, JobStatus.COMPLETED, JobStatus.FAILED],
+        },
+        createdAt: { gte: new Date(Date.now() - FAST_JOB_DEDUP_WINDOW_MS) },
+        payload: { path: [key], equals: value },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /** FAILED가 cooldown 안이면 같은 jobId를 재사용한다 (job 스팸 방지). */
+  private isRecentlyFailed(job: { status: string; finishedAt: Date | null }): boolean {
+    return (
+      job.status === JobStatus.FAILED &&
+      !!job.finishedAt &&
+      Date.now() - job.finishedAt.getTime() < FAST_FAILED_COOLDOWN_MS
+    );
+  }
+
+  /**
+   * FALLBACK/CACHED 응답과 함께 LIVE 교체 job을 enqueue한다. 실패해도 FALLBACK은 반환한다.
+   * diagnosisId 모드에서는 payload를 { diagnosisId }만 담아 AsyncJob.payload를 가볍게 유지한다
+   * (handler는 진단 모드에서 skinScore/weather를 무시한다).
+   */
+  private async enqueueLiveJob(
+    userId: number,
+    diagnosisId: string | undefined,
+    skinInput: Record<string, unknown>,
+    weatherInput: Record<string, unknown>,
+  ): Promise<string | undefined> {
+    try {
+      const payload = diagnosisId
+        ? { diagnosisId }
+        : { skinScore: skinInput, weather: weatherInput };
+      const { jobId } = await this.jobService.enqueue(
+        userId,
+        JobType.RECOMMENDATION_GENERATE,
+        payload,
+      );
+      return jobId;
+    } catch (e) {
+      this.logger.warn(
+        `Fast path: LIVE job enqueue failed (userId=${userId}): ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+      return undefined;
+    }
+  }
+
+  /** Redis SWR 캐시 키 — diagnosisId가 있으면 진단 키, 없으면 (스냅샷+날씨) 지문 키. */
+  private fastCacheKey(
+    userId: number,
+    diagnosisId: string | undefined,
+    skinInput: Record<string, unknown>,
+    weatherInput: Record<string, unknown>,
+  ): string {
+    if (diagnosisId) return `rec:fast:${userId}:${diagnosisId}`;
+    const fingerprint = createHash('sha1')
+      .update(JSON.stringify({ skinInput, weatherInput }))
+      .digest('hex')
+      .slice(0, 16);
+    return `rec:fast:${userId}:compat:${fingerprint}`;
+  }
+
+  private async readFastCache(
+    key: string,
+  ): Promise<{ recommendations: RecommendationDto[]; generatedAt: string } | null> {
+    return this.redis.getJson<{
+      recommendations: RecommendationDto[];
+      generatedAt: string;
+    }>(key);
+  }
+
+  /** LIVE 생성 결과를 Redis SWR에 저장 (진단 모드). Redis 장애 시 조용히 실패. */
+  private async cacheFastRecommendations(
+    userId: number,
+    diagnosisId: string,
+    recommendations: RecommendationDto[],
+  ): Promise<void> {
+    const key = `rec:fast:${userId}:${diagnosisId}`;
+    await this.redis.setJson(
+      key,
+      { recommendations, generatedAt: new Date().toISOString() },
+      REC_FAST_CACHE_TTL_S,
+    );
+  }
+
+  /**
+   * N32: 규칙 기반 빠른 추천 (FALLBACK) — 실제 카탈로그 제품만 연결한다.
+   * 가상 제품·가상 인용을 만들지 않는 정직한 자리표시자다. AI 상세 분석(LIVE)이
+   * 완료되면 job 결과로 교체된다. 등급은 B로 표기하되 sourceLabel로 AI가 아님을 명시한다.
+   */
+  private async buildRuleRecommendations(
+    skinInput: Record<string, unknown>,
+    weatherInput: Record<string, unknown>,
+  ): Promise<RecommendationDto[]> {
+    const catalog = await this.prisma.product.findMany();
+    const used = new Set<string>();
+    const slots: Array<{
+      timing: RecommendationTiming;
+      prefs: ProductCategory[];
+      title: string;
+      body: string;
+    }> = [
+      {
+        timing: '외출 후',
+        prefs: [ProductCategory.BARRIER, ProductCategory.MOISTURE],
+        title: '외출 후 진정·세안 루틴',
+        body: '외출 후 세안과 진정 케어가 오늘 환경 노출 관리에 도움될 수 있어요.',
+      },
+      {
+        timing: '자기 전',
+        prefs: [ProductCategory.MOISTURE, ProductCategory.BARRIER],
+        title: '자기 전 보습·배리어 루틴',
+        body: '자기 전 보습과 피부장벽 관리가 피부 상태 유지에 도움될 수 있어요.',
+      },
+      {
+        timing: '언제든',
+        prefs: [ProductCategory.MOISTURE, ProductCategory.BRIGHTENING],
+        title: '언제든 수분 유지 루틴',
+        body: '하루 중 수분 보충이 건조함 완화에 도움될 수 있어요.',
+      },
+    ];
+
+    const overallScore =
+      typeof skinInput.overallScore === 'number'
+        ? skinInput.overallScore
+        : null;
+    return slots.map((slot) => {
+      const picked = this.pickRuleRecommendationProducts(
+        catalog,
+        slot.prefs,
+        used,
+        2,
+      );
+      picked.forEach((p) => used.add(p.id));
+      const ingredientTags = [
+        ...new Set(picked.flatMap((p) => p.matchedIngredients)),
+      ];
+      const weatherPhrase = this.ruleWeatherPhrase(weatherInput);
+      const scorePhrase =
+        overallScore !== null
+          ? ` 측정 점수 ${Math.round(overallScore)}점을 기준으로`
+          : '';
+      return {
+        id: `fast-${this.shortId()}`,
+        title: slot.title,
+        grade: EvidenceGrade.B,
+        sourceLabel: FALLBACK_SOURCE_LABEL,
+        explanation: `${slot.body}${scorePhrase} 오늘 날씨(${weatherPhrase})를 고려해 고른 실제 제품이에요. AI 상세 분석이 완료되면 LIVE 결과로 교체돼요.`,
+        // N32: FALLBACK은 관측 통계가 아니므로 observationalNote는 비운다.
+        observationalNote: null,
+        ingredientTags,
+        relatedProductIds: picked.map((p) => p.id),
+        timing: slot.timing,
+      };
+    });
+  }
+
+  /** 규칙 fallback 문구용 날씨 요약 — 존재하는 수치만 언급한다. */
+  private ruleWeatherPhrase(weather: Record<string, unknown>): string {
+    const parts: string[] = [];
+    if (typeof weather.uvIndex === 'number') {
+      parts.push(`자외선지수 ${weather.uvIndex}`);
+    }
+    if (typeof weather.pm25 === 'number') {
+      parts.push(`미세먼지 ${weather.pm25}`);
+    }
+    if (typeof weather.pm10 === 'number') {
+      parts.push(`초미세먼지 ${weather.pm10}`);
+    }
+    return parts.length > 0 ? parts.join(', ') : '자외선·대기질 측정 불가';
   }
 
   // ── 매핑 헬퍼 ──────────────────────────────────
@@ -519,12 +885,25 @@ export class RecommendationService {
     used: Set<string>,
     count: number,
   ): Product[] {
-    const available = catalog.filter((p) => !used.has(p.id));
     // 추천 timing('외출 후'|'자기 전'|'언제든') 기준 카테고리 우선순위.
     const categoryPref =
       timing === '외출 후'
         ? ['barrier', 'moisture']
         : ['moisture', 'barrier', 'brightening', 'elasticity'];
+    return this.pickRuleRecommendationProducts(catalog, categoryPref, used, count);
+  }
+
+  /**
+   * N27/N32 공용: 규칙 기반 실제품 선택 — 등급 A 우선 + 카테고리 우선순위로
+   * 결정적으로 골라 최대 count개를 반환한다.
+   */
+  private pickRuleRecommendationProducts(
+    catalog: Product[],
+    categoryPref: string[],
+    used: Set<string>,
+    count: number,
+  ): Product[] {
+    const available = catalog.filter((p) => !used.has(p.id));
     const ranked = [...available].sort((a, b) => {
       const gradeDiff =
         (a.matchedGrade === EvidenceGrade.A ? 0 : 1) -

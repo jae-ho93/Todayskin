@@ -10,6 +10,7 @@ import { StationClient } from '../src/modules/weather/clients/station.client';
 import { RedisService } from '../src/redis/redis.service';
 import { signupWithOtp } from './helpers/auth-flow';
 import { grantRecommendationTransfer } from './helpers/consent-flow';
+import { waitForJob } from './helpers/job-polling';
 
 /**
  * 프론트 API response contract 통합 테스트 (T13).
@@ -165,6 +166,48 @@ describe('API Response Contract (e2e)', () => {
   describe('추천 생성 503 계약 (Gemini 실패)', () => {
     let accessToken: string;
 
+    // N32: weather-based 빠른 경로는 규칙 FALLBACK이 실제 카탈로그 제품을 골라야 하므로
+    // 이 suite가 쓰는 로컬 제품 3개(규칙 fallback 3슬롯 충족)를 시드한다.
+    // (다른 suite가 시드하는 PRODUCTS id와 겹치지 않게 접두사 acct- 사용)
+    const localProducts = [
+      {
+        id: 'acct-prod-1',
+        name: '독도 클렌저',
+        brand: '라운드랩',
+        imageUri: null,
+        purchaseUrl: 'https://example.com/p1',
+        matchedGrade: 'B',
+        matchedIngredients: ['약산성 클렌저'],
+        category: 'barrier',
+        reason: null,
+        timing: null,
+      },
+      {
+        id: 'acct-prod-2',
+        name: '자작나무 수분 선크림',
+        brand: '라운드랩',
+        imageUri: null,
+        purchaseUrl: 'https://example.com/p2',
+        matchedGrade: 'A',
+        matchedIngredients: ['징크옥사이드'],
+        category: 'barrier',
+        reason: null,
+        timing: null,
+      },
+      {
+        id: 'acct-prod-3',
+        name: '다이브인 히알루론산 세럼',
+        brand: '토리든',
+        imageUri: null,
+        purchaseUrl: 'https://example.com/p3',
+        matchedGrade: 'A',
+        matchedIngredients: ['히알루론산'],
+        category: 'moisture',
+        reason: null,
+        timing: null,
+      },
+    ];
+
     beforeAll(async () => {
       const signupRes = await signupWithOtp(app, testPhone, {
         name: '컨트랙트',
@@ -174,7 +217,22 @@ describe('API Response Contract (e2e)', () => {
       accessToken = signupRes.body.accessToken;
       // N3: Gemini 호출 전 transfer 동의 게이트를 통과해야 503(Gemini 실패)까지 도달한다.
       await grantRecommendationTransfer(app, accessToken);
+      for (const p of localProducts) {
+        await prisma.product.upsert({
+          where: { id: p.id },
+          update: p,
+          create: p,
+        });
+      }
     });
+
+    afterAll(async () => {
+      await prisma.product.deleteMany({
+        where: { id: { in: localProducts.map((p) => p.id) } },
+      });
+    });
+
+    // N4/Inline dispatcher job polling 헬퍼 — test/helpers/job-polling.ts 공용.
 
     it('MOCK_GEMINI=false + 키 없음 시 /recommendations/generate → 503', async () => {
       // AppModule 인스턴스는 MOCK_GEMINI 환경변수를 beforeAll에서 읽었으므로
@@ -192,10 +250,8 @@ describe('API Response Contract (e2e)', () => {
         });
     });
 
-    it('POST /products/weather-based — MOCK_GEMINI=false + 키 없음 시 503', async () => {
-      // N12: 서버 소유 날씨 — 날씨 조회가 LIVE로 성공해야 Gemini 실패(503)까지 도달한다.
-      // 정부 API가 전부 null이면 UNAVAILABLE fallback 경로(스냅샷 없음 → 503)가 먼저 걸리므로
-      // 여기서는 값이 있는 응답으로 mock해 "Gemini 실패 → 503" 계약을 검증한다.
+    it('POST /products/weather-based — 키 없어도 FALLBACK 실제품 즉시, Gemini 실패는 job FAILED (N32)', async () => {
+      // N12: 서버 소유 날씨 — 날씨 조회가 LIVE로 성공해야 규칙 FALLBACK까지 도달한다.
       kmaClient.fetchUvIndex.mockResolvedValue({
         current: 5,
         peak: 7,
@@ -213,14 +269,27 @@ describe('API Response Contract (e2e)', () => {
         observedAt: new Date('2026-08-04T06:00:00Z'),
       });
 
-      await request(app.getHttpServer())
+      // MOCK_GEMINI=false + 키 없음이어도 빈 화면 대신 규칙 기반 실제품이 즉시 온다.
+      const res = await request(app.getHttpServer())
         .post('/products/weather-based')
         .set('Authorization', `Bearer ${accessToken}`)
         .send({ lat: 37.5665, lon: 126.978 })
-        .expect(503)
-        .then((res) => {
-          expect(res.body.detail).toBeDefined();
-        });
+        .expect(200);
+
+      expect(res.body.source).toBe('FALLBACK');
+      expect(res.body.jobId).toBeDefined();
+      expect(res.body.items).toHaveLength(3);
+      for (const p of res.body.items) {
+        // N31: FALLBACK도 실제품 + purchaseUrl, 가상 gemini-product-* 없음.
+        expect(String(p.id)).not.toMatch(/^gemini-product-/);
+        expect(p.purchaseUrl).toBeDefined();
+        expect(p.purchaseUrl).toMatch(/^https?:\/\//);
+      }
+
+      // LIVE 교체 job은 Gemini 키가 없어 명시적으로 FAILED가 된다 (503로 위장하지 않음).
+      const final = await waitForJob(app, accessToken, res.body.jobId);
+      expect(final.status).toBe('FAILED');
+      expect(final.error).toBeDefined();
     });
 
     it('POST /products/weather-based — 조작된 weather 본문은 400 (N12)', async () => {
