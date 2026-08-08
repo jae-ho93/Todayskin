@@ -10,6 +10,7 @@ import { AirKoreaClient } from '../src/modules/weather/clients/airkorea.client';
 import { StationClient } from '../src/modules/weather/clients/station.client';
 import { signupWithOtp, loginWithOtp } from './helpers/auth-flow';
 import { grantRecommendationTransfer } from './helpers/consent-flow';
+import { PRODUCTS } from '../prisma/seed-data';
 
 /**
  * Recommendation/Product e2e 테스트.
@@ -51,30 +52,22 @@ describe('Recommendation & Product (e2e)', () => {
             timing: '외출 후',
           },
         ]),
+        // N27: 가상 제품을 만들지 않고 seed된 실제 카탈로그의 id를 선택한다.
         generateWeatherProducts: jest.fn().mockResolvedValue([
           {
             timing: '세안 후',
-            category: 'barrier',
-            name: '보습 토너',
-            brand: 'TestLab',
-            explanation: '세안 후 수분 보충에 도움될 수 있어요.',
-            ingredientTags: ['판테놀'],
+            productId: 'prod-11',
+            explanation: '세안 후 피부결 정돈에 도움될 수 있어요.',
           },
           {
             timing: '외출 전',
-            category: 'barrier',
-            name: '데일리 선크림',
-            brand: 'TestLab',
-            explanation: '외출 전 보호에 도움될 수 있어요.',
-            ingredientTags: ['징크옥사이드'],
+            productId: 'prod-2',
+            explanation: '외출 전 자외선 관리에 도움될 수 있어요.',
           },
           {
             timing: '외출 후',
-            category: 'moisture',
-            name: '휴대용 미스트',
-            brand: 'TestLab',
+            productId: 'prod-13',
             explanation: '외출 후 수분 보충에 도움될 수 있어요.',
-            ingredientTags: ['히알루론산'],
           },
         ]),
       })
@@ -125,6 +118,16 @@ describe('Recommendation & Product (e2e)', () => {
     await app.init();
     await prisma.$connect();
 
+    // N27: 날씨 기반 제품은 실제 카탈로그만 사용하므로 seed 데이터(실제품)를 준비한다.
+    // (suite 순서에 독립적으로 동작하도록 이 suite가 필요한 제품을 직접 upsert한다.)
+    for (const p of PRODUCTS) {
+      await prisma.product.upsert({
+        where: { id: p.id },
+        update: { ...p },
+        create: { ...p },
+      });
+    }
+
     // 테스트용 사용자 가입 후 accessToken 획득
     const signupRes = await signupWithOtp(app, testPhone, {
       name: '테스터',
@@ -137,6 +140,10 @@ describe('Recommendation & Product (e2e)', () => {
   });
 
   afterAll(async () => {
+    // N27: 이 suite가 시드한 실제품을 정리한다 (RecommendationProduct는 Cascade로 함께 삭제).
+    await prisma.product.deleteMany({
+      where: { id: { in: PRODUCTS.map((p) => p.id) } },
+    });
     await prisma.recommendation.deleteMany({ where: { userId } });
     await prisma.consentRecord.deleteMany({ where: { userId } }).catch(() => undefined);
     await prisma.otpCode.deleteMany({
@@ -273,12 +280,16 @@ describe('Recommendation & Product (e2e)', () => {
 
       expect(Array.isArray(res.body)).toBe(true);
       expect(res.body).toHaveLength(3);
-      // 각 제품은 reason, timing, grade=A를 포함해야 한다
+      // 각 제품은 실제 카탈로그 제품(reason, timing, grade=A, purchaseUrl)이어야 한다
       for (const p of res.body) {
         expect(p.matchedGrade).toBe('A');
         expect(p.reason).toBeDefined();
         expect(p.timing).toBeDefined();
         expect(['세안 후', '외출 전', '외출 후']).toContain(p.timing);
+        // N24: 노출 제품은 purchaseUrl을 가진 실제품이어야 한다
+        expect(p.purchaseUrl).toBeDefined();
+        expect(p.purchaseUrl).toMatch(/^https?:\/\//);
+        expect(p.id).not.toMatch(/^gemini-product-/);
       }
       // timing이 세 상황 모두 포함
       const timings = (res.body as Array<{ timing: string }>)

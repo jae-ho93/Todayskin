@@ -55,7 +55,7 @@ describe('운영 환경 mock fallback 비활성화 (e2e)', () => {
       await expect(client.generateRecommendations({}, {})).rejects.toThrow(
         GeminiUnavailable,
       );
-      await expect(client.generateWeatherProducts({})).rejects.toThrow(
+      await expect(client.generateWeatherProducts({}, [])).rejects.toThrow(
         GeminiUnavailable,
       );
     });
@@ -68,11 +68,10 @@ describe('운영 환경 mock fallback 비활성화 (e2e)', () => {
       // 실제 호출은 GeminiUnavailable 또는 네트워크 오류로 끝나야 하며,
       // mock 데이터(title="오늘은 이중 세안...")를 반환하지 않는다.
       try {
-        const result = await client.generateWeatherProducts({ uvIndex: 5 });
-        // 네트워크가 차단된 환경이면 여기 도달하지 않음.
-        // 도달하면 mock 응답이 아닌지 확인.
-        const titles = result.map((r) => r.name);
-        expect(titles).not.toContain('릴렉싱 리커버리 토너');
+        // 카탈로그가 비어 있으므로 실제 호출이 응답해도 유효한 선택이 나올 수 없다.
+        // 도달하면 mock(가상 제품) 응답이 아닌지 확인한다.
+        const result = await client.generateWeatherProducts({ uvIndex: 5 }, []);
+        expect(result).toEqual([]);
       } catch (e) {
         // GeminiUnavailable 또는 fetch 오류는 허용 — mock 폴백이 아님을 의미.
         expect(e).toBeDefined();

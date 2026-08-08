@@ -4,12 +4,17 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { GeminiClient, GeminiUnavailable } from '../gemini/gemini.client';
+import {
+  CatalogProduct,
+  GeminiClient,
+  GeminiUnavailable,
+  GeneratedWeatherProduct,
+  PRODUCT_TIMINGS,
+} from '../gemini/gemini.client';
 import { ProductCategory } from './enums/product-category.enum';
 import { EvidenceGrade } from '../recommendations/enums/evidence-grade.enum';
 import { ProductDto, ProductTiming } from './dto/product.dto';
 import { Prisma, Product, WeatherSnapshot } from '@prisma/client';
-import { randomUUID } from 'node:crypto';
 import { WeatherService } from '../weather/weather.service';
 import { WeatherSnapshotDto } from '../weather/dto/weather-snapshot.dto';
 import { WeatherSource } from '../../common/enums/weather-source.enum';
@@ -23,12 +28,14 @@ import {
 /**
  * ProductService — 제품 카탈로그 목록과 날씨 기반 제품 생성.
  *
- * 설계 기준 (BACKEND_TASKS.md T7):
+ * 설계 기준 (BACKEND_TASKS.md T7 / N24 / N27):
  * - 제품 목록·category 필터 이식
  * - POST /products/weather-based 이식 — 피부 측정값 없이 날씨만으로 제품 생성
  * - 날씨 기반 제품의 reason, timing 응답 계약 유지
- * - 날씨 기반 제품은 영구 저장하지 않고 요청 시 생성(유저 비종속)
- * - Gemini 실패 시 503, 가짜 제품으로 대체하지 않음
+ * - **N24**: 모든 노출 제품은 DB 실제품이며 `purchaseUrl`을 포함한다.
+ * - **N27**: Gemini는 카탈로그에서 productId를 선택한다. 가상 `gemini-product-*`를
+ *   만들지 않는다. Gemini 선택이 유효하지 않거나 누락된 timing은 규칙 기반 실제품
+ *   fallback으로 채운다. 카탈로그/날씨 조회가 불가능하면 503(가짜 데이터 금지).
  */
 @Injectable()
 export class ProductService {
@@ -86,7 +93,8 @@ export class ProductService {
    * 오늘 날씨를 조회하고, 외부 API가 전부 실패(UNAVAILABLE)하면 최근 WeatherSnapshot을
    * fallback으로 사용한다. 조회 가능한 날씨가 전혀 없으면 가짜 데이터 대신 503을 반환한다.
    *
-   * 응답에 reason(explanation), timing을 포함한다.
+   * N27: 응답은 항상 DB 실제품(+purchaseUrl)이다. Gemini가 카탈로그에서 productId를
+   * 고르고, 유효하지 않은 선택은 규칙 기반 실제품 fallback으로 대체한다.
    * 유저 비종속이므로 DB에 저장하지 않고 요청 시 생성한다(인증은 남용 방지 목적).
    */
   async generateWeatherBased(
@@ -94,9 +102,27 @@ export class ProductService {
   ): Promise<ProductDto[]> {
     const weather = await this.resolveServerWeather(opts?.lat, opts?.lon);
 
-    let items;
+    // N27: 실제 카탈로그만 사용. 카탈로그가 비어 있으면 가상 제품을 만들 수 없으므로 503.
+    const catalog = await this.prisma.product.findMany();
+    if (catalog.length === 0) {
+      throw new ServiceUnavailableException(
+        '추천할 실제 제품이 아직 준비되지 않았어요. 잠시 후 다시 시도해주세요.',
+      );
+    }
+
+    // Gemini가 카탈로그에서 productId를 고른다.
+    let selections: GeneratedWeatherProduct[];
     try {
-      items = await this.geminiClient.generateWeatherProducts({ ...weather });
+      selections = await this.geminiClient.generateWeatherProducts(
+        { ...weather },
+        catalog.map((p): CatalogProduct => ({
+          id: p.id,
+          name: p.name,
+          brand: p.brand,
+          category: p.category,
+          matchedIngredients: p.matchedIngredients,
+        })),
+      );
     } catch (e) {
       if (e instanceof GeminiUnavailable) {
         throw new ServiceUnavailableException(
@@ -106,23 +132,9 @@ export class ProductService {
       throw e;
     }
 
-    // 서버가 grade=A를 고정한다.
-    return items.map((item) => {
-      const id = `gemini-product-${this.shortId()}`;
-      const dto: ProductDto = {
-        id,
-        name: item.name,
-        brand: item.brand,
-        imageUri: null,
-        matchedGrade: EvidenceGrade.A,
-        matchedIngredients: item.ingredientTags,
-        category: item.category as ProductCategory,
-        recommendationId: null,
-        reason: item.explanation,
-        timing: item.timing as ProductTiming,
-      };
-      return dto;
-    });
+    // 세 timing 슬롯을 채운다 — Gemini 선택이 유효한 실제품이면 그대로,
+    // 아니면 규칙 기반 실제품 fallback (가상 gemini-product-* 생성 금지).
+    return this.buildWeatherProducts(catalog, weather, selections);
   }
 
   // ── N12 서버 소유 날씨 구성 헬퍼 ──────────────────────────
@@ -205,6 +217,99 @@ export class ProductService {
     return dto;
   }
 
+  // ── N27 실제품 매핑·규칙 fallback ──────────────────────────
+
+  /**
+   * Gemini 선택 결과를 실제 카탈로그 제품으로 매핑한다.
+   * 세 timing(세안 후/외출 전/외출 후)을 순서대로 채우며,
+   * Gemini 선택이 (a) 카탈로그에 없거나 (b) 이미 사용된 제품이면 규칙 기반 실제품으로 대체한다.
+   */
+  private buildWeatherProducts(
+    catalog: Product[],
+    weather: WeatherSnapshotDto,
+    selections: GeneratedWeatherProduct[],
+  ): ProductDto[] {
+    const byId = new Map(catalog.map((p) => [p.id, p]));
+    const byTiming = new Map(selections.map((s) => [s.timing, s]));
+    const used = new Set<string>();
+    const result: ProductDto[] = [];
+
+    for (const timing of PRODUCT_TIMINGS) {
+      const sel = byTiming.get(timing);
+      let product: Product | null = null;
+      let reason: string | null = null;
+
+      if (sel) {
+        const candidate = byId.get(sel.productId);
+        if (candidate && !used.has(candidate.id)) {
+          product = candidate;
+          reason = sel.explanation;
+        }
+      }
+
+      if (!product) {
+        product = this.pickRuleProduct(catalog, timing, used);
+        reason = this.ruleReason(weather, timing);
+      }
+      used.add(product.id);
+      result.push(this.weatherToDto(product, reason, timing));
+    }
+    return result;
+  }
+
+  /**
+   * 규칙 기반 실제품 fallback — timing별 카테고리·성분 우선순위로 결정적으로 고른다.
+   * (가상 제품 생성 금지: 카탈로그에 실제로 있는 제품만 선택)
+   */
+  private pickRuleProduct(
+    catalog: Product[],
+    timing: string,
+    used: Set<string>,
+  ): Product {
+    const candidates = catalog.filter((p) => !used.has(p.id));
+    const prefer = (pred: (p: Product) => boolean): Product | null =>
+      candidates.find(pred) ?? null;
+
+    let product: Product | null = null;
+    if (timing === '세안 후') {
+      product =
+        prefer(
+          (p) =>
+            p.category === 'barrier' &&
+            p.matchedIngredients.includes('약산성 클렌저'),
+        ) ?? prefer((p) => p.category === 'moisture');
+    } else if (timing === '외출 전') {
+      product =
+        prefer(
+          (p) =>
+            p.category === 'barrier' &&
+            p.matchedIngredients.includes('징크옥사이드'),
+        ) ?? prefer((p) => p.category === 'barrier');
+    } else {
+      // 외출 후
+      product =
+        prefer((p) => p.category === 'moisture') ??
+        prefer((p) => p.category === 'barrier');
+    }
+
+    // 예외 방어: 조건이 전부 소진됐거나 카탈로그가 1개뿐이면 남은 아무 제품.
+    // (실제 카탈로그는 30개 이상이라 used 소진은 일어나지 않는다 — 이 줄은 방어용이다.)
+    return product ?? candidates[0] ?? catalog[0];
+  }
+
+  /** 규칙 fallback용 근거 문구 — 날씨 수치를 담되 의료 확정 표현을 쓰지 않는다. */
+  private ruleReason(weather: WeatherSnapshotDto, timing: string): string {
+    const uv =
+      weather.uvIndex != null
+        ? `자외선지수 ${weather.uvIndex}`
+        : '자외선지수 측정 불가';
+    const pm =
+      weather.pm25 != null
+        ? `미세먼지 ${weather.pm25}`
+        : '미세먼지 측정 불가';
+    return `${timing} 시점의 오늘 날씨(${uv}, ${pm})를 고려해 고른 실제 제품이에요. 피부 상태 유지에 도움될 수 있어요.`;
+  }
+
   // ── 매핑 헬퍼 ──────────────────────────────────
 
   private catalogToDto(p: Product): ProductDto {
@@ -213,6 +318,7 @@ export class ProductService {
       name: p.name,
       brand: p.brand,
       imageUri: p.imageUri,
+      purchaseUrl: p.purchaseUrl,
       matchedGrade: p.matchedGrade as EvidenceGrade,
       matchedIngredients: p.matchedIngredients,
       category: p.category as ProductCategory,
@@ -222,7 +328,24 @@ export class ProductService {
     };
   }
 
-  private shortId(): string {
-    return randomUUID().replace(/-/g, '').slice(0, 20);
+  /** 날씨 기반 제품 DTO — grade는 서버가 A로 고정, 실제품 메타를 그대로 노출한다. */
+  private weatherToDto(
+    p: Product,
+    reason: string | null,
+    timing: string,
+  ): ProductDto {
+    return {
+      id: p.id,
+      name: p.name,
+      brand: p.brand,
+      imageUri: p.imageUri,
+      purchaseUrl: p.purchaseUrl,
+      matchedGrade: EvidenceGrade.A,
+      matchedIngredients: p.matchedIngredients,
+      category: p.category as ProductCategory,
+      recommendationId: null,
+      reason,
+      timing: timing as ProductTiming,
+    };
   }
 }

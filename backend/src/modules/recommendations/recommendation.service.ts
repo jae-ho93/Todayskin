@@ -15,6 +15,7 @@ import { IdempotencyService } from '../idempotency/idempotency.service';
 import { EvidenceGrade } from './enums/evidence-grade.enum';
 import { RecommendationDto, RecommendationTiming } from './dto/recommendation.dto';
 import {
+  Product,
   RecommendationTemplate,
   Recommendation as RecommendationModel,
 } from '@prisma/client';
@@ -273,20 +274,36 @@ export class RecommendationService {
 
         await tx.recommendation.createMany({ data });
 
-        // N20: 생성된 추천마다 성분 기반 관련 제품을 연결한다.
+        // N20/N27: 생성된 추천마다 성분 기반 관련 제품을 연결한다.
+        // 매칭 0건이면 규칙 기반 실제품 fallback을 연결한다 (가상 제품 금지).
         const links: {
           recommendationId: string;
           productId: string;
           displayOrder: number;
         }[] = [];
+        const usedProductIds = new Set<string>();
         data.forEach((row, i) => {
           const tags = items[i]?.ingredientTags ?? [];
           const matched = catalog
             .filter((p) => tags.some((tag) => p.matchedIngredients.includes(tag)))
             .map((p) => p.id);
-          matched.forEach((pid, order) =>
-            links.push({ recommendationId: row.id, productId: pid, displayOrder: order }),
-          );
+          matched.forEach((pid, order) => {
+            links.push({ recommendationId: row.id, productId: pid, displayOrder: order });
+            usedProductIds.add(pid);
+          });
+          if (matched.length === 0) {
+            // N27: 매칭 0건 → 규칙 기반 실제품 fallback (최대 2개, 등급 A 우선 + timing 카테고리)
+            const fallback = this.pickFallbackProducts(
+              catalog,
+              row.timing,
+              usedProductIds,
+              2,
+            );
+            fallback.forEach((p, order) => {
+              links.push({ recommendationId: row.id, productId: p.id, displayOrder: order });
+              usedProductIds.add(p.id);
+            });
+          }
         });
         if (links.length > 0) {
           await tx.recommendationProduct.createMany({ data: links });
@@ -489,5 +506,34 @@ export class RecommendationService {
 
   private shortId(): string {
     return randomUUID().replace(/-/g, '').slice(0, 20);
+  }
+
+  /**
+   * N27: 성분 매칭 0건일 때 쓰는 규칙 기반 실제품 fallback.
+   * 등급 A 우선, timing별 카테고리 우선순위 순으로 결정적으로 골라 최대 count개를 반환한다.
+   * 카탈로그에 실제 존재하는 제품만 고른다 (가상 제품 생성 금지).
+   */
+  private pickFallbackProducts(
+    catalog: Product[],
+    timing: string | null,
+    used: Set<string>,
+    count: number,
+  ): Product[] {
+    const available = catalog.filter((p) => !used.has(p.id));
+    // 추천 timing('외출 후'|'자기 전'|'언제든') 기준 카테고리 우선순위.
+    const categoryPref =
+      timing === '외출 후'
+        ? ['barrier', 'moisture']
+        : ['moisture', 'barrier', 'brightening', 'elasticity'];
+    const ranked = [...available].sort((a, b) => {
+      const gradeDiff =
+        (a.matchedGrade === EvidenceGrade.A ? 0 : 1) -
+        (b.matchedGrade === EvidenceGrade.A ? 0 : 1);
+      if (gradeDiff !== 0) return gradeDiff;
+      const catA = categoryPref.indexOf(a.category);
+      const catB = categoryPref.indexOf(b.category);
+      return (catA === -1 ? 99 : catA) - (catB === -1 ? 99 : catB);
+    });
+    return ranked.slice(0, count);
   }
 }

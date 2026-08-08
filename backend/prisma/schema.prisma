@@ -415,6 +415,9 @@ model Product {
   name               String
   brand              String
   imageUri           String?         @map("image_uri")
+  // N24: 실제 구매 가능한 URL (FE가 Linking.openURL로 여는 값).
+  // 허구 시드가 아닌 실제 카탈로그 제품에 채운다. 카탈로그 제품은 사실상 필수.
+  purchaseUrl        String?         @map("purchase_url")
   matchedGrade       EvidenceGrade   @map("matched_grade")
   matchedIngredients String[]        @default([]) @map("matched_ingredients")
   category           ProductCategory

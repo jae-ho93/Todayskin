@@ -105,6 +105,14 @@ export class CalendarProductDto {
   @ApiPropertyOptional({ type: String, nullable: true })
   imageUri?: string | null;
 
+  // N24: 실제 구매 URL — FE가 Linking.openURL로 연다.
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description: '구매 페이지 URL (Linking.openURL로 직접 열 수 있는 값)',
+  })
+  purchaseUrl?: string | null;
+
   @ApiProperty()
   category!: string;
 

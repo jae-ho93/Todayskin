@@ -35,12 +35,40 @@ describe('GeminiClient', () => {
     expect(items[0].timing).toBeDefined();
   });
 
-  it('MOCK_GEMINI=true 시 날씨 기반 제품 mock 응답 반환 (3개, 정책 통과)', async () => {
+  it('MOCK_GEMINI=true 시 날씨 기반 제품 mock 응답 — 실제 카탈로그에서 productId 선택 (N27)', async () => {
     const client = new GeminiClient(makeConfig({ MOCK_GEMINI: 'true' }), policy);
-    const items = await client.generateWeatherProducts({ uvIndex: 5 });
+    const catalog = [
+      {
+        id: 'prod-11',
+        name: '1025 독도 클렌저',
+        brand: '라운드랩',
+        category: 'barrier',
+        matchedIngredients: ['약산성 클렌저'],
+      },
+      {
+        id: 'prod-2',
+        name: '자작나무 수분 선크림',
+        brand: '라운드랩',
+        category: 'barrier',
+        matchedIngredients: ['징크옥사이드'],
+      },
+      {
+        id: 'prod-13',
+        name: '다이브인 히알루론산 세럼',
+        brand: '토리든',
+        category: 'moisture',
+        matchedIngredients: ['히알루론산'],
+      },
+    ];
+    const items = await client.generateWeatherProducts({ uvIndex: 5 }, catalog);
     expect(items).toHaveLength(3);
     const timings = items.map((i) => i.timing).sort();
     expect(timings).toEqual(['세안 후', '외출 전', '외출 후']);
+    // 가상 productId가 아니라 카탈로그에 실제 존재하는 id만 선택한다.
+    const catalogIds = new Set(catalog.map((p) => p.id));
+    for (const item of items) {
+      expect(catalogIds.has(item.productId)).toBe(true);
+    }
   });
 
   it('키 없음 시 GeminiUnavailable (추천)', async () => {
@@ -53,7 +81,7 @@ describe('GeminiClient', () => {
   it('키 없음 시 GeminiUnavailable (제품)', async () => {
     const client = new GeminiClient(makeConfig({ MOCK_GEMINI: 'false' }), policy);
     await expect(
-      client.generateWeatherProducts({}),
+      client.generateWeatherProducts({}, []),
     ).rejects.toThrow(GeminiUnavailable);
   });
 });
