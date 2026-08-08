@@ -970,11 +970,16 @@ Jest coverageThreshold를 반영했다.
 
 브랜치: `fix/landmarks-storage-consent`
 
-- [ ] `diagnosis.service.ts`에서 `storeImage && landmarks` 등 저장 동의와 landmarks 영속화 조건 일치
-- [ ] 미동의 시 landmarks/이미지 미노출 계약 유지 (N8)
-- [ ] 회귀 테스트: 동의·미동의·이미지 없음
+- [x] `diagnosis.service.ts`에서 `storeImage && landmarks` 등 저장 동의와 landmarks 영속화 조건 일치
+- [x] 미동의 시 landmarks/이미지 미노출 계약 유지 (N8)
+- [x] 회귀 테스트: 동의·미동의·이미지 없음
 
 완료 기준: 저장 동의 진단에서 landmarks가 일관되게 저장·조회된다.
+
+> ✅ 완료 (PR, `fix/landmarks-storage-consent`): 영속화 조건(`storeImage && landmarks`)은 이미 정합 — 감사만.
+> 실질 수정은 **조회 노출 정합**: 저장 동의여도 이미지가 없으면(저장 실패·soft-delete·철회 잔재)
+> landmarks를 함께 숨긴다(얼굴 기하 정보는 저장된 이미지와 함께만 노출). 회귀 테스트 4건 추가
+> (동의 시 영속화 / 미동의 시 미영속화 / 이미지 soft-delete / 이미지 row 없음) + 캘린더 e2e 1건.
 
 ### N27. 실제 화장품 카탈로그·매칭 — P0
 

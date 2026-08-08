@@ -210,7 +210,10 @@ export class CalendarDiagnosisDto {
   @ApiPropertyOptional({ type: CalendarImageDto, nullable: true })
   image!: CalendarImageDto | null;
 
-  /** 저장 동의 + landmarks 존재 시에만 채워짐. 미동의면 null. */
+  /**
+   * 저장 동의 + 이미지 존재 + landmarks 존재 시에만 채워짐 (N26: 이미지 없으면 미노출).
+   * 미동의면 null.
+   */
   @ApiPropertyOptional({ type: LandmarksDto, nullable: true })
   landmarks!: LandmarksDto | null;
 }

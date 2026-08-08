@@ -30,6 +30,10 @@ describe('Calendar History (e2e)', () => {
 
   const testPhone = '01077770008';
 
+  // N26: '저장 동의' 테스트가 만든 진단을 다음 테스트(이미지 삭제 후 미노출)가 재사용한다.
+  let consentedDiagnosisId: string;
+  let consentedDate: string;
+
   const JPEG_1x1 = Buffer.from(
     '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrq6tba2t7i5usLFxsfIycrO0NHS09TV1tfY2drq6+vsLTz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhCRJFiGQYHR8VjQoLxaKyEjOTFS8pHj4xQlRJU1VWV1hZWmNkZWZnaGlqc3R1dnd4eXqCg4SFhoeIiYqLjI2Oj5KSk5SVlpeYmZqYm5ydXp6cnqcoqSlpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drq6+vr/9sAQwA',
     'base64',
@@ -204,6 +208,10 @@ describe('Calendar History (e2e)', () => {
     expect(row?.landmarks).toBeTruthy();
     expect(row?.image?.deletedAt).toBeNull();
 
+    // N26: 다음 테스트(이미지 없음)에서 이 진단을 재사용한다.
+    consentedDiagnosisId = diagnosisId;
+    consentedDate = date;
+
     const history = await request(app.getHttpServer())
       .get(`/diagnosis/history/${date}`)
       .set('Authorization', `Bearer ${accessToken}`)
@@ -230,5 +238,33 @@ describe('Calendar History (e2e)', () => {
         (p: { diagnosisId: string }) => p.diagnosisId === diagnosisId,
       ),
     ).toBe(true);
+  });
+
+  it('N26: 저장 동의 + 이미지 삭제 후에는 image/landmarks를 숨긴다 (이미지 없음)', async () => {
+    expect(consentedDiagnosisId).toBeDefined();
+
+    // 저장 동의가 활성 상태인데 이미지가 soft-delete된 상황을 재현한다.
+    await prisma.diagnosisImage.updateMany({
+      where: { diagnosisId: consentedDiagnosisId },
+      data: { deletedAt: new Date() },
+    });
+
+    // DB의 landmarks는 감사 보존 정책상 남아 있을 수 있지만 노출되면 안 된다.
+    const row = await prisma.diagnosis.findUnique({
+      where: { id: consentedDiagnosisId },
+    });
+    expect(row?.landmarks).toBeTruthy();
+
+    const history = await request(app.getHttpServer())
+      .get(`/diagnosis/history/${consentedDate}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+
+    const entry = history.body.diagnoses.find(
+      (d: { id: string }) => d.id === consentedDiagnosisId,
+    );
+    expect(entry).toBeDefined();
+    expect(entry.image).toBeNull();
+    expect(entry.landmarks).toBeNull();
   });
 });
