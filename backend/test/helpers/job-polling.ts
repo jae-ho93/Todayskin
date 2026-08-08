@@ -10,7 +10,9 @@ export async function waitForJob(
   app: INestApplication,
   accessToken: string,
   jobId: string,
-  timeoutMs = 8000,
+  // N32: 일부 job은 재시도 backoff(attempts=3, 2s)로 FAILED/COMPLETED 전이에 ~6s 걸린다.
+  // jest e2e testTimeout(30s) 안에서 충분히 기다리되, 실패 원인을 빨리 알 수 있게 15s로 제한한다.
+  timeoutMs = 15000,
 ): Promise<{ status: string; result?: unknown; error?: string | null }> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
