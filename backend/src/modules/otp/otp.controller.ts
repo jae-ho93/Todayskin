@@ -10,7 +10,7 @@ import type { OtpProvider } from './providers/otp-provider.interface';
 /**
  * OTP 컨트롤러.
  *
- * decision.md T3-04: 가입·새 디바이스 로그인에 OTP 필수.
+ * OTP policy: 가입·새 디바이스 로그인에 OTP 필수.
  * - POST /otp/send: 전화번호로 OTP 발송
  * - POST /otp/verify: OTP 코드 검증
  *

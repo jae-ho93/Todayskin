@@ -1,8 +1,7 @@
 # Todayskin Backend Tasks
 
 이 문서는 Todayskin 백엔드 구조와 운영·협업의 기준 문서다. 위치는 `docs/` (프론트 보드 `docs/FRONTEND_TASKS.md`와 동일).
-아키텍처 원칙은 `docs/ARCHITECTURE.md`, 결정 사항은 `backend/decision.md`를 따른다.
-예전 경로 `backend/BACKEND_TASKS.md`는 이동 안내 stub이다.
+아키텍처 원칙은 `docs/ARCHITECTURE.md`를 따른다.
 
 ## 목표
 

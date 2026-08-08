@@ -4,7 +4,7 @@ import { OtpProvider } from './otp-provider.interface';
 /**
  * 개발/테스트용 mock OTP provider.
  *
- * decision.md T3-04: 개발 환경은 allowlisted test phone / mock OTP 사용.
+ * OTP policy: 개발 환경은 allowlisted test phone / mock OTP 사용.
  * - allowlisted 번호: 고정 코드 "123456" 발송 (로그만 출력)
  * - 그 외 번호: 무작위 6자리 코드 생성 후 로그만 출력 (실제 SMS 미발송)
  *

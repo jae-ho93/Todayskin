@@ -9,8 +9,6 @@ coverage
 *.log
 .DS_Store
 README.md
-BACKEND_TASKS.md
-decision.md
 requirements.txt
 
 # N5: inference is built from its own Dockerfile/context

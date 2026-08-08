@@ -19,7 +19,7 @@ import { ImageStorageService } from '../storage/image-storage.service';
 /**
  * ADMIN 운영 서비스.
  *
- * decision.md T3-05: Role 기반 유지. Permission은 3개+ 독립 action 시 도입.
+ * ADMIN role policy: Role 기반 유지. Permission은 3개+ 독립 action 시 도입.
  * 첫 ADMIN API: 사용자 목록 조회, 사용자 역할 변경.
  * 모든 행위는 AuditLogService로 감사 로그에 기록된다.
  */

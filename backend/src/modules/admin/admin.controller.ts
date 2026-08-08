@@ -27,7 +27,7 @@ import type { JwtPayload } from '../../common/strategies/jwt.strategy';
 /**
  * ADMIN 운영 API.
  *
- * decision.md T3-05: @Roles(Role.ADMIN) + 감사 로그.
+ * ADMIN role policy: @Roles(Role.ADMIN) + 감사 로그.
  * 모든 엔드포인트는 JwtAuthGuard → RolesGuard(ADMIN) 순서로 보호된다.
  */
 @ApiTags('admin')

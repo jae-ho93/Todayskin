@@ -5,7 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
  * 감사 로그 서비스.
  *
  * N1 구조화 로깅(JSON)과 별개로 DB에 영구 보존하는 보안 감사 이력.
- * decision.md T3-05: ADMIN endpoint 만들 때 @Roles(Role.ADMIN) + 감사 로그.
+ * ADMIN role policy: ADMIN endpoint 만들 때 @Roles(Role.ADMIN) + 감사 로그.
  *
  * 응답 본문·secret은 저장하지 않고 행위 종류·대상·결과·메타만 저장한다.
  * 민감정보(전화번호 등)는 N1 redact 로거와 동일 규칙으로 마스킹해 저장한다.

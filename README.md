@@ -1,86 +1,30 @@
 # Todayskin
 
-날씨·대기질과 피부 이미지 분석을 결합해 피부 상태와 스킨케어 추천을 제공하는 Expo 모바일 애플리케이션.
+날씨·대기질과 피부 이미지 분석을 결합한 Expo 앱.  
+**NestJS**가 인증·동의·진단·추천·날씨·영속화, **FastAPI**는 추론 결과만 반환. 동의 이미지만 S3 저장.
 
-<p align="center">
-  <a href="https://docs.expo.dev/versions/v54.0.0/"><img src="https://img.shields.io/badge/Expo-SDK%2054-000020?style=for-the-badge&logo=expo&logoColor=white" alt="Expo SDK 54"></a>
-  <a href="https://reactnative.dev/"><img src="https://img.shields.io/badge/React%20Native-Expo%20Router-61DAFB?style=for-the-badge&logo=react&logoColor=white" alt="React Native"></a>
-  <a href="https://nestjs.com/"><img src="https://img.shields.io/badge/NestJS-11-E0234E?style=for-the-badge&logo=nestjs&logoColor=white" alt="NestJS 11"></a>
-  <a href="https://www.prisma.io/"><img src="https://img.shields.io/badge/Prisma-7-2D3748?style=for-the-badge&logo=prisma&logoColor=white" alt="Prisma 7"></a>
-  <a href="https://www.postgresql.org/"><img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL"></a>
-</p>
-<p align="center">
-  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-MobileNetV3-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI inference"></a>
-  <a href="https://redis.io/"><img src="https://img.shields.io/badge/Redis-cache-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis"></a>
-  <a href="https://docs.bullmq.io/"><img src="https://img.shields.io/badge/BullMQ-queue-e6484c?style=for-the-badge" alt="BullMQ"></a>
-  <a href="https://aws.amazon.com/ko/fargate/"><img src="https://img.shields.io/badge/AWS-ECS%20Fargate-FF9900?style=for-the-badge&logo=amazonaws&logoColor=white" alt="AWS ECS Fargate"></a>
-  <a href="https://github.com/features/actions"><img src="https://img.shields.io/badge/GitHub%20Actions-CI%2FCD-2088FF?style=for-the-badge&logo=githubactions&logoColor=white" alt="GitHub Actions"></a>
-</p>
+| 레이어 | 스택 |
+|---|---|
+| 앱 | Expo SDK 54 · React Native · Expo Router |
+| API | NestJS 11 · Prisma 7 · PostgreSQL · Redis · BullMQ |
+| 추론 | `backend/inference-service/` FastAPI + MobileNetV3 |
+| 운영 | ECS Fargate · RDS · S3 · GitHub Actions |
 
-<p align="center">
-  <img src="https://img.shields.io/badge/T0--T14-완료-38A169?style=flat-square" alt="T0-T14 done">
-  <img src="https://img.shields.io/badge/N0--N22-완료-38A169?style=flat-square" alt="N0-N22 done">
-  <img src="https://img.shields.io/badge/N24--N34-버그픽스·제품-D69E2E?style=flat-square" alt="N24-N34 bugfix wave">
-  <img src="https://img.shields.io/badge/N16-AWS%20첫%20배포%20별도-D69E2E?style=flat-square" alt="N16 AWS deploy separate">
-</p>
-
----
-
-## 개요
-
-**NestJS가 인증·동의·진단·추천·날씨·데이터 영속화**를 담당하고, **FastAPI는 이미지 추론 결과만 반환**한다. 동의한 진단 이미지만 S3에 암호화 저장하며, 미동의 이미지는 추론 후 즉시 삭제한다.
+**상태:** BE T0~T14 · N0~N22 · N24~N34 완료 · **API freeze**. 다음 = FE ([FRONTEND_TASKS](docs/FRONTEND_TASKS.md)). 남은 BE = N16(AWS 첫 배포, 별도). EAS·구독 보류.
 
 ```mermaid
 flowchart LR
-    APP["📱 Expo App<br/>React Native · Expo Router"] -->|REST| API["NestJS 11<br/>Modular Monolith (BFF)"]
-    API --> PG[("PostgreSQL<br/>Prisma 7")]
-    API --> REDIS[("Redis<br/>날씨 캐시 · BullMQ broker")]
-    API -->|추론 요청| AI["FastAPI<br/>MobileNetV3 추론 서버"]
-    API -->|동의 시만| S3[("S3<br/>암호화 저장")]
-    REDIS --> QUEUE["BullMQ<br/>추천 · 패턴 · 알림"]
-    subgraph AWS["AWS ECS Fargate"]
-        API
-        AI
-    end
+    APP[Expo] -->|REST| API[NestJS]
+    API --> PG[(PostgreSQL)]
+    API --> REDIS[(Redis/BullMQ)]
+    API -->|infer| AI[FastAPI]
+    API -->|동의 시| S3[(S3)]
 ```
-
-## 구성
-
-| 레이어 | 스택 | 역할 |
-|---|---|---|
-| 프론트엔드 | Expo SDK 54 · React Native · Expo Router | 온보딩, 촬영, 진단 결과, 추천, 히스토리 UI |
-| 메인 백엔드 | NestJS 11 Modular Monolith · Prisma 7 · PostgreSQL | 인증·OTP·동의·진단·추천·날씨·데이터 영속화 |
-| AI 추론 | `backend/inference-service/` FastAPI + MobileNetV3 | 이미지 → 부위별 등급/수치 추론 결과만 반환 |
-| 비동기·캐시 | Redis · BullMQ | 날씨 캐시, 추천/패턴/알림 비동기 처리 |
-| 운영 | AWS ECS Fargate · RDS · S3 · CloudWatch · GitHub Actions | CI → ECR → Fargate 배포 |
-
-## 진행 상태
-
-- ✅ **T0~T14** — 초기 구조(NestJS/Prisma/인증/진단/추천 등 MVP 기능) 완료
-- ✅ **N0~N22** — 운영 보안·SMS OTP·S3 동의·BullMQ·ECS 배포·Soft Delete·캘린더·서버 소유 날씨 계약·inference 경계 보호·외부 AI 멱등성·세션·OTP 남용 방지 등 완료
-- 🚧 **N24~N34** — 실기기 버그픽스·실제품 카탈로그·`rec-fast-path`·소셜 로그인·설정 계약 (상세: [`docs/BACKEND_TASKS.md`](docs/BACKEND_TASKS.md))
-- ⏳ **N16** — AWS 운영 리소스 프로비저닝 및 첫 배포 (계정·시크릿·승인자 준비 후, 위 웨이브와 별도)
-
-프론트 작업 보드: [`docs/FRONTEND_TASKS.md`](docs/FRONTEND_TASKS.md) · FE 복붙 프롬프트: [`docs/FE_HANDOFF_PROMPT.md`](docs/FE_HANDOFF_PROMPT.md).  
-프론트에서 이미 끝난 N15/N18/N19 기록은 `docs/BACKEND_TASKS.md`의 `프론트 범위 완료 기록`에 있다. EAS(N23)·구독 결제는 보류.
 
 ## 문서
 
-- [전체 설치 가이드](docs/SETUP.md)
-- [온보딩](docs/ONBOARDING.md)
-- [백엔드 아키텍처](docs/ARCHITECTURE.md)
-- [백엔드 실행과 API 개요](backend/README.md)
-- [백엔드 작업 현황과 다음 과정](docs/BACKEND_TASKS.md)
-- [프론트 작업 보드](docs/FRONTEND_TASKS.md)
-- [FE 핸드오프 프롬프트](docs/FE_HANDOFF_PROMPT.md)
-- [BE 핸드오프 프롬프트](docs/BE_HANDOFF_PROMPT.md)
-- [설계 결정](backend/decision.md)
-- [협업 규칙](CONTRIBUTING.md)
-
-## 관련 저장소
-
-- Todayskin Skin-AI (준비 중) — `backend/inference-service/`가 서빙하는 피부 진단 모델(백본 비교실험, 학습 파이프라인) 전용 저장소
-
----
-
-<p align="center"><sub>날씨 × 피부 데이터를 결합한 개인 맞춤 스킨케어 추천 서비스</sub></p>
+- [로컬 셋업](docs/SETUP.md)
+- [아키텍처](docs/ARCHITECTURE.md)
+- [백엔드 실행 요약](backend/README.md) · [배포](backend/docker/DEPLOYMENT.md)
+- [BE Task 이력](docs/BACKEND_TASKS.md) · [FE Task](docs/FRONTEND_TASKS.md) · [FE 핸드오프](docs/FE_HANDOFF_PROMPT.md)
+- [협업](CONTRIBUTING.md)

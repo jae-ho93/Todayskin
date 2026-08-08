@@ -1,7 +1,7 @@
 /**
  * OTP 발송 채널 추상화.
  *
- * decision.md T3-04: 운영 공개 전까지 OTP 필수.
+ * OTP policy: 운영 공개 전까지 OTP 필수.
  * 개발: allowlisted test phone / mock OTP (MockOtpProvider)
  * 운영: 실제 SMS/알림톡 (SmsOtpProvider) + 시도 횟수·만료·재전송 제한
  *
@@ -25,7 +25,7 @@ export interface OtpProvider {
 /**
  * OTP 발송 채널 추상화.
  *
- * decision.md T3-04: 운영 공개 전까지 OTP 필수.
+ * OTP policy: 운영 공개 전까지 OTP 필수.
  * 개발: allowlisted test phone / mock OTP (MockOtpProvider)
  * 운영: 실제 SMS/알림톡 (SmsOtpProvider) + 시도 횟수·만료·재전송 제한
  *
