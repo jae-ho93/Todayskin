@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   NotificationPreferenceDto,
@@ -29,7 +30,19 @@ export interface SendNotificationResult {
 export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {
+    // N34: 서버가 실제 푸시 발송(FCM/APNs)을 지원하는지 여부.
+    // env.registry의 PUSH_DELIVERY_AVAILABLE에서 읽는다 (기본 false).
+    this.pushDeliveryAvailable =
+      (this.config.get<string>('PUSH_DELIVERY_AVAILABLE') ?? 'false') ===
+      'true';
+  }
+
+  /** N34: 읽기 전용 플래그 — 푸시 실제 발송 지원 여부. */
+  private readonly pushDeliveryAvailable: boolean;
 
   /**
    * 사용자 알림 설정 조회.
@@ -44,6 +57,7 @@ export class NotificationService {
       return {
         userId,
         ...NOTIFICATION_DEFAULTS,
+        pushDeliveryAvailable: this.pushDeliveryAvailable,
       };
     }
 
@@ -209,6 +223,7 @@ export class NotificationService {
       uvAlertEnabled: row.uvAlertEnabled,
       dustAlertEnabled: row.dustAlertEnabled,
       morningReminder: row.morningReminder,
+      pushDeliveryAvailable: this.pushDeliveryAvailable,
       updatedAt: row.updatedAt.toISOString(),
     };
   }

@@ -73,5 +73,11 @@ N33 미머지면 F15는 건너뛰고 보고 (환각 OAuth 금지)
   - `POST /auth/social/link-phone` { phoneNumber, birthDate? } (JWT) — OTP(`social_link`) 본인확인 후 연결,
     사용 중 번호 409. 미연결 상태에서도 세션은 정상 동작
   - OTP: `/otp/send|verify` purpose `'social_link'` 추가
+- N34 계약 (F16 설정 전면 재구성 대상):
+  - `GET/PUT /notifications/preferences` 응답에 **읽기 전용 `pushDeliveryAvailable: boolean`** 추가.
+    - `false`(현재 기본)면 pushEnabled/uvAlertEnabled/dustAlertEnabled/morningReminder는 **선호 저장일 뿐**
+      실제 푸시가 발송되지 않는다 — F16은 토글을 "되는 것처럼 보이게" 활성화하지 말고
+      비활성/"준비 중"으로 표시해야 한다 (게이트웨이 연동 시 배포에서 true로 flip).
+    - `morningReminder`는 저장 전용·발송 스케줄 미구현(unsupported) — 활성 토글로 노출 금지
 
 모든 Task 사이클 끝나면: 마지막 merge 확인 + 브랜치/PR URL 목록 출력.

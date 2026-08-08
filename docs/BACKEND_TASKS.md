@@ -1081,11 +1081,19 @@ Jest coverageThreshold를 반영했다.
 
 브랜치: `feature/settings-notification-contract`
 
-- [ ] 푸시 미구현 구간을 FE가 거짓 토글로 오해하지 않도록 플래그/문서 (`pushDeliveryAvailable` 등)
-- [ ] `morningReminder` 등 미사용 필드 정리 또는 명시적 unsupported
-- [ ] F16 설정 전면 재구성과 맞춤
+- [x] 푸시 미구현 구간을 FE가 거짓 토글로 오해하지 않도록 플래그/문서 (`pushDeliveryAvailable` 등)
+  - `GET/PUT /notifications/preferences` 응답에 읽기 전용 `pushDeliveryAvailable: boolean` 추가.
+  - `PUSH_DELIVERY_AVAILABLE` env.registry 등록 (기본 false). false면 알림 토글은 "선호 저장"일 뿐 실제 발송 없음.
+- [x] `morningReminder` 등 미사용 필드 정리 또는 명시적 unsupported
+  - `morningReminder`는 저장 전용이며 발송 스케줄 미구현 — Swagger description + FE 핸드오프에 명시.
+  - `pushDeliveryAvailable=false`가 모든 push 토글(마스터/UV/먼지/아침)의 실제 발송 불가를 서버 계약으로 막는다.
+- [x] F16 설정 전면 재구성과 맞춤 — FE 핸드오프(FE_HANDOFF_PROMPT.md)에 계약 명시 (F16 참고)
 
 완료 기준: 설정 UI가 “되는 것처럼 보이는” 토글을 서버 계약으로 막을 수 있다.
+
+> ✅ 완료 (PR, `feature/settings-notification-contract`): `NotificationPreferenceDto.pushDeliveryAvailable`(읽기 전용,
+> env `PUSH_DELIVERY_AVAILABLE` 기본 false) 추가. `morningReminder`는 저장 전용·발송 스케줄 미구현으로 Swagger에 명시.
+> unit(+2), e2e(jobs-async preferences 단언) 반영.
 
 ## 프론트 범위 완료 기록 (참고용)
 
