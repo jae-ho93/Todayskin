@@ -604,7 +604,8 @@ Refresh Token
 > **이 웨이브 운영**
 > - BE(아키텍처·계약·실제품·rec-fast-path·소셜) 먼저 → API freeze → FE는 `docs/FRONTEND_TASKS.md` + `docs/FE_HANDOFF_PROMPT.md`.
 > - Task 하나 = 브랜치 하나 = PR 하나. **예외: N29+N31+N32는 epic `feature/rec-fast-path` 한 PR.**
-> - 리뷰어 1명 강제 **일시 해제**. 작업자가 squash merge 후 `main` pull → 다음 Task. (`CONTRIBUTING.md` 웨이브 주석 참고)
+> - **`main` 작업 금지.** merge 후 브랜치 **삭제 금지**. 다음 Task는 항상 새 브랜치.
+> - 리뷰어 1명 강제 **일시 해제**. 작업자가 `gh pr merge --squash`(delete 없이) 후 `main` pull → 다음 Task. (`CONTRIBUTING.md` 참고)
 > - 비밀번호·아이디/비번 찾기 신설 금지. 가상 제품·가짜 구독 카드 금지. 크롤링 없이 큐레이션 시드.
 >
 > **BE 구현 순서**: N24+N27 → **rec-fast-path(N31+N32+N29)** → N33 → (선택) N34 → freeze → FE.

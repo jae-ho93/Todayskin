@@ -14,15 +14,17 @@ BE가 `rec-fast-path`·관련 API를 `main`에 올린 뒤, API freeze 상태에�
 - `backend/` 수정 금지
 - API·엔드포인트를 새로 만들지 말 것. `docs/FRONTEND_TASKS.md`와 아래 계약·Swagger만 사용
 - **한 Task = 한 브랜치 = 한 PR**. 여러 Task를 한 브랜치에 몰지 말 것
+- **`main`에서 절대 커밋하지 말 것.** 매 Task마다 `main` pull 후 **새 브랜치 생성**
+- **merge 후 브랜치 삭제 금지** (`--delete-branch` / Delete branch 사용 금지)
 - 매 Task 사이클:
   1. `docs/FRONTEND_TASKS.md`에서 다음 Task 읽기
-  2. `git switch main && git pull --ff-only`
+  2. `git switch main && git pull --ff-only origin main`
   3. `git switch -c <그 Task 브랜치명>`
   4. 작업 + 검증(가능하면 typecheck)
   5. 커밋 → 푸시 → PR 생성
-  6. **squash merge** (네가 함. 리뷰어·BE 승인 대기 금지)
-  7. `git switch main && git pull --ff-only` 로 동기화
-  8. 다음 Task로
+  6. **`gh pr merge --squash`** (네가 함. 리뷰어·BE 승인 대기 금지. **`--delete-branch` 넣지 말 것**)
+  7. `git switch main && git pull --ff-only origin main` 로 동기화
+  8. 다음 Task는 **새 브랜치**로 (이전 브랜치에 이어서 커밋하지 말 것)
 - 충돌 나면 rebase/강제 push 하지 말고 멈추고 보고
 - 비밀번호·아이디/비번 찾기·이름+생일 찾기 UI 신설 금지
 - 가상 제품·가짜 구독 가격 카드·목업 로그인 금지

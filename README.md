@@ -73,6 +73,7 @@ flowchart LR
 - [백엔드 작업 현황과 다음 과정](docs/BACKEND_TASKS.md)
 - [프론트 작업 보드](docs/FRONTEND_TASKS.md)
 - [FE 핸드오프 프롬프트](docs/FE_HANDOFF_PROMPT.md)
+- [BE 핸드오프 프롬프트](docs/BE_HANDOFF_PROMPT.md)
 - [설계 결정](backend/decision.md)
 - [협업 규칙](CONTRIBUTING.md)
 
