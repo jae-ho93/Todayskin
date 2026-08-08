@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { WeatherController } from './weather.controller';
 import { WeatherService } from './weather.service';
 import { WeatherCollectionScheduler } from './weather-collection.scheduler';
+import { WeatherWarmupService } from './weather-warmup.service';
 import { KmaClient } from './clients/kma.client';
 import { AirKoreaClient } from './clients/airkorea.client';
 import { StationClient } from './clients/station.client';
@@ -19,7 +20,14 @@ import { RedisModule } from '../../redis/redis.module';
 @Module({
  imports: [RedisModule],
  controllers: [WeatherController],
- providers: [WeatherService, WeatherCollectionScheduler, KmaClient, AirKoreaClient, StationClient],
+ providers: [
+   WeatherService,
+   WeatherCollectionScheduler,
+   WeatherWarmupService,
+   KmaClient,
+   AirKoreaClient,
+   StationClient,
+ ],
  exports: [WeatherService],
 })
 export class WeatherModule {}

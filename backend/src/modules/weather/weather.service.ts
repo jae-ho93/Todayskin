@@ -37,6 +37,18 @@ interface CollectedWeather {
 }
 
 /**
+ * N25: 지역 근사표에서 이미 확보한 메타데이터.
+ * 스케줄러 워밍처럼 areaNo/측정소명을 이미 알면 근접측정소 조회를 생략하고
+ * UV + 대기질을 병렬로 수집한다.
+ */
+export interface RegionMeta {
+  areaNo: string;
+  stationName: string;
+  regionName: string;
+  cityName: string | null;
+}
+
+/**
  * WeatherService — 기상청 자외선 + 에어코리아 대기오염을 결합한 실시간 스냅샷.
  * 기존 FastAPI get_current_weather 로직 이식 + T6 날씨 이력 저장.
  *
@@ -137,28 +149,50 @@ export class WeatherService {
   async getOrCreateSnapshot(
     lat?: number,
     lon?: number,
+    meta?: RegionMeta,
   ): Promise<WeatherSnapshot | null> {
     // T12: 진단/추천 연결용은 캐시를 사용하지 않는다. 재현성·정확성이 캐시 지연보다 중요.
-    const collected = await this.collect(lat, lon);
+    // N25: 스케줄러 워밍은 meta를 넘겨 근접측정소 조회를 생략하고 병렬 수집한다.
+    const collected = await this.collect(lat, lon, meta);
     return this.persist(collected);
   }
 
   /**
    * 외부 API 호출과 메타데이터 수집. 저장하지 않고 raw 결과만 반환한다.
    * 테스트와 persist 분리를 위해 별도 메서드로 둔다.
+   *
+   * N25 병렬화 정책:
+   * - meta(근사표 지역 메타) 제공 시: 근접측정소 조회 없이 UV + 대기질을 병렬 호출.
+   * - 좌표 제공 시: 근접측정소 조회와 UV는 서로 독립이라 병렬 호출. 대기질은
+   *   측정소명이 필요하므로 그 뒤에 호출한다(필수 의존성).
+   * - 좌표 없음(기본 지역): UV + 대기질을 병렬 호출.
    */
-  private async collect(lat?: number, lon?: number): Promise<CollectedWeather> {
+  private async collect(
+    lat?: number,
+    lon?: number,
+    meta?: RegionMeta,
+  ): Promise<CollectedWeather> {
     const hasCoords = lat !== undefined && lon !== undefined;
+    const latOut: number | null = lat ?? null;
+    const lonOut: number | null = lon ?? null;
 
     let areaNo: string;
     let stationName: string;
     let regionName: string;
-    let latOut: number | null = lat ?? null;
-    let lonOut: number | null = lon ?? null;
     let cityName: string | null = null;
     let uv: UvForecastWithTime;
+    let air: AirQualityDataWithTime;
 
-    if (hasCoords) {
+    if (meta) {
+      areaNo = meta.areaNo;
+      stationName = meta.stationName;
+      regionName = meta.regionName;
+      cityName = meta.cityName ?? null;
+      [uv, air] = await Promise.all([
+        this.kmaClient.fetchUvIndex(areaNo),
+        this.airKoreaClient.fetchAirQuality(stationName),
+      ]);
+    } else if (hasCoords) {
       const region = findNearestRegion(lat!, lon!);
       areaNo = region.kmaAreaNo;
       // 자외선지수 조회는 근접측정소 조회 결과와 무관(areaNo만 필요)하므로
@@ -171,14 +205,17 @@ export class WeatherService {
       regionName = nearest?.cityName ?? region.cityName;
       cityName = nearest?.cityName ?? null;
       uv = uvResult;
+      air = await this.airKoreaClient.fetchAirQuality(stationName);
     } else {
       areaNo = this.defaultKmaAreaNo;
       stationName = this.defaultStationName;
       regionName = DEFAULT_REGION.cityName;
-      uv = await this.kmaClient.fetchUvIndex(areaNo);
+      // N25: 기본 지역은 두 외부 API가 서로 독립이므로 병렬 호출한다.
+      [uv, air] = await Promise.all([
+        this.kmaClient.fetchUvIndex(areaNo),
+        this.airKoreaClient.fetchAirQuality(stationName),
+      ]);
     }
-
-    const air = await this.airKoreaClient.fetchAirQuality(stationName);
 
     return {
       uv,
