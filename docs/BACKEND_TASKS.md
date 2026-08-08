@@ -1,15 +1,179 @@
 # Todayskin Backend Tasks
 
-백엔드 Task 이력·남은 항목. 원칙은 `docs/ARCHITECTURE.md`, 구조는 `backend/README.md`,
-협업은 `CONTRIBUTING.md`. 프론트는 `docs/FRONTEND_TASKS.md`.
+이 문서는 Todayskin 백엔드 구조와 운영·협업의 기준 문서다. 위치는 `docs/` (프론트 보드 `docs/FRONTEND_TASKS.md`와 동일).
+아키텍처 원칙은 `docs/ARCHITECTURE.md`를 따른다.
 
-## 상태
+## 목표
 
-- **BE API freeze** — T0~T14, N0~N22, N24~N34 완료 (N30 취소).
-- **다음 구현:** FE (`docs/FRONTEND_TASKS.md` · `docs/FE_HANDOFF_PROMPT.md`).
-- **남은 BE:** N16 AWS 첫 배포 (계정·시크릿·승인자 준비 후, FE와 분리).
-- **보류:** WebSocket/SSE(현재 polling), EAS·구독 결제.
-- merge 후 브랜치 삭제 금지. FE 웨이브 self-merge 예외는 `CONTRIBUTING.md`.
+NestJS를 메인 백엔드(BFF + 비즈니스 로직)로, FastAPI(inference-service)를 독립 AI 추론 서버로
+역할 분리한 운영 가능한 백엔드를 목표로 한다. NestJS는 Modular Monolith 구조로 auth, otp, admin,
+consent, storage, diagnosis, weather, recommendations, products, pattern, notifications, gemini, jobs
+모듈로 책임을 분리하고 모든 비즈니스 로직을 담당한다. FastAPI는 AI 모델 서빙과 피부 이미지 추론만 담당하며
+추론 결과만 NestJS로 전달한다.
+
+데이터는 PostgreSQL + Prisma(운영: AWS RDS), Redis(날씨 캐시·BullMQ broker),
+BullMQ(추천·패턴·알림 비동기)를 사용한다. Refresh Token은 PostgreSQL에 해시로 저장하고,
+현재 HTTP Rate Limit은 인스턴스 메모리 저장소를 사용한다. 이미지는 동의한 경우만 암호화해 S3에 저장하고
+미동의 시 추론 후 즉시 삭제한다. 운영은 GitHub Actions → ECR → ECS Fargate 배포,
+RDS·S3·CloudWatch 연동, Pino·Sentry·Helmet·JWT·Swagger·Jest를 적용한다.
+
+> 현재 구현된 기능을 실제 서비스에서도 사용할 수 있는 구조로 개선하는 것이 목표다.
+
+## 역할 분리 (완료)
+
+NestJS와 FastAPI의 역할 분리는 완료되었다.
+
+- NestJS(src/)가 메인 백엔드(BFF + 비즈니스 로직)로 동작한다.
+- FastAPI(inference-service/)가 독립 AI 추론 서버로 동작한다. AI 모델 서빙과 피부 이미지
+추론만 담당하며 비즈니스 로직·인증·DB 접근을 갖지 않고 추론 결과만 NestJS로 전달한다.
+- NestJS 진단 서비스는 InferenceProvider interface로 추론 호출을 추상화한다.
+`MOCK_INFERENCE=true`인 개발·테스트는 MockInferenceProvider, `INFERENCE_SERVICE_URL` 설정 시 PythonInferenceProvider,
+둘 다 없으면 fail-closed provider가 503을 반환한다.
+- 레거시 FastAPI 비즈니스 코드(`backend/app/`)는 N7에서 제거되었다. Python은 inference-service/ 추론 서버만 유지한다.
+
+## 2026-08-04 프론트 계약 동기화 이력
+
+NestJS 전환 중 원격 `origin/main`의 프론트 계약을 확인해 반영한 기준이다. 이후 N0~N8 구현 상태는 아래 `다음 과정`에 별도로 기록한다.
+
+- 날씨 API는 MOCK_WEATHER로 값을 채우지 않는다. 정부 API 실패 시 각 지표가 None/undefined가 되고 프론트가 측정 불가를 표시한다.
+- UV API가 V4에서 V5로 변경되었고 uvIndexPeak, uvStatusPeak, uvIndexPeakHour가 추가되었다.
+- POST /products/weather-based가 추가되었다. 피부 측정값 없이 Gemini가 세안 후, 외출 전, 외출 후 제품을 생성한다.
+- 날씨 기반 제품 응답에 reason, timing이 추가되었다.
+- 회원가입과 User 응답에 선택 필드 gender가 추가되었다.
+- 개인 패턴 차트와 프론트 mock 데이터는 제거되었고, 현재 개인 패턴 화면은 준비 중 상태다.
+- 프론트 API client도 실패 시 목업 대신 null, error, not_found 상태를 사용한다.
+
+이후 작업은 과거의 목업 fallback을 기준으로 하지 않고, 최신의 명시적 unavailable/error 계약을 기준으로 진행한다.
+
+## 최종 구조
+
+```text
+backend/
+├─ src/                        # NestJS 메인 백엔드 (BFF + 비즈니스 로직)
+│  ├─ main.ts
+│  ├─ app.module.ts
+│  ├─ common/                 # Guard, decorator, exception, pipe
+│  ├─ prisma/                 # PrismaModule, PrismaService
+│  ├─ redis/                  # RedisModule (날씨 캐시)
+│  └─ modules/
+│     ├─ auth/, otp/, admin/   # 인증·OTP·운영 권한
+│     ├─ consent/, storage/    # 동의 게이트·이미지 수명주기
+│     ├─ weather/              # 날씨·대기질 API + 캐시
+│     ├─ diagnosis/            # 진단 도메인 + InferenceProvider + 캘린더
+│     ├─ recommendations/, products/, pattern/
+│     ├─ notifications/, gemini/
+│     └─ jobs/                 # Inline/BullMQ 비동기 작업
+├─ inference-service/          # FastAPI 독립 AI 추론 서버
+│  ├─ main.py                  # POST /infer, GET /health
+│  ├─ analyzer.py              # SkinAnalyzer (MobileNetV3)
+│  └─ *.py                     # 전처리·모델·랜드마크·스코어링
+├─ prisma/
+│  ├─ schema.prisma
+│  ├─ migrations/
+│  └─ seed.ts
+├─ docker-compose.yml           # 개발: postgres + redis + (backend)
+├─ Dockerfile                   # NestJS 운영 이미지
+└─ package.json
+```
+
+## 파일 매핑 (전환 완료)
+
+| 기존 FastAPI                 | NestJS                                         |
+| -------------------------- | ---------------------------------------------- |
+| main.py                    | main.ts, app.module.ts                         |
+| database.py                | PrismaModule, PrismaService                    |
+| models.py                  | prisma/schema.prisma                           |
+| schemas.py                 | 모듈별 dto/, enum/                                |
+| deps.py                    | JwtStrategy, JwtAuthGuard, RolesGuard          |
+| seed.py                    | prisma/seed.ts                                 |
+| regions.py                 | RegionResolver (region.registry)               |
+| mock_data.py               | seed, fixture, MockInferenceProvider           |
+| gemini_client.py           | GeminiClient, EvidencePolicy                   |
+| routers/auth.py            | AuthController, AuthService                    |
+| routers/weather.py         | WeatherController, WeatherService, API Clients |
+| routers/diagnosis.py       | DiagnosisController, DiagnosisService          |
+| routers/recommendations.py | Recommendation/Product modules                 |
+| trend.tsx mock             | PatternController, PatternService              |
+| settings 로컬 상태             | NotificationController, NotificationService    |
+
+Controller는 HTTP 처리만 담당하고, 비즈니스 로직은 Service에 둔다. 외부 API는 Client,
+정책은 Policy로 분리한다. 단순 CRUD마다 Repository를 무조건 만들지는 않는다.
+
+## 최신 코드와의 충돌 및 수정 필요 사항
+
+### 1. Weather 지표 nullable 계약
+
+최신 백엔드는 API 실패 시 목업값을 반환하지 않고 지표를 None으로 응답한다. NestJS DTO와 Prisma 모델은 다음을 반영한다.
+
+- UV, 오존, PM2.5, PM10, CAI, NO2, SO2, CO는 nullable이다.
+- uvIndexPeak, uvStatusPeak, uvIndexPeakHour를 포함한다.
+- 데이터 출처는 LIVE, CACHED, UNAVAILABLE처럼 명시한다.
+- Redis와 DB에 정상 데이터가 없으면 임의 수치를 만들지 않고 unavailable 상태를 반환한다.
+
+### 2. Weather API 설정 변경
+
+- 기상청 UV endpoint는 최신 V5 기준으로 이식한다.
+- GEMINI_MODEL 기본값은 현재 gemini-flash-latest 기준으로 관리한다.
+- 기존 KMA_AREA_NO, AIRKOREA_STATION_NAME은 위치 조회 실패 시 기본 지역 fallback에 필요하므로
+환경변수와 코드 중 어느 쪽을 기준으로 할지 결정해야 한다. 지역 registry를 기준으로 할 경우
+환경변수는 기본 region id로 단순화한다.
+
+### 3. 날씨 기반 제품 추천 API 추가
+
+최신 프론트는 다음 API를 사용한다.
+
+```text
+POST /products/weather-based
+```
+
+- 피부 측정값 없이 날씨 데이터만으로 제품을 생성한다.
+- 응답에는 reason, timing이 포함된다.
+- timing은 세안 후, 외출 전, 외출 후 중 하나다.
+- Gemini 실패 시 503을 반환하고 가짜 제품으로 대체하지 않는다.
+- 현재는 사용자별 영구 추천이 아니라 요청 시 생성하는 결과이므로, 캐시 여부와 저장 여부를 별도 결정한다.
+- 클라이언트가 보낸 날씨를 그대로 신뢰하지 않고, 최종 구조에서는 서버가 지역·Redis·WeatherSnapshot에서 입력값을 조회한다.
+
+### 4. 회원가입 gender 추가
+
+최신 API 계약에 선택 필드 gender: male | female가 추가되었다.
+
+- Prisma User.gender는 nullable enum으로 정의한다.
+- 회원가입 DTO와 User 응답에 포함한다.
+- 모델 학습 전에는 추천 로직에 임의로 사용하지 않는다.
+- 민감정보 취급 여부와 수집 목적·보관 필요성을 문서화한다.
+
+### 5. 개인 패턴 화면 계약
+
+최신 프론트는 개인 패턴 mock 차트를 제거하고 현재 준비 중만 표시한다.
+
+- 백엔드 GET /diagnosis/pattern은 구현 완료다.
+- 프론트 연결은 API 응답 계약과 통계 정책이 확정된 뒤 별도 PR로 진행한다.
+- 데이터 부족 상태는 404가 아니라 200 + LOCKED로 유지한다.
+
+### 6. 현재 프론트 호출과 최종 보안 계약의 차이
+
+현재 프론트는 POST /recommendations/generate에 skinScore와 weather 전체를 보내고 있다.
+최종 NestJS API는 diagnosisId만 받아야 한다.
+
+```json
+{
+  "diagnosisId": "diagnosis-id"
+}
+```
+
+서버는 diagnosis의 사용자 소유권을 확인한 후 DB에서 피부 측정값과 연결된 날씨 snapshot을 조회한다.
+이 변경은 NestJS 이식 PR에서 프론트와 함께 contract migration으로 처리한다.
+
+### 7. 기존 Python DB와 최신 코드의 migration 주의점
+
+현재 SQLite에는 기존 5개 테이블과 과거 생성 추천 데이터가 있다. 최신 코드에는 gender가 추가되었으므로
+단순 데이터 복사가 아니라 다음 순서로 처리한다.
+
+1. 새 Prisma schema에 nullable gender를 포함한다.
+2. 기존 사용자의 gender는 null로 import한다.
+3. 기존 전역 추천과 개인 생성 추천을 구분한다.
+4. 동일 진단에 중복 생성된 추천은 하나의 기준으로 정리한다.
+5. Access Token은 import하지 않고 사용자를 재로그인시킨다.
 
 ## Task 목록
 
@@ -25,6 +189,8 @@
 - [x] 담당자와 수정 파일 범위를 Issue에 기록하는 규칙 추가
 - [x] Issue와 PR 연결 템플릿 추가
 - [x] PR CI workflow 추가
+
+GitHub branch protection/ruleset은 현재 비공개 저장소 플랜에서 지원되지 않아 API 설정이 거부됩니다. 플랜이 지원될 때까지 `main` 직접 push 금지, 승인 1명, CI 성공 후 merge를 팀 규칙으로 적용합니다.
 
 ### T1. NestJS 기본 구조
 
@@ -54,6 +220,26 @@
 - [x] `WeatherSnapshot`에 UV peak와 측정 불가 상태 반영
 - [x] 날씨 기반 생성 제품의 `reason`, `timing` 저장 여부 결정 (DB 비저장, 응답만. 카탈로그 Product에는 reason/timing 컬럼 존재)
 
+초기 모델:
+
+```text
+User, RefreshSession, ConsentRecord
+Diagnosis, SkinMetric, WeatherSnapshot
+RecommendationTemplate, Recommendation
+Product, RecommendationProduct
+NotificationPreference
+```
+
+인덱스 후보:
+
+```text
+User.phoneNumber UNIQUE
+Diagnosis(userId, capturedAt)
+SkinMetric(diagnosisId, part) UNIQUE
+WeatherSnapshot(regionName, observedAt)
+Recommendation(userId, diagnosisId, createdAt)
+```
+
 ### T3. JWT 인증과 USER/ADMIN
 
 브랜치: `feature/jwt-refresh-auth`
@@ -67,6 +253,8 @@
 - [x] ADMIN 전용 운영 API 보호 (N2 AdminModule로 구현)
 - [x] 진단·추천 조회 시 사용자 소유권 검사 (Diagnosis/Recommendation Service userId 검사 + ForbiddenException)
 - [x] 인증 실패와 권한 부족 상태 코드 구분
+
+전화번호만으로 로그인하는 현재 방식은 개발용 MVP로 취급합니다. 실제 서비스에는 OTP 또는 별도 본인확인이 필요합니다. Access Token은 `User` 테이블에 저장하지 않습니다.
 
 ### T4. 기존 Auth/User API 호환
 
@@ -90,6 +278,8 @@
 - [x] timeout·외부 API 오류·응답 스키마 검증
 - [x] `LIVE | CACHED | UNAVAILABLE` 출처 구분
 - [x] API 키가 로그에 나오지 않는지 확인
+
+정부 API 실패 시 지표를 임의 목업값으로 채우지 않습니다. `LIVE`, `CACHED`, `UNAVAILABLE`을 구분하고, 프론트가 측정 불가 상태를 표시할 수 있도록 합니다.
 
 ### T6. 날씨 이력 저장
 
@@ -146,6 +336,8 @@
 - [x] 원본 이미지 비저장 (memoryStorage + 처리 후 GC, 동의는 ConsentRecord 모델로 별도)
 - [x] 중복 요청 방지 정책 결정 (동일 사용자 60초 이내 제출 거부)
 
+후속 N5/N8에서 Python inference-service 호출, 실제 모델 컨테이너, landmarks 계약과 ECS 배포 경로까지 반영했다.
+
 ### T10. 개인 패턴 분석 API
 
 브랜치: `feature/personal-pattern-api`
@@ -159,6 +351,10 @@
 - [x] 결과를 C등급 추천과 연결
 - [x] `trend.tsx`의 직접 mock 사용을 API 계약으로 교체
 
+데이터 부족은 `404`가 아니라 `200 + LOCKED`로 반환합니다.
+
+현재 최신 프론트는 개인 패턴 API를 호출하지 않고 `준비 중` 상태를 표시합니다. 백엔드 API 완성 후 프론트 연결은 별도 Task로 진행합니다.
+
 ### T11. 알림 설정 저장
 
 브랜치: `feature/notification-preferences`
@@ -167,6 +363,8 @@
 - [x] 설정 조회·수정 API
 - [x] USER는 자기 설정만 수정
 - [x] 기본값 및 프론트 동기화 정책 결정
+
+이번 단계에서는 DB 저장만 구현합니다. 푸시 발송과 WebSocket은 포함하지 않습니다.
 
 ### T12. Redis 날씨 캐시
 
@@ -178,6 +376,8 @@
 - [x] Redis 장애 시 외부 API 또는 최근 DB fallback
 - [x] live/cached 출처 구분
 - [x] 무효화·로그·metric 정책 결정 (→ N11 다중 인스턴스 운영 보강에서 완료)
+
+초기 Redis 범위는 날씨 캐시였으며, N4에서 추천·패턴·알림 BullMQ 작업 큐와 Inline fallback을 추가했다.
 
 ### T13. 테스트와 API 계약
 
@@ -205,7 +405,204 @@
 - [x] Prisma migration 검사
 - [x] 배포 전략 결정
 
-## Next (N)
+Python inference-service 컨테이너와 ECS 배포는 N5에서 추가되었다.
+
+참고: Dockerfile, docker-compose backend 서비스, CI migration diff 검사 단계, 배포 전략 문서(`docker/DEPLOYMENT.md`)를 추가했다. CI는 `prisma generate`, build, 단위/E2E 테스트와 lint를 실행한다. migration diff 검사는 별도 shadow DB(`todayskin_shadow`)를 사용한다.
+
+## 데이터 설계 기준
+
+```text
+User
+ ├─ RefreshSession
+ ├─ Diagnosis
+ │   ├─ SkinMetric
+ │   └─ WeatherSnapshot
+ ├─ Recommendation
+ ├─ NotificationPreference
+ └─ ConsentRecord
+
+RecommendationTemplate
+Recommendation
+ └─ RecommendationProduct ─ Product
+```
+
+- `User.accessToken`은 제거하고 `RefreshSession`으로 분리합니다.
+- `SkinDiagnosis`는 `Diagnosis`로 정리하며 `status`, `modelVersion`, `weatherSnapshotId`를 검토합니다.
+- `SkinPartMetric`은 `SkinMetric`으로 정리하고 `unique(diagnosisId, part)`를 둡니다.
+- 전역 추천 템플릿과 사용자 생성 결과를 분리합니다.
+- 제품 관계는 `RecommendationProduct` 중간 테이블로 전환합니다.
+- 프론트와 스키마가 현재 6개 부위를 사용하므로 모델 명세 확정 전까지 6개를 유지합니다.
+
+## API 계약 기준
+
+| 현재 API                           | NestJS 책임                               |
+| -------------------------------- | --------------------------------------- |
+| `POST /auth/signup`              | `AuthController.signup()`               |
+| `POST /auth/login`               | `AuthController.login()`                |
+| `POST /auth/logout`              | `AuthController.logout()`               |
+| `GET /weather`                   | `WeatherController.getCurrentWeather()` |
+| `GET /diagnosis/latest`          | `DiagnosisController.getLatest()`       |
+| `GET /diagnosis/history`         | `DiagnosisController.getHistory()`      |
+| `POST /diagnosis`                | `DiagnosisController.submit()`          |
+| `GET /recommendations`           | `RecommendationController.list()`       |
+| `POST /recommendations/generate` | `RecommendationController.generate()`   |
+| `GET /recommendations/:id`       | `RecommendationController.getById()`    |
+| `GET /products`                  | `ProductController.list()`              |
+
+가능하면 기존 `camelCase` 응답 필드와 `Authorization: Bearer ...` 헤더 계약을 유지합니다.
+
+추천 생성 요청은 최종적으로 다음처럼 `diagnosisId`만 받는 방향을 권장합니다.
+
+```json
+{
+  "diagnosisId": "diagnosis-id"
+}
+```
+
+## 협업 규칙
+
+### 미리 생성된 Task 브랜치 주의사항
+
+T0~T14 브랜치는 2026-08-04의 `main` 커밋 `2e48c21`을 기준으로 미리 생성했습니다. 브랜치를 미리 만들면 다른 Task가 먼저 병합되는 동안 오래된 기준점에 남을 수 있습니다.
+
+각 Task를 실제로 시작하기 전 반드시 최신 `main`을 반영합니다.
+
+```bash
+git fetch origin
+git switch <task-branch>
+git merge origin/main
+```
+
+처음 협업하는 동안에는 공유 브랜치의 이력을 다시 쓰지 않도록 merge 방식을 기본으로 사용합니다. 팀이 rebase 규칙에 합의한 경우에만 아직 공유되지 않은 개인 작업 브랜치에서 rebase를 사용합니다.
+
+Task 브랜치를 동시에 연쇄적으로 개발하지 않습니다. 선행 Task 의존성이 있는 경우 선행 PR이 `main`에 병합된 뒤 후속 브랜치에 최신 `origin/main`을 반영하고 작업합니다.
+
+### 브랜치 규칙
+
+- `main`: 배포 가능한 상태
+- `feature/<name>`: 기능
+- `fix/<name>`: 버그
+- `refactor/<name>`: 구조 개선
+- `test/<name>`: 테스트
+- `chore/<name>`: 설정
+
+작업 시작:
+
+```bash
+git switch main
+git pull origin main
+git switch -c feature/<작업명>
+```
+
+### 커밋 규칙
+
+커밋은 하나의 목적만 포함합니다.
+
+```text
+feat: add Prisma PostgreSQL schema
+fix: prevent duplicate recommendation generation
+refactor: separate weather API clients
+test: add ownership checks for diagnosis history
+chore: configure backend CI workflow
+```
+
+작업 중에는 `git status`, `git diff`, `git diff --cached`를 확인합니다.
+
+### Pull Request 규칙
+
+모든 작업은 PR을 통해 `main`에 병합합니다. PR에는 다음을 포함합니다.
+
+- 변경 내용과 이유
+- 테스트 명령어와 결과
+- API/DB schema 변경 여부
+- 환경변수 변경 여부
+- 보류하거나 남은 작업
+- 리뷰어가 확인할 위험 지점
+
+PR 하나는 하나의 기능 또는 하나의 설계 주제만 다룹니다. 권장 병합 방식은 `Squash and merge`입니다.
+FE F0~F16 웨이브에서는 `CONTRIBUTING.md`의 한시적 예외(작업자 self-merge)를 따른다. BE는 API freeze.
+
+### 코드 리뷰 기준
+
+- 기존 API와 프론트 호환성이 유지되는가?
+- Controller에 비즈니스 로직이 과도하게 들어가지 않았는가?
+- 사용자 데이터 소유권 검사가 있는가?
+- 인증과 권한 검사가 누락되지 않았는가?
+- migration이 안전한가?
+- 중복 저장과 race condition 가능성이 있는가?
+- 외부 API 실패와 timeout이 처리되는가?
+- secret과 개인정보가 로그/커밋에 노출되지 않는가?
+- mock fallback이 운영에서 실제 데이터처럼 보이지 않는가?
+- 테스트가 실패·빈 데이터·권한 부족 상태를 포함하는가?
+
+### DB 협업
+
+- DB 파일은 커밋하지 않습니다.
+- `schema.prisma`와 `prisma/migrations`는 커밋합니다.
+- 공유 migration을 임의로 수정하거나 삭제하지 않습니다.
+- 스키마 변경은 별도 PR로 분리합니다.
+- seed는 upsert를 사용해 반복 실행에도 중복을 만들지 않습니다.
+
+### 보안
+
+절대 커밋하지 않는 항목:
+
+```text
+.env
+.env.bak
+backend/.env
+API key
+JWT secret
+DB password
+Refresh Token
+얼굴 이미지
+실사용자 개인정보
+```
+
+`.env.example`에는 변수명과 형식만 기록합니다.
+
+## 우선순위
+
+### P0
+
+- [x] NestJS 실행 구조
+- [x] PostgreSQL + Prisma migration
+- [x] JWT + Refresh Token
+- [x] USER / ADMIN
+- [x] 기존 Auth/Weather/Recommendation/Product API 이식
+- [x] `POST /products/weather-based` 포함
+- [x] 사용자 데이터 소유권 검사
+
+### P1
+
+- [x] WeatherSnapshot 저장
+- [x] 개인 패턴 분석 API
+- [x] 추천 중복 생성 방지
+- [x] 진단 파일 검증 및 MockInferenceProvider
+- [x] NotificationPreference DB 저장
+- [x] Redis 날씨 캐시
+
+### P2
+
+- [x] Python inference-service 연동
+- [x] Redis BullMQ 작업 큐
+- [ ] WebSocket/SSE (현재 polling)
+- [x] Docker 배포 환경
+- [x] GitHub Actions 배포 자동화
+
+## 다음 과정 (Next)
+
+> **BE 버그픽스/제품 웨이브(N24~N34) 완료 · API freeze** (main `42897d5` / PR #59~#66).
+> 다음 구현은 **FE** (`docs/FRONTEND_TASKS.md` + `docs/FE_HANDOFF_PROMPT.md`).
+> N16(AWS 첫 배포)는 계정·시크릿·승인자가 준비된 뒤 **별도**. EAS·구독 결제는 보류.
+>
+> **FE 웨이브 운영** (BE는 freeze — 계약 변경 시 Task/Swagger 먼저)
+> - Task 하나 = 브랜치 하나 = PR 하나.
+> - **`main` 작업 금지.** merge 후 브랜치 **삭제 금지**.
+> - 리뷰어 1명 강제 **일시 해제**(FE F0~F16). `gh pr merge --squash`(`--delete-branch` 금지) 후 `main` pull → 새 브랜치.
+> - 비밀번호·아이디/비번 찾기 UI 금지. 가상 제품·가짜 구독 카드·목업 로그인 금지.
+>
+> 아래 Task 체크리스트는 **이력·계약 기준**으로 유지한다 (삭제하지 않음).
 
 ### N0. 운영 보안·HTTP 보호
 
@@ -244,6 +641,8 @@
   - Role 기반 유지 (Permission은 3개+ 독립 action 시 도입)
 - [x] USER 403·ADMIN 200·미인증 401 e2e 테스트
 
+현재 기준: OTP 검증 흐름과 ADMIN 보호는 완료했지만 실제 SMS 발송은 N9에서 완료해야 운영 공개가 가능하다.
+
 ### N3. S3 이미지 저장·Consent 실제 연동
 
 브랜치: `feature/s3-consent-image`
@@ -256,6 +655,10 @@
 - [x] 미동의 시 추론 후 즉시 삭제 (현재 memoryStorage 비저장 유지)
 - [x] 동의 철회 후 신규 처리/보존 데이터 정책 구현
 - [x] 동의 audit log 연동 (N1 로깅과 연계)
+
+참고: ConsentModule + StorageModule 추가. `GET/POST /consents`, registry version 게이트.
+저장 동의 시에만 SSE(AES256/KMS)로 객체 저장하고 `DiagnosisImage` 메타를 남긴다.
+S3_BUCKET 미설정 시 개발/테스트는 Memory store를 사용한다. 운영은 S3_BUCKET 필수이며 Memory fallback을 허용하지 않는다.
 
 완료 기준: 동의 상태가 진단·추천 기능의 진입 조건으로 동작하고, 동의한 이미지만 S3에 암호화 저장된다.
 
@@ -284,6 +687,11 @@
 - [x] production deploy: 승인 게이트 + 이전 image rollback 절차
 - [x] secret: Secret Manager 주입
 
+참고: `.github/workflows/deploy-ecs.yml`, `backend/docker/ecs/*.json`,
+`backend/inference-service/Dockerfile`, `RUN_MIGRATIONS_ON_START` entrypoint,
+`backend/docker/DEPLOYMENT.md`에 절차·시크릿·롤백을 정리했다.
+실제 AWS ECR/ECS/RDS/OIDC는 계정 시크릿 설정 후 워크플로로 실행한다.
+
 완료 기준: CI 통과 후 ECR에 이미지가 push되고, 승인 후 NestJS와 FastAPI가 각각 Fargate에 배포된다.
 
 ### N6. 운영 DB·확장성·정책 마무리
@@ -304,6 +712,11 @@
   - production unknown key 엄격 처리
 - [x] 의존성 audit(npm audit) CI 게이트 — critical/high SLA
 - [x] coverage threshold: Auth·Diagnosis·Weather·Recommendation·Exception branch/function 우선
+
+참고: Soft Delete(`deletedAt`/`purgeAfter`), Diagnosis 익명 보존(`anonymizedAt`, userId SetNull),
+`POST /auth/withdraw`, ADMIN soft-delete/purge, `/health/live|/health/ready`,
+커서 pagination(limit 지정 시), `env.registry.ts`, CI `npm audit --audit-level=high`,
+Jest coverageThreshold를 반영했다.
 
 완료 기준: 탈퇴 시 Soft Delete로 보존 기간이 유지되고, purge job이 최종 삭제를 수행하며, health probe가 의존성 중요도별로 분리된다.
 
@@ -351,6 +764,9 @@
 - [x] 운영에서 `SMS_API_KEY`, `SMS_USER_ID`, `SMS_SENDER`, `SMS_ENDPOINT` 누락 시 readiness 실패 (env.registry `requiredIn: ['production']`)
 - [x] provider 계약 단위 테스트 (`sms-otp.provider.spec.ts` — 성공/거부/HTTP오류/재시도/마스킹) + 기존 가입·로그인 E2E 유지 확인
 
+참고: `SMS_USER_ID`(알리고 user_id)와 `SMS_TESTMODE`(testmode_yn=Y) 환경변수 추가. `testmode_yn=Y`면 과금 없이 연동 테스트만 수행.
+개발/테스트는 기존 `MockOtpProvider` 유지.
+
 완료 기준: 운영 환경의 OTP가 실제 SMS로 발송되고, 설정 누락이나 provider 장애가 가짜 성공으로 처리되지 않는다.
 
 ### N10. 이미지 저장소 reconciliation
@@ -388,16 +804,21 @@
 - [x] 날씨 cache hit/miss와 BullMQ queue/DLQ metric 수집
   - 날씨: `metric:weather:cache:hit/miss` Redis 카운터 (WeatherService)
   - BullMQ: `JobMetricsScheduler`(`JOB_METRICS_INTERVAL_MS`, 기본 60s)가 queue별
+  waiting/active/completed/failed/delayed + DLQ waiting을 구조화 로그로 수집
 - [x] Redis 장애 시 cache·job·rate limit별 fail-open/fail-closed 정책 확정
   - **cache: fail-open** — Redis 다운 시 외부 API/DB fallback (기존 T12 설계)
   - **rate limit: fail-open** — Redis 다운 시 요청 통과. rate limit이 서비스 가용성을
+  깨지 않게 하며, 복구 전 짧은 남용 가능성은 인지된 tradeoff
   - **job(BullMQ): fail-closed** — 큐 add 실패는 명시적 오류 전파(요청자가 재시도),
+  재시도·DLQ 정책은 기존 JOB_POLICIES 유지. Inline fallback은 JOB_DISPATCHER=inline로 명시 선택
 - [x] `/health/ready`에 운영 필수 inference/SMS dependency 정책 반영
   - inference: production+MOCK_INFERENCE=false에서 INFERENCE_SERVICE_URL 없으면 required down
   - SMS: production에서 SMS_API_KEY/SMS_SENDER 없으면 required down (N9 readiness 게이트와 정합)
   - dev/test는 skipped로 취급해 ready를 깨지 않음
 - [x] WebSocket/SSE 필요성 재평가(현재 job polling 유지)
   - 결정: **job polling 유지** — N4 job 상태 API + 프론트 polling이 MVP에 충분.
+  실시간 알림/라이브 차트 요구가 생기면 N11 후속으로 재평가 (SSE가 서버 비용·인프라
+  측면에서 WebSocket보다 우선 후보)
 
 완료 기준: ECS 다중 task에서도 rate limit과 운영 지표가 인스턴스별로 분산되지 않고 일관되게 동작한다.
 
@@ -453,6 +874,9 @@
 
 브랜치: `fix/ci-test-recovery`
 
+> 2026-08-07 오디트 기준: main의 `backend-build-test → npm test`가 실패 중(2 suites / 3 tests).
+> 원인은 N8/#37 이후 구현이 바뀌었는데 테스트 기대값이 갱신되지 않은 드리프트다.
+
 - [x] `diagnosis.service.spec.ts` 2건 — N8 이후 `submit()`이 `wentOutside=true`일 때만 날씨 스냅샷을 연결하도록 바뀐 것을 테스트에 반영
 - [x] `python-inference.provider.spec.ts` 1건 — N8 landmarks 필드가 provider 출력에 추가된 것을 mock fixture에 반영(`landmarks: null`)
 - [x] spec 파일 TS 타입 에러 정리 — `soft-delete.service.spec`(implicit any), `diagnosis.service.spec`/`weather.service.spec`(mock에 `getPresignedUrlForDiagnosis`/`$executeRaw` 누락), `product`/`recommendation.service.spec`(`CursorPageDto` 인덱싱)
@@ -460,6 +884,12 @@
 - [x] `npm audit --audit-level=high` CI 게이트 복구 — `@nestjs/swagger@11.4.6`(js-yaml 5.x 계열)으로 올리고 `js-yaml@5.2.3` override 적용 (CVE-2026-59870 / GHSA-pm4m-ph32-ghv5 회피)
 
 완료 기준: `npm test`가 CI·로컬에서 모두 초록이고 main CI가 복구된다.
+
+> 2026-08-07 완료: 로컬 `npm test` 190 passed(+13 skipped=DB 스위트), `tsc --noEmit` 클린, `npm run build`/`lint` 통과, `npm audit --audit-level=high` 0 vulnerabilities.
+> e2e 드리프트 1건 추가 수정: N11 이후 `WeatherService`가 `redisService.incrementCounter`를 호출하는데
+> e2e 4개 스펙(`api-contract`/`consent-image`/`calendar-history`/`diagnosis-pattern`)의 RedisService mock에 메서드가 없어 `/weather`가 500 — mock에 `incrementCounter` 추가.
+> **PR #43 CI에서 `backend-build-test`(build→test→test:cov→test:e2e→lint→audit)와 `frontend-typecheck` 모두 초록 확인** (#25 이후 첫 초록).
+> 참고: 로컬에서 DB 없이 `npm run test:cov`를 돌리면 auth/prisma 스위트가 skip되어 `auth.service.ts` coverage threshold(60%)에 미달할 수 있다.
 
 ### N20. 추천-제품 연결 데이터 구축
 
@@ -606,4 +1036,53 @@
 - [x] F16 설정 전면 재구성과 맞춤 — FE 핸드오프에 계약 명시
 
 완료 기준: 설정 UI가 “되는 것처럼 보이는” 토글을 서버 계약으로 막을 수 있다.
+
+## 프론트 범위 완료 기록 (참고용)
+
+> 아래는 프론트엔드 범위에서 완료되어 `main`에 병합된 작업이다. 백엔드 태스크는 아니지만
+> 작업 기록 보존을 위해 여기에 남겨둔다. 상세는 해당 PR과 프론트 코드에서 확인한다.
+
+### N15. 캘린더 히스토리 프론트 연결 (프론트 범위 — 완료)
+
+브랜치: `feature/calendar-history-client`
+
+- [x] 프론트 API client에 `history/:date`, `score-series` 추가
+- [x] 날씨·진단·추천·image·landmarks 응답 타입 동기화
+- [x] History 화면의 기존 목록/로컬 시계열을 N8 계약으로 migration
+- [x] 저장 미동의와 presigned URL 만료 상태 처리
+- [x] 로딩·빈 날짜·부분 데이터·재인증 UI 검증
+
+완료 기준: 사용자가 날짜를 선택하면 N8 통합 히스토리를 실제 앱에서 조회하고 동의 상태에 맞는 이미지·landmarks를 확인할 수 있다.
+
+### N18. 앱 세션 토큰 수명 관리 (프론트 범위 — 완료)
+
+브랜치: `feature/app-session-refresh`
+
+- [x] 프론트에 refresh token 회전 연동 (현재 `saveSession`은 accessToken만 저장, refresh 미사용)
+- [x] 401 응답 시 재로그인 유도 흐름 (현재는 "불러올 수 없어요"만 노출되고 로그인 화면으로 복귀하지 않음)
+- [x] access token(15m) 만료 후에도 앱이 조용히 갱신되거나 명확한 재인증 UX 제공
+
+완료 기준: 세션이 15분 이상 지속돼도 인증 API가 끊기지 않고, 토큰 무효 시 사용자가 로그인 화면으로 안내된다.
+
+### N19. 설정 화면 기능 연동 (프론트 범위 — 완료)
+
+브랜치: `feature/settings-integration`
+
+- [x] 알림 스위치를 `NotificationPreference` API에 연동 (현재 로컬 state만 변경, 서버 미저장)
+- [x] "안면 이미지 처리방침 확인" / "데이터 처리 동의 철회" 행에 consent 조회·철회 API 연결
+- [x] 탈퇴(withdraw) UI — 백엔드 `POST /auth/withdraw`(N6)는 구현돼 있으나 앱 진입점 없음
+- [ ] 구독(프리미엄) 화면 — 현재 정적 표시만, 결제·권한 로직 없음 (범위 별도 결정 — 미완료). **가짜 가격 카드는 F16에서 삭제.** 이후 FE 미완료 작업은 `docs/FRONTEND_TASKS.md`.
+
+완료 기준: 설정 화면의 모든 항목이 실제 API와 동기화되고 동의 철회·탈퇴가 사용자 흐름으로 동작한다.
+
+## 완료 정의
+
+- NestJS 모듈 경계 안에 기능이 구현되어 있습니다.
+- Prisma migration과 seed가 재현 가능합니다.
+- 인증·권한·소유권 검사가 있습니다.
+- 성공과 실패 테스트가 있습니다.
+- 기존 프론트 API 계약이 검증되었습니다.
+- secret이 코드에 포함되지 않았습니다.
+- PR 리뷰가 완료되고 `main`에 병합되었습니다.
+- 보류 항목과 후속 작업이 PR에 기록되었습니다.
 
