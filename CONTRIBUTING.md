@@ -73,6 +73,10 @@ PR 본문에는 다음을 작성합니다.
 
 저장소 플랜이 지원되면 위 규칙을 GitHub branch protection으로 즉시 강제합니다.
 
+### 한시적 예외: N24~N34 / FE F0~F16 버그픽스·제품 웨이브
+
+이 웨이브에 한해 **리뷰어 1명 강제와 “자기 PR self-merge 금지”를 일시 해제**한다. 작업자(또는 FE AI)가 CI를 확인한 뒤 squash merge하고 `main`을 pull한 다음 Task로 넘어간다. N16 AWS·총리팩·결제 등 이 웨이브 밖 작업에는 위 기본 규칙을 다시 적용한다.
+
 ## 코드 리뷰
 
 리뷰어는 다음을 확인합니다.
@@ -116,4 +120,4 @@ SQLite DB
 
 ## 현재 Backend Task 담당 범위
 
-백엔드 Task와 브랜치 목록은 [backend/BACKEND_TASKS.md](backend/BACKEND_TASKS.md)의 `다음 과정`을 기준으로 합니다. 작업 시작 전 Issue에 담당자와 수정 예정 파일을 댓글로 남겨 충돌을 예방합니다.
+백엔드 Task와 브랜치 목록은 [docs/BACKEND_TASKS.md](docs/BACKEND_TASKS.md)의 `다음 과정`을, 프론트는 [docs/FRONTEND_TASKS.md](docs/FRONTEND_TASKS.md)를 기준으로 합니다. 작업 시작 전 Issue에 담당자와 수정 예정 파일을 댓글로 남겨 충돌을 예방합니다.

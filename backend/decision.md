@@ -24,6 +24,19 @@
 - HTTP Rate Limit은 N11에서 Redis 기반 분산 저장소(`RedisThrottlerStorage`)로 전환 완료했다.
 - 남은 것은 N16(실제 AWS 리소스 프로비저닝·첫 배포)뿐이며, 계정·시크릿·승인자가 준비된 뒤 진행한다.
 
+## 제품·인증 추가 결정 (2026-08-08)
+
+| 항목 | 결정 | 요약 |
+|---|---|---|
+| 제품 카탈로그 | 실제품만 | Skinlab/Greenfield 등 허구 시드 삭제. 큐레이션 시드 30~50 + 동작 `purchaseUrl`. 크롤링 없음. 성분 whitelist(`ALLOWED_INGREDIENTS`) 유지, Gemini는 productId 선택 우선 |
+| 추천 체감 | `rec-fast-path` epic | Redis SWR `CACHED` + miss 시 규칙 실제품 `FALLBACK` 즉시 → 비동기 job 후 `LIVE`. 가상 weather 제품 금지. N29+N31+N32는 **한 PR** |
+| 인증 | 전화+OTP + 소셜 | 비밀번호·아이디/비번 찾기·이름+생일 찾기 **안 함**. Kakao·Google·Apple 추가 (N33). Apple은 스토어 전에도 API 포함 |
+| 설정 UX | 전면 재구성 (FE F16) | 프로필·동의 grant/revoke·실동작 알림만·가짜 구독 카드 삭제. `PATCH /auth/me`(N28) |
+| 협업 | BE 선행 → FE | FE는 `docs/FRONTEND_TASKS.md` / `docs/FE_HANDOFF_PROMPT.md`. 이 웨이브는 작업자 squash self-merge 허용(리뷰어 1명 일시 해제) |
+| N16 | 별도 | AWS 첫 배포는 이 웨이브와 분리 |
+
+상세 Task: `docs/BACKEND_TASKS.md` Next(N24~N34), 프론트: `docs/FRONTEND_TASKS.md`.
+
 ## N6 Soft Delete / FK / Health / Pagination (2026-08-08 구현)
 
 ### Soft Delete 보존

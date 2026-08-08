@@ -45,6 +45,8 @@ yarn-error.*
 .codebase-memory/
 .ua/
 .understand-anything/
+.freebuff/
+.omc/
 
 # typescript
 *.tsbuildinfo

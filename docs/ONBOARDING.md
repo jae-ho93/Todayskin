@@ -161,7 +161,7 @@ npm run prisma:seed
 npm run start:dev
 ```
 
-상세 설정은 [SETUP.md](SETUP.md), 작업 상태와 다음 브랜치는 [backend/BACKEND_TASKS.md](../backend/BACKEND_TASKS.md)를 참고합니다.
+상세 설정은 [SETUP.md](SETUP.md), 작업 상태와 다음 브랜치는 [BACKEND_TASKS.md](BACKEND_TASKS.md) · [FRONTEND_TASKS.md](FRONTEND_TASKS.md)를 참고합니다.
 
 ## 7. 변경 전 체크
 
