@@ -30,6 +30,8 @@ describe('Jobs async (e2e)', () => {
     process.env.OTP_ALLOWLIST_PHONES = `${testPhone},01088888888`;
     process.env.OTP_MAX_PENDING_PER_PHONE = '50';
     process.env.JOB_DISPATCHER = 'inline';
+    // N34: pushDeliveryAvailable 단언이 로컬 .env와 무관하게 결정적이도록 명시.
+    process.env.PUSH_DELIVERY_AVAILABLE = 'false';
 
     const moduleRef: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -173,11 +175,13 @@ describe('Jobs async (e2e)', () => {
     });
 
     it('pushEnabled=true 후 uv 발송 시 delivered=true', async () => {
-      await request(app.getHttpServer())
+      // N34: pushDeliveryAvailable 플래그가 계약에 노출되고 기본 false(게이트웨이 미연동)다.
+      const prefRes = await request(app.getHttpServer())
         .put('/notifications/preferences')
         .set('Authorization', `Bearer ${accessToken}`)
         .send({ pushEnabled: true, uvAlertEnabled: true })
         .expect(200);
+      expect(prefRes.body.pushDeliveryAvailable).toBe(false);
 
       const res = await request(app.getHttpServer())
         .post('/notifications/send/async')

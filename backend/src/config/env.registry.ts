@@ -89,6 +89,11 @@ export const ENV_REGISTRY: EnvVarDefinition[] = [
   { key: 'THROTTLE_STORAGE', owner: 'security', description: 'Rate limit storage: auto|memory|redis', requiredIn: 'never', safeDefault: 'auto', secret: false },
   { key: 'JOB_METRICS_INTERVAL_MS', owner: 'jobs', description: 'BullMQ queue/DLQ metrics collection interval ms (0=disabled)', requiredIn: 'never', safeDefault: 60_000, secret: false },
 
+  // N34: 푸시 실제 발송(FCM/APNs) 지원 여부. false면 FE는 알림 토글을
+  // "되는 것처럼 보이는" 토글이 아닌 비활성/준비 중으로 표시해야 한다.
+  // 게이트웨이 연동 시 배포에서 true로 flip한다 (코드 재배포 불필요).
+  { key: 'PUSH_DELIVERY_AVAILABLE', owner: 'platform', description: '실제 푸시 발송(FCM/APNs) 지원 여부 — false면 FE가 거짓 토글 노출 금지', requiredIn: 'never', safeDefault: 'false', secret: false },
+
   { key: 'LOG_LEVEL', owner: 'observability', description: 'Pino log level', requiredIn: 'never', safeDefault: 'info', secret: false },
   { key: 'SENTRY_DSN', owner: 'observability', description: 'Sentry DSN', requiredIn: 'never', secret: true },
   { key: 'SENTRY_TRACES_SAMPLE_RATE', owner: 'observability', description: 'Sentry traces sample rate', requiredIn: 'never', safeDefault: 0.1, secret: false },
