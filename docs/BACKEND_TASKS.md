@@ -407,7 +407,7 @@ Recommendation(userId, diagnosisId, createdAt)
 
 Python inference-service 컨테이너와 ECS 배포는 N5에서 추가되었다.
 
-참고: Dockerfile, docker-compose backend 서비스, CI migration diff 검사 단계, 배포 전략 문서(`docker/DEPLOYMENT.md`)를 추가했다. CI는 `prisma generate`, build, 단위/E2E 테스트와 lint를 실행한다. migration diff 검사는 별도 shadow DB(`todayskin_shadow`)를 사용한다.
+참고: Dockerfile, docker-compose backend 서비스, CI migration diff 검사 단계, 배포 전략 문서(`docs/DEPLOYMENT.md`)를 추가했다. CI는 `prisma generate`, build, 단위/E2E 테스트와 lint를 실행한다. migration diff 검사는 별도 shadow DB(`todayskin_shadow`)를 사용한다.
 
 ## 데이터 설계 기준
 
@@ -593,7 +593,7 @@ Refresh Token
 ## 다음 과정 (Next)
 
 > **BE 버그픽스/제품 웨이브(N24~N34) 완료 · API freeze** (main `42897d5` / PR #59~#66).
-> 다음 구현은 **FE** (`docs/FRONTEND_TASKS.md` + `docs/FE_HANDOFF_PROMPT.md`).
+> 다음 구현은 **FE** (`docs/FRONTEND_TASKS.md` + `docs/FE_HANDOFF.md`).
 > N16(AWS 첫 배포)는 계정·시크릿·승인자가 준비된 뒤 **별도**. EAS·구독 결제는 보류.
 >
 > **FE 웨이브 운영** (BE는 freeze — 계약 변경 시 Task/Swagger 먼저)
@@ -689,7 +689,7 @@ S3_BUCKET 미설정 시 개발/테스트는 Memory store를 사용한다. 운영
 
 참고: `.github/workflows/deploy-ecs.yml`, `backend/docker/ecs/*.json`,
 `backend/inference-service/Dockerfile`, `RUN_MIGRATIONS_ON_START` entrypoint,
-`backend/docker/DEPLOYMENT.md`에 절차·시크릿·롤백을 정리했다.
+`docs/DEPLOYMENT.md`에 절차·시크릿·롤백을 정리했다.
 실제 AWS ECR/ECS/RDS/OIDC는 계정 시크릿 설정 후 워크플로로 실행한다.
 
 완료 기준: CI 통과 후 ECR에 이미지가 push되고, 승인 후 NestJS와 FastAPI가 각각 Fargate에 배포된다.

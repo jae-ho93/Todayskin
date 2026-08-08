@@ -94,7 +94,7 @@ NestJS가 호출하고 결과를 영속화합니다. 원칙: [`docs/ARCHITECTURE
 | 컴퓨팅 | **ECS Fargate** (NestJS · FastAPI 각각) |
 | 데이터 · 스토리지 | RDS · ElastiCache(Redis) · S3 |
 | CI/CD · 시크릿 | GitHub Actions → ECR · Secrets Manager · CloudWatch |
-| 가이드 | [`backend/docker/DEPLOYMENT.md`](backend/docker/DEPLOYMENT.md) |
+| 가이드 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) |
 
 ---
 
@@ -158,15 +158,34 @@ npm run start:dev
 
 ---
 
+## 저장소 구조
+
+```text
+Todayskin/
+├─ README.md · CONTRIBUTING.md     # GitHub 대문 · 협업 규칙
+├─ app/ · src/                     # Expo 앱
+├─ docs/                           # 문서 허브 → docs/README.md
+│  ├─ SETUP.md · ARCHITECTURE.md · DEPLOYMENT.md
+│  ├─ BACKEND_TASKS.md · FRONTEND_TASKS.md · FE_HANDOFF.md
+├─ backend/                        # NestJS + inference-service
+│  ├─ README.md                    # 모듈·디렉터리 구조 지도
+│  ├─ src/ · prisma/ · test/
+│  ├─ inference-service/
+│  └─ docker/                      # Compose · ECS task JSON (배포 본문은 docs/DEPLOYMENT.md)
+└─ ml/                             # 모델 학습 계획
+```
+
 ## 문서 지도
+
+전체 목록: **[docs/README.md](docs/README.md)**
 
 | 역할 | 먼저 읽을 것 |
 |------|----------------|
 | 누구나 / 새로 합류 | 이 README → [SETUP](docs/SETUP.md) → [CONTRIBUTING](CONTRIBUTING.md) |
-| 프론트 | [FRONTEND_TASKS](docs/FRONTEND_TASKS.md) · [FE_HANDOFF](docs/FE_HANDOFF_PROMPT.md) · `app/`, `src/` |
+| 프론트 | [FRONTEND_TASKS](docs/FRONTEND_TASKS.md) · [FE_HANDOFF](docs/FE_HANDOFF.md) · `app/`, `src/` |
 | 백엔드 | [ARCHITECTURE](docs/ARCHITECTURE.md) · [backend/README](backend/README.md) · [BACKEND_TASKS](docs/BACKEND_TASKS.md) |
-| 프로젝트 매니저 (PM) | FE/BE Task 보드 · CONTRIBUTING (브랜치·PR 규칙) |
-| 인프라 | [DEPLOYMENT](backend/docker/DEPLOYMENT.md) |
+| 프로젝트 매니저 (PM) | FE/BE Task 보드 · CONTRIBUTING |
+| 인프라 | [DEPLOYMENT](docs/DEPLOYMENT.md) |
 
 ---
 

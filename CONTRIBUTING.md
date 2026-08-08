@@ -35,6 +35,6 @@ N16·총리팩·결제·BE 계약 변경은 기본 규칙.
 
 ## 지금 할 일
 
-- **FE:** [docs/FRONTEND_TASKS.md](docs/FRONTEND_TASKS.md) · [docs/FE_HANDOFF_PROMPT.md](docs/FE_HANDOFF_PROMPT.md)
+- **FE:** [docs/FRONTEND_TASKS.md](docs/FRONTEND_TASKS.md) · [docs/FE_HANDOFF.md](docs/FE_HANDOFF.md)
 - **BE:** freeze. 이력·N16 → [docs/BACKEND_TASKS.md](docs/BACKEND_TASKS.md)
 - 셋업: [docs/SETUP.md](docs/SETUP.md) · 원칙: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)

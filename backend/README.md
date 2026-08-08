@@ -1,7 +1,7 @@
 # Backend 구조
 
 NestJS Modular Monolith(BFF·비즈니스) + `inference-service/` FastAPI(추론만).  
-원칙: [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) · 실행: [docs/SETUP.md](../docs/SETUP.md) · 배포: [docker/DEPLOYMENT.md](docker/DEPLOYMENT.md)
+원칙: [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) · 실행: [docs/SETUP.md](../docs/SETUP.md) · 배포: [docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md)
 
 ```text
 요청 → Controller → Service → Prisma / Redis / 외부 Client

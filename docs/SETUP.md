@@ -70,4 +70,4 @@ cd backend && npm test && npm run lint
 | 진단 403 | processing 동의 |
 | 진단/추천 503 | `MOCK_INFERENCE` / `MOCK_GEMINI` 또는 실제 URL·키 |
 
-운영 배포: `backend/docker/DEPLOYMENT.md`. secret·mock flag·얼굴 이미지 커밋 금지.
+운영 배포: `docs/DEPLOYMENT.md`. secret·mock flag·얼굴 이미지 커밋 금지.

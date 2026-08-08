@@ -1,4 +1,4 @@
-# FE Handoff Prompt (복붙용)
+# FE Handoff (복붙용)
 
 아래 구분선 안 블록을 Cursor 에이전트에 **그대로** 붙여넣는다.
 사람은 복붙만 한다. git·PR·머지는 에이전트가 한다.

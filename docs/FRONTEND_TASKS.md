@@ -1,7 +1,7 @@
 # Todayskin Frontend Tasks
 
 Expo SDK 54 기준. 백엔드 규칙은 `docs/BACKEND_TASKS.md`, 협업은 `CONTRIBUTING.md` 참고.
-복붙 실행 지시서는 `docs/FE_HANDOFF_PROMPT.md`.
+복붙 실행 지시서는 `docs/FE_HANDOFF.md`.
 
 ## 운영 (이 웨이브)
 

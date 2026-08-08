@@ -234,5 +234,5 @@ jobs:
           2. image_tag = previous successful commit SHA (ECR image tag)
           3. skip_migrate = true (schema already applied or rollback via new migration)
           4. Approve the production environment gate
-          See backend/docker/DEPLOYMENT.md § Rollback
+          See docs/DEPLOYMENT.md § Rollback
           EOF
