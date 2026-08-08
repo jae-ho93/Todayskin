@@ -941,11 +941,15 @@ Jest coverageThreshold를 반영했다.
 
 브랜치: `feature/product-purchase-url` (N27과 같은 PR 권장)
 
-- [ ] Prisma `Product.purchaseUrl String?` + migration
-- [ ] Product DTO/응답에 `purchaseUrl` 노출 (목록·관련 제품·weather-based)
-- [ ] seed/실제품 데이터에 동작하는 구매 URL 채움 (허위 Skinlab/Greenfield 제거는 N27과 함께)
+- [x] Prisma `Product.purchaseUrl String?` + migration
+- [x] Product DTO/응답에 `purchaseUrl` 노출 (목록·관련 제품·weather-based)
+- [x] seed/실제품 데이터에 동작하는 구매 URL 채움 (허위 Skinlab/Greenfield 제거는 N27과 함께)
 
 완료 기준: 노출되는 실제품마다 FE가 `Linking.openURL` 할 수 있는 URL이 있다.
+
+> ✅ 완료 (PR, `feature/real-product-catalog`): `Product.purchaseUrl`(migration `20260815000000_n24_product_purchase_url`)
+> + ProductDto/CalendarProductDto 노출. weather-based 응답도 실제품 + `purchaseUrl`(가상 제품 없음).
+> URL은 큐레이션 초안(Olive Young 직링크 10건 리서치 기반 + 안정적 검색 URL)이라 **배포 전 사람 검증** 필요.
 
 ### N25. 날씨 수집 병렬·워밍 — P1
 
@@ -971,14 +975,19 @@ Jest coverageThreshold를 반영했다.
 
 브랜치: `feature/real-product-catalog` (N24와 함께 권장)
 
-- [ ] 허구 Skinlab/Greenfield 시드 삭제
-- [ ] 실제 화장품 30~50개 큐레이션 시드 (오프라인 Gemini 초안 + 사람 검증 가능). **크롤링 없음**
-- [ ] `purchaseUrl` 필수에 가깝게 채움 (N24)
-- [ ] 성분 매칭: 기존 `ALLOWED_INGREDIENTS` whitelist 유지. Gemini는 가능하면 **productId 선택** 우선
-- [ ] 매칭 0건 시 규칙 기반 실제품 fallback (가상 `gemini-product-*` 생성 금지)
-- [ ] Gemini 담당과 선택 품질·프롬프트 조율
+- [x] 허구 Skinlab/Greenfield 시드 삭제
+- [x] 실제 화장품 30~50개 큐레이션 시드 (오프라인 Gemini 초안 + 사람 검증 가능). **크롤링 없음**
+- [x] `purchaseUrl` 필수에 가깝게 채움 (N24)
+- [x] 성분 매칭: 기존 `ALLOWED_INGREDIENTS` whitelist 유지. Gemini는 가능하면 **productId 선택** 우선
+- [x] 매칭 0건 시 규칙 기반 실제품 fallback (가상 `gemini-product-*` 생성 금지)
+- [x] Gemini 담당과 선택 품질·프롬프트 조율
 
 완료 기준: 추천/날씨 제품이 DB 실제품(+purchaseUrl)만 가리키고, 허구 브랜드가 seed/응답에 없다.
+
+> ✅ 완료 (PR, `feature/real-product-catalog`): 허구 시드 삭제, 실제 화장품 33개 큐레이션 시드(`prisma/seed-data.ts`).
+> Gemini 날씨 제품 계약을 카탈로그 `productId` 선택으로 전환(가상 name/brand 생성 금지), 선택 무효/중복/매칭 0건은
+> 규칙 기반 실제품 fallback. `prisma/seed.ts`·seed-migration e2e가 seed-data를 단일 소스로 사용.
+> **남은 일**: URL 최종 검증·교체(사람), Gemini 실응답 프롬프트 튜닝은 rec-fast-path epic에서 계속.
 
 ### N28. PATCH /auth/me — P1
 

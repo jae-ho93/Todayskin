@@ -15,11 +15,18 @@ export class ProductDto {
   @ApiProperty({ example: '데일리 UV 디펜스 선크림' })
   name!: string;
 
-  @ApiProperty({ example: 'Skinlab' })
+  @ApiProperty({ example: '닥터지' })
   brand!: string;
 
   @ApiPropertyOptional({ example: null, description: '제품 이미지 URI' })
   imageUri?: string | null;
+
+  // N24: 실제 구매 URL — FE가 Linking.openURL로 연다. 카탈로그 제품은 사실상 필수.
+  @ApiPropertyOptional({
+    example: 'https://www.oliveyoung.co.kr/store/search/getSearch.do?query=%EC%84%A0%ED%81%AC%EB%A6%BC',
+    description: '구매 페이지 URL (Linking.openURL로 직접 열 수 있는 값)',
+  })
+  purchaseUrl?: string | null;
 
   @ApiProperty({ enum: EvidenceGrade, example: EvidenceGrade.A })
   matchedGrade!: EvidenceGrade;

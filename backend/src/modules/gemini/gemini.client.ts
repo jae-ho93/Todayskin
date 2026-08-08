@@ -35,9 +35,6 @@ export const RECOMMENDATION_TIMINGS = ['외출 후', '자기 전', '언제든'] 
 // 제품 timing — Product 응답 계약 (ProductTiming)
 export const PRODUCT_TIMINGS = ['세안 후', '외출 전', '외출 후'] as const;
 
-// Product.category와 1:1 대응
-export const PRODUCT_CATEGORIES = ['moisture', 'elasticity', 'brightening', 'barrier'] as const;
-
 /**
  * Gemini 호출 실패(키 없음, timeout, 응답 파싱 실패 등).
  * 호출부에서 목업으로 폴백하지 않고 503을 반환해야 함을 의미.
@@ -56,13 +53,24 @@ export interface GeneratedRecommendation {
   timing: string | null;
 }
 
-export interface GeneratedWeatherProduct {
-  timing: string;
-  category: string;
+/** Gemini에 전달하는 실제 카탈로그 제품 요약 — id 선택용. */
+export interface CatalogProduct {
+  id: string;
   name: string;
   brand: string;
+  category: string;
+  matchedIngredients: string[];
+}
+
+/**
+ * N27: 날씨 기반 제품은 Gemini가 실제 카탈로그에서 productId를 선택한다.
+ * 가상의 name/brand를 만들지 않는다 — productId로 DB 실제품에 매핑하고
+ * purchaseUrl까지 응답에 포함한다.
+ */
+export interface GeneratedWeatherProduct {
+  timing: string;
+  productId: string;
   explanation: string;
-  ingredientTags: string[];
 }
 
 interface WeatherInput {
@@ -121,11 +129,8 @@ function isGeneratedWeatherProduct(value: unknown): value is GeneratedWeatherPro
   const item = value as Record<string, unknown>;
   return (
     isNonEmptyString(item.timing) &&
-    isNonEmptyString(item.category) &&
-    isNonEmptyString(item.name) &&
-    isNonEmptyString(item.brand) &&
-    isNonEmptyString(item.explanation) &&
-    isStringArray(item.ingredientTags)
+    isNonEmptyString(item.productId) &&
+    isNonEmptyString(item.explanation)
   );
 }
 
@@ -153,33 +158,29 @@ const SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 근거 기반 추
 
 const PRODUCT_SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 근거 기반 제품 추천 작성자입니다.
 오늘의 날씨/대기질 데이터만 보고(사용자의 피부 측정값은 아직 없음), 확립된 피부과학 지식
-(자외선-광노화, 오존/미세먼지로 인한 산화 스트레스, 습도 저하와 피부장벽 손상 등)에 근거해 하루 중
-화장품을 실제로 쓰는 다음 세 상황 각각에 맞는 화장품을 정확히 하나씩, 총 3개를 추천하세요:
+(자외선-광노화, 오존/미세먼지로 인한 산화 스트레스, 습도 저하와 피부장벽 손상 등)에 근거해
+사용자에게 제공되는 **실제 제품 카탈로그**에서 하루 중 화장품을 실제로 쓰는 세 상황 각각에
+맞는 제품을 정확히 하나씩, 총 3개를 선택하세요:
 
 1. **세안 후** (timing: "세안 후") — 세안 직후 피부결을 정돈·보호하는 데 도움 되는 제품
-   (예: 토너, 에센스, 로션 등). 오늘 습도·미세먼지 등으로 인한 피부 상태를 고려하세요.
+   (토너, 에센스, 로션, 약산성 클렌저 등). 오늘 습도·미세먼지 등으로 인한 피부 상태를 고려하세요.
 2. **외출 전** (timing: "외출 전") — 오늘 자외선지수·대기질을 근거로 외출 전 미리 발라두면
-   좋은 제품 (예: 선크림, 프라이머 등).
+   좋은 제품 (선크림 등 자외선 차단 제품 우선).
 3. **외출 후 밖에 있을 때** (timing: "외출 후") — 아직 귀가하지 않고 밖에 있는 동안 휴대하며
-   틈틈이 쓰기 좋은 제품 (예: 수분 미스트, 쿠션, 블로팅 페이퍼, 립밤 등). 오늘 오존·미세먼지·
-   자외선 누적 노출을 고려하세요.
+   틈틈이 쓰기 좋은 제품 (수분 미스트, 보습 세럼 등). 오늘 오존·미세먼지·자외선 누적 노출을 고려하세요.
 
-세 상황의 제품 종류(카테고리·타입)는 서로 겹치지 않게 다양하게 고르세요 — 매번 같은 종류의
-크림/세럼만 추천하지 마세요.
+세 상황의 제품은 서로 겹치지 않게 **서로 다른 productId**를 고르세요.
 
 반드시 지킬 규칙:
-1. name/brand는 실제 존재하는 특정 상용 브랜드·제품을 언급하지 마세요. 가상의 제품명·브랜드명을
-   지어내되, 어떤 제품 종류인지 이름에서 드러나게 하세요.
+1. **가상의 제품명·브랜드명을 절대 만들지 마세요.** 아래 [제품 카탈로그]에 있는 제품의 id만
+   productId로 선택하고, 카탈로그에 없는 id를 지어내지 마세요.
 2. "진단", "치료", "질환" 등 의료적 확정 표현을 쓰지 마세요. "~에 도움될 수 있음", "~하는 경향이
    있어요" 같은 완곡한 표현만 사용하세요.
 3. 존재를 확인할 수 없는 논문·연구·기관을 인용하거나 지어내지 마세요.
-4. ingredientTags는 반드시 다음 목록에서만 골라 사용하세요 (목록 밖 성분 언급 금지): ${ALLOWED_INGREDIENTS.join(', ')}
-5. category는 그 제품의 주요 효능에 가장 가까운 것으로 고르세요: moisture(보습), elasticity(탄력),
-   brightening(미백), barrier(장벽 강화).
-6. explanation에는 오늘 날씨/대기질의 어떤 수치 때문에 이 상황에 이 제품·성분이 도움될 수 있는지
-   구체적인 근거를 담으세요.
-7. 톤은 매일 쓰는 날씨 앱처럼 친근하고 부담스럽지 않게 작성하세요.
-8. 출력은 지정된 JSON 스키마를 그대로 따르고, timing은 3개 각각 정확히 한 번씩만 사용하세요.`;
+4. explanation에는 오늘 날씨/대기질의 어떤 수치 때문에 이 상황에 이 제품이 도움될 수 있는지
+   구체적인 근거를 담으세요. (선택한 제품의 matchedIngredients를 근거로 삼아도 좋습니다.)
+5. 톤은 매일 쓰는 날씨 앱처럼 친근하고 부담스럽지 않게 작성하세요.
+6. 출력은 지정된 JSON 스키마를 그대로 따르고, timing은 3개 각각 정확히 한 번씩만 사용하세요.`;
 
 @Injectable()
 export class GeminiClient {
@@ -285,14 +286,16 @@ export class GeminiClient {
   }
 
   /**
-   * 날씨 기반(A등급) 제품 생성 — 날씨만으로 세 상황별 화장품을 추천.
-   * 서버가 grade=A, timing/category 유효성을 강제한다.
+   * 날씨 기반(A등급) 제품 생성 — 날씨만으로 세 상황별 **실제 카탈로그 제품**을 선택.
+   * N27: Gemini는 카탈로그에서 productId를 고르고, 가상 제품명/브랜드는 만들지 않는다.
+   * 실제 제품 매핑·구매 URL 포함은 ProductService가 담당한다.
    */
   async generateWeatherProducts(
     weather: WeatherInput,
+    catalog: CatalogProduct[],
   ): Promise<GeneratedWeatherProduct[]> {
     if (this.mockEnabled) {
-      return this.mockWeatherProducts();
+      return this.mockWeatherProducts(catalog);
     }
     if (!this.apiKey) {
       throw new GeminiUnavailable('GEMINI_API_KEY not configured');
@@ -303,7 +306,11 @@ export class GeminiClient {
       contents: [
         {
           role: 'user',
-          parts: [{ text: `[오늘 날씨/대기질]\n${JSON.stringify(weather)}` }],
+          parts: [
+            {
+              text: `[오늘 날씨/대기질]\n${JSON.stringify(weather)}\n\n[제품 카탈로그]\n${JSON.stringify(catalog)}`,
+            },
+          ],
         },
       ],
       generationConfig: {
@@ -322,23 +329,19 @@ export class GeminiClient {
       throw new GeminiUnavailable('Gemini returned an invalid product shape');
     }
 
-    // timing별 정확히 1개만 남기고, category/성분 화이트리스트 검증
+    // timing별 정확히 1개만 남긴다. productId의 카탈로그 존재 여부는 서비스가 판정하고,
+    // 카탈로그에 없는 id를 골랐다면 ProductService가 규칙 기반 실제품 fallback으로 채운다 (N27).
     const seenTimings = new Set<string>();
     const results: GeneratedWeatherProduct[] = [];
     for (const item of items) {
       const timing = item.timing;
-      const category = item.category;
       if (
         !(PRODUCT_TIMINGS as readonly string[]).includes(timing) ||
-        seenTimings.has(timing) ||
-        !(PRODUCT_CATEGORIES as readonly string[]).includes(category)
+        seenTimings.has(timing)
       ) {
         continue;
       }
       seenTimings.add(timing);
-      item.ingredientTags = (item.ingredientTags ?? []).filter((t) =>
-        (ALLOWED_INGREDIENTS as readonly string[]).includes(t),
-      );
       results.push(item);
     }
 
@@ -432,33 +435,39 @@ export class GeminiClient {
     ];
   }
 
-  private mockWeatherProducts(): GeneratedWeatherProduct[] {
-    return [
-      {
-        timing: '세안 후',
-        category: 'barrier',
-        name: '릴렉싱 리커버리 토너',
-        brand: 'LabSkin',
-        explanation: '오늘 미세먼지 수치가 보통이라 세안 직후 피부결 정돈에 도움되는 보습 토너를 추천해요.',
-        ingredientTags: ['히알루론산', '나이아신아마이드'],
-      },
-      {
-        timing: '외출 전',
-        category: 'barrier',
-        name: '데일리 실드 선크림',
-        brand: 'LabSkin',
-        explanation: '오늘 자외선지수에 맞춰 외출 전 발라두면 자외선 노출 관리에 도움될 수 있어요.',
-        ingredientTags: ['징크옥사이드', '나이아신아마이드'],
-      },
-      {
-        timing: '외출 후',
-        category: 'moisture',
-        name: '휴대용 수분 미스트',
-        brand: 'LabSkin',
-        explanation: '오존·미세먼지 누적 노출 환경에서 틈틈이 수분을 보충해 피부 건조감을 낮추는 데 도움될 수 있어요.',
-        ingredientTags: ['판테놀', '센텔라'],
-      },
-    ];
+  /**
+   * N27 개발용 mock — 가상 제품을 만들지 않고 전달받은 실제 카탈로그에서 상황별로 고른다.
+   * 카탈로그가 비어 있으면 빈 배열(서비스가 503 처리).
+   */
+  private mockWeatherProducts(catalog: CatalogProduct[]): GeneratedWeatherProduct[] {
+    const hasIngredient = (p: CatalogProduct, tag: string) =>
+      p.matchedIngredients.includes(tag);
+    const used = new Set<string>();
+    const pick = (
+      timing: string,
+      predicate: (p: CatalogProduct) => boolean,
+    ): GeneratedWeatherProduct | null => {
+      const p = catalog.find((c) => predicate(c) && !used.has(c.id));
+      if (!p) return null;
+      used.add(p.id);
+      return {
+        timing,
+        productId: p.id,
+        explanation: `${timing} 시점의 오늘 날씨(자외선지수·대기질)를 고려해 고른 실제 제품이에요. 피부 상태 유지에 도움될 수 있어요.`,
+      };
+    };
+
+    const results: GeneratedWeatherProduct[] = [
+      pick('세안 후', (p) =>
+        p.category === 'barrier' ? hasIngredient(p, '약산성 클렌저') : false,
+      ) ?? pick('세안 후', (p) => p.category === 'moisture'),
+      pick('외출 전', (p) =>
+        p.category === 'barrier' ? hasIngredient(p, '징크옥사이드') : false,
+      ) ?? pick('외출 전', (p) => p.category === 'barrier'),
+      pick('외출 후', (p) => p.category === 'moisture'),
+    ].filter((x): x is GeneratedWeatherProduct => x !== null);
+
+    return results;
   }
 }
 
@@ -484,12 +493,9 @@ const PRODUCT_RESPONSE_SCHEMA = {
     type: 'OBJECT',
     properties: {
       timing: { type: 'STRING', enum: [...PRODUCT_TIMINGS] },
-      category: { type: 'STRING', enum: [...PRODUCT_CATEGORIES] },
-      name: { type: 'STRING' },
-      brand: { type: 'STRING' },
+      productId: { type: 'STRING' },
       explanation: { type: 'STRING' },
-      ingredientTags: { type: 'ARRAY', items: { type: 'STRING' } },
     },
-    required: ['timing', 'category', 'name', 'brand', 'explanation', 'ingredientTags'],
+    required: ['timing', 'productId', 'explanation'],
   },
 } as const;

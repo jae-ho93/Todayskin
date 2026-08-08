@@ -177,7 +177,7 @@ describe('RecommendationService', () => {
         {
           id: 'prod-4',
           name: '세라마이드 리페어 밤',
-          brand: 'Greenfield',
+          brand: '일리윤',
           imageUri: null,
           matchedGrade: 'B',
           matchedIngredients: ['세라마이드', '시어버터'],

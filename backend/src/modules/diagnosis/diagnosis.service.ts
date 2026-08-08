@@ -684,6 +684,7 @@ export class DiagnosisService {
         name: string;
         brand: string;
         imageUri: string | null;
+        purchaseUrl: string | null;
         category: string;
         reason: string | null;
         timing: string | null;
@@ -705,6 +706,7 @@ export class DiagnosisService {
       p.name = rp.product.name;
       p.brand = rp.product.brand;
       p.imageUri = rp.product.imageUri;
+      p.purchaseUrl = rp.product.purchaseUrl;
       p.category = rp.product.category;
       p.reason = rp.product.reason;
       p.timing = rp.product.timing;

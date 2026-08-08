@@ -1,5 +1,6 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { LINKS, PRODUCTS, TEMPLATES } from '../prisma/seed-data';
 
 /**
  * Migration/Seed 멱등성 테스트 (T13).
@@ -34,78 +35,19 @@ describe('Migration & Seed (e2e)', () => {
 
   /**
    * seed.ts 로직을 인라인으로 재현해 멱등성을 검증한다.
+   * 데이터는 seed-data.ts(실제품 큐레이션, N27)를 단일 소스로 사용한다.
    * (별도 프로세스로 npx prisma db seed를 실행하는 것은 느리고 불안정하므로
    *  동일한 upsert 로직을 직접 실행한다.)
    */
   async function runSeedInline(): Promise<void> {
-    const templates: Prisma.RecommendationTemplateCreateInput[] = [
-      {
-        id: 'rec-1',
-        title: '오늘은 자외선 차단제를 2~3시간마다 재도포해 주세요',
-        grade: 'A',
-        sourceLabel: '대한피부과학회 자외선 가이드라인',
-        explanation: '오늘 자외선지수는 8(매우 높음)로 측정되었습니다.',
-        observationalNote: null,
-        ingredientTags: ['SPF50+', '징크옥사이드'],
-        timing: null,
-      },
-    ];
-
-    const products: Prisma.ProductCreateInput[] = [
-      {
-        id: 'prod-1',
-        name: '데일리 UV 디펜스 선크림',
-        brand: 'Skinlab',
-        imageUri: null,
-        matchedGrade: 'A',
-        matchedIngredients: ['징크옥사이드', '나이아신아마이드'],
-        category: 'barrier',
-        reason: null,
-        timing: null,
-      },
-      {
-        id: 'prod-2',
-        name: '퓨어 클렌징 오일',
-        brand: 'Skinlab',
-        imageUri: null,
-        matchedGrade: 'B',
-        matchedIngredients: ['호호바오일'],
-        category: 'barrier',
-        reason: null,
-        timing: null,
-      },
-      {
-        id: 'prod-3',
-        name: '센텔라 진정 크림',
-        brand: 'Greenfield',
-        imageUri: null,
-        matchedGrade: 'C',
-        matchedIngredients: ['센텔라', '판테놀'],
-        category: 'moisture',
-        reason: null,
-        timing: null,
-      },
-      {
-        id: 'prod-4',
-        name: '세라마이드 리페어 밤',
-        brand: 'Greenfield',
-        imageUri: null,
-        matchedGrade: 'B',
-        matchedIngredients: ['세라마이드', '시어버터'],
-        category: 'moisture',
-        reason: null,
-        timing: null,
-      },
-    ];
-
-    for (const t of templates) {
+    for (const t of TEMPLATES) {
       await prisma.recommendationTemplate.upsert({
         where: { id: t.id },
         update: { ...t },
         create: { ...t },
       });
     }
-    for (const p of products) {
+    for (const p of PRODUCTS) {
       await prisma.product.upsert({
         where: { id: p.id },
         update: { ...p },
@@ -115,16 +57,20 @@ describe('Migration & Seed (e2e)', () => {
     // N20: 템플릿-제품 연결도 시드 로직과 동일하게 재현한다.
     // (beforeAll이 템플릿/제품을 삭제하면 링크가 Cascade로 함께 지워지므로,
     //  재시드로 복원하지 않으면 이후 e2e의 관련 제품 단언이 실패한다.)
-    await prisma.recommendationProduct.upsert({
-      where: { templateId_productId: { templateId: 'rec-1', productId: 'prod-1' } },
-      update: {},
-      create: {
-        templateId: 'rec-1',
-        recommendationId: null,
-        productId: 'prod-1',
-        displayOrder: 0,
-      },
-    });
+    for (const l of LINKS) {
+      await prisma.recommendationProduct.upsert({
+        where: {
+          templateId_productId: { templateId: l.templateId, productId: l.productId },
+        },
+        update: { displayOrder: l.displayOrder },
+        create: {
+          templateId: l.templateId,
+          recommendationId: null,
+          productId: l.productId,
+          displayOrder: l.displayOrder,
+        },
+      });
+    }
   }
 
   describeOrSkip('스키마 무결성', () => {
@@ -180,13 +126,13 @@ describe('Migration & Seed (e2e)', () => {
   });
 
   describeOrSkip('Seed 멱등성', () => {
-    it('첫 seed 실행 후 템플릿 1개, 제품 4개, 링크 1개가 존재한다', async () => {
+    it('첫 seed 실행 후 템플릿 1개, 실제품 30+, 링크 1개가 존재한다 (N24/N27)', async () => {
       await runSeedInline();
       const templateCount = await prisma.recommendationTemplate.count();
       const productCount = await prisma.product.count();
       const linkCount = await prisma.recommendationProduct.count();
       expect(templateCount).toBe(1);
-      expect(productCount).toBe(4);
+      expect(productCount).toBeGreaterThanOrEqual(30);
       expect(linkCount).toBe(1);
     });
 
@@ -195,7 +141,7 @@ describe('Migration & Seed (e2e)', () => {
       const templateCount = await prisma.recommendationTemplate.count();
       const productCount = await prisma.product.count();
       expect(templateCount).toBe(1);
-      expect(productCount).toBe(4);
+      expect(productCount).toBeGreaterThanOrEqual(30);
     });
 
     it('seed된 템플릿은 A등급 고정 문구를 갖는다', async () => {
@@ -207,11 +153,18 @@ describe('Migration & Seed (e2e)', () => {
       expect(rec1!.sourceLabel).toContain('자외선');
     });
 
-    it('seed된 제품 카탈로그는 카테고리 분포를 갖는다', async () => {
+    it('seed된 제품은 실제품만 — 허구 브랜드 없음 + purchaseUrl 존재 (N27)', async () => {
       const products = await prisma.product.findMany();
       const categories = new Set(products.map((p) => p.category));
       expect(categories.has('barrier')).toBe(true);
       expect(categories.has('moisture')).toBe(true);
+      // 허구 브랜드 제거 검증
+      for (const p of products) {
+        expect(p.brand).not.toBe('Skinlab');
+        expect(p.brand).not.toBe('Greenfield');
+        expect(p.purchaseUrl).toBeTruthy();
+        expect(p.purchaseUrl).toMatch(/^https?:\/\//);
+      }
     });
   });
 });
