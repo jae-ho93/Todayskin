@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  Patch,
   Post,
   Req,
   UseGuards,
@@ -12,6 +13,7 @@ import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
+import { UpdateMeDto } from './dto/update-me.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { TokenResponseDto } from './dto/token-response.dto';
 import { UserResponseDto } from './dto/user-response.dto';
@@ -62,6 +64,23 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   async me(@CurrentUser() user: JwtPayload): Promise<UserResponseDto> {
     return this.authService.getMe(user.sub);
+  }
+
+  @Patch('me')
+  @ApiOperation({
+    summary: '내 프로필 수정 (N28)',
+    description:
+      'name, gender만 수정 가능. phoneNumber 변경은 OTP 본인확인이 필요해 범위 밖. ' +
+      '소유자 본인(JWT)만 수정할 수 있고 GET /auth/me와 동일한 형태를 반환한다.',
+  })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(200)
+  async updateMe(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: UpdateMeDto,
+  ): Promise<UserResponseDto> {
+    return this.authService.updateMe(user.sub, dto);
   }
 
   @Post('withdraw')

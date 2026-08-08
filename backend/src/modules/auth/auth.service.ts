@@ -13,6 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
+import { UpdateMeDto } from './dto/update-me.dto';
 import { TokenResponseDto } from './dto/token-response.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { Gender } from './enums/gender.enum';
@@ -228,6 +229,37 @@ export class AuthService {
       throw new NotFoundException('사용자를 찾을 수 없습니다');
     }
     return this.toUserResponse(user);
+  }
+
+  /**
+   * N28: 내 프로필 수정 (PATCH /auth/me).
+   * name, gender만 수정한다. 소유자는 JWT(sub)로 보장되고, 존재하지 않는
+   * 사용자(또는 탈퇴)는 404. 수정 필드가 없으면 400.
+   * GET /auth/me와 동일한 UserResponseDto 형태를 반환한다.
+   */
+  async updateMe(userId: number, dto: UpdateMeDto): Promise<UserResponseDto> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user || user.deletedAt) {
+      throw new NotFoundException('사용자를 찾을 수 없습니다');
+    }
+
+    const hasChanges = dto.name !== undefined || dto.gender !== undefined;
+    if (!hasChanges) {
+      throw new BadRequestException('수정할 내용이 없습니다 (name 또는 gender)');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        name: dto.name !== undefined ? dto.name : undefined,
+        // gender: null이면 미선택으로 초기화한다.
+        gender: dto.gender !== undefined ? (dto.gender ?? null) : undefined,
+      },
+    });
+
+    return this.toUserResponse(updated);
   }
 
   // ── 내부 헬퍼 ──────────────────────────────────
