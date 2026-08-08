@@ -20,14 +20,6 @@
   <a href="https://github.com/features/actions"><img src="https://img.shields.io/badge/GitHub%20Actions-CI%2FCD-2088FF?style=for-the-badge&logo=githubactions&logoColor=white" alt="GitHub Actions"></a>
 </p>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/T0--T14-완료-38A169?style=flat-square" alt="T0-T14 done">
-  <img src="https://img.shields.io/badge/N0--N22-완료-38A169?style=flat-square" alt="N0-N22 done">
-  <img src="https://img.shields.io/badge/N24--N34-완료·API%20freeze-38A169?style=flat-square" alt="N24-N34 done API freeze">
-  <img src="https://img.shields.io/badge/FE%20F0--F16-제품%20웨이브-D69E2E?style=flat-square" alt="FE F0-F16 wave">
-  <img src="https://img.shields.io/badge/N16-AWS%20첫%20배포%20별도-D69E2E?style=flat-square" alt="N16 AWS deploy separate">
-</p>
-
 ---
 
 ## 제품이 하는 일
