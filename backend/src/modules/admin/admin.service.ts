@@ -45,7 +45,8 @@ export class AdminService {
         id: u.id,
         phoneNumber: u.phoneNumber,
         name: u.name,
-        birthDate: u.birthDate.toISOString().slice(0, 10),
+        // N33: 소셜 계정은 생년월일이 null일 수 있다.
+        birthDate: u.birthDate ? u.birthDate.toISOString().slice(0, 10) : null,
         role: u.role as Role,
         createdAt: u.createdAt.toISOString(),
       })),
@@ -101,7 +102,9 @@ export class AdminService {
       id: updated.id,
       phoneNumber: updated.phoneNumber,
       name: updated.name,
-      birthDate: updated.birthDate.toISOString().slice(0, 10),
+      birthDate: updated.birthDate
+        ? updated.birthDate.toISOString().slice(0, 10)
+        : null,
       role: updated.role as Role,
       createdAt: updated.createdAt.toISOString(),
     };

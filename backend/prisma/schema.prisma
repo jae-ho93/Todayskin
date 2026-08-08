@@ -28,6 +28,7 @@ datasource db {
 // Recommendation.diagnosis      | Diagnosis     | SetNull  | 진단 삭제 후에도 추천 문구 보존 가능
 // Recommendation.template       | Template      | Restrict | 전역 템플릿 삭제 방지(기본 Restrict)
 // RecommendationProduct.*       | Rec/Product   | Cascade  | 중간 테이블
+// SocialAccount.user            | User          | Cascade  | 소셜 연결은 사용자 종속
 // ───────────────────────────────────────────────────
 
 // ── 권한 ──────────────────────────────────────────
@@ -39,9 +40,12 @@ enum Role {
 // ── 회원 ──────────────────────────────────────────
 model User {
   id          Int      @id @default(autoincrement())
-  phoneNumber String   @unique @map("phone_number")
+  // N33: 소셜 로그인 계정은 전화번호 없이 생성되고 온보딩에서 연결한다.
+  // 전화 가입/로그인은 여전히 이 값으로 unique 조회한다 (nullable unique — NULL 허용).
+  phoneNumber String?  @unique @map("phone_number")
   name        String
-  birthDate   DateTime @map("birth_date")
+  // N33: 소셜 계정은 생년월일 없이 생성, 온보딩(전화 연결) 시 입력받는다.
+  birthDate   DateTime? @map("birth_date")
   // 선택 입력. 모델 학습 전에는 추천 로직에 임의로 사용하지 않는다.
   gender      Gender?
   // T3에서 access token은 User 테이블에 저장하지 않고 RefreshSession으로 분리한다.
@@ -60,6 +64,7 @@ model User {
   consentRecords         ConsentRecord[]
   asyncJobs              AsyncJob[]
   aiCallReservations     AiCallReservation[]
+  socialAccounts         SocialAccount[]
 
   auditLogs              AuditLog[]
 
@@ -451,6 +456,27 @@ model RecommendationProduct {
   @@index([templateId])
   @@index([productId])
   @@map("recommendation_products")
+}
+
+// ── 소셜 로그인 (N33) ─────────────────────────────
+// 소셜 계정 ↔ Todayskin 계정 연결. provider + providerUserId unique로
+// 같은 소셜 계정이 여러 Todayskin 계정을 만들지 않는다.
+model SocialAccount {
+  id             Int      @id @default(autoincrement())
+  userId         Int      @map("user_id")
+  // kakao | google | apple
+  provider       String
+  // 제공자별 사용자 식별자 (kakao: id, google/apple: id_token sub)
+  providerUserId String   @map("provider_user_id")
+  // 제공자가 알려준 이메일 (선택, 사용자 동의에 따라 없을 수 있음)
+  email          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+  @@map("social_accounts")
 }
 
 // ── 알림 설정 ──────────────────────────────────────

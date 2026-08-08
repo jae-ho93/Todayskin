@@ -14,6 +14,9 @@ import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
+import { SocialLoginDto } from './dto/social-login.dto';
+import { SocialLoginResponseDto } from './dto/social-login-response.dto';
+import { LinkPhoneDto } from './dto/link-phone.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { TokenResponseDto } from './dto/token-response.dto';
 import { UserResponseDto } from './dto/user-response.dto';
@@ -40,6 +43,38 @@ export class AuthController {
   // User 필드 + accessToken + refreshToken + expiresIn을 함께 반환한다.
   async login(@Body() dto: LoginDto): Promise<UserResponseDto> {
     return this.authService.login(dto);
+  }
+
+  @Post('social')
+  @ApiOperation({
+    summary: '소셜 로그인 (Kakao·Google·Apple) — N33',
+    description:
+      '제공자 토큰을 서버에서 검증한다 (kakao: access token REST 검증, google/apple: id_token JWKS RS256 서명 검증). ' +
+      '연결된 계정이 있으면 기존 refresh 세션으로 로그인, 미가입이면 계정을 생성하고 isNewUser=true로 온보딩(동의 + 선택 전화 연결)을 안내한다. ' +
+      '비밀번호 API는 없으며 세션은 기존 /auth/refresh 흐름을 그대로 사용한다.',
+  })
+  @HttpCode(200)
+  async socialLogin(
+    @Body() dto: SocialLoginDto,
+  ): Promise<SocialLoginResponseDto> {
+    return this.authService.socialLogin(dto);
+  }
+
+  @Post('social/link-phone')
+  @ApiOperation({
+    summary: '소셜 계정 전화번호 연결 (N33 온보딩)',
+    description:
+      'OTP(social_link) 본인확인 후 소셜 계정에 전화번호(+선택 생년월일)를 연결한다. ' +
+      '이미 다른 계정이 사용 중인 번호는 409. 연결 전까지 phoneNumber/birthDate는 null이다.',
+  })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(200)
+  async linkPhone(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: LinkPhoneDto,
+  ): Promise<UserResponseDto> {
+    return this.authService.linkPhone(user.sub, dto);
   }
 
   @Post('logout')

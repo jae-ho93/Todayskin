@@ -8,7 +8,7 @@ import { Gender } from '../enums/gender.enum';
  * 하이픈은 선택이며 서버 저장 시 제거한다.
  * 예: 010-1234-5678, 01012345678
  */
-const PHONE_PATTERN = /^01[016789]-?\d{3,4}-?\d{4}$/;
+export const PHONE_PATTERN = /^01[016789]-?\d{3,4}-?\d{4}$/;
 
 export class SignupDto {
   @ApiProperty({ example: '010-1234-5678', description: '휴대폰 번호' })

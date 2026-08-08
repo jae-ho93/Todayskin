@@ -14,6 +14,7 @@ import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { OtpService } from '../otp/otp.service';
 import { JwtKeyService } from './jwt-key.service';
+import { SocialAuthService } from './social/social-auth.service';
 
 /**
  * AuthService 단위 테스트 — 실제 PostgreSQL test DB(todayskin_test)를 사용한다.
@@ -86,6 +87,17 @@ describeWithDb('AuthService', () => {
             getVerifyKey: async () => null,
           },
         },
+        {
+          // N33: 소셜 토큰 검증은 단위 테스트에서 mock으로 대체.
+          provide: SocialAuthService,
+          useValue: {
+            verify: jest.fn().mockResolvedValue({
+              providerUserId: 'kakao-test-1',
+              name: '카카오 테스터',
+              email: 'kakao@test.dev',
+            }),
+          },
+        },
       ],
     }).compile();
 
@@ -95,6 +107,9 @@ describeWithDb('AuthService', () => {
   });
 
   afterAll(async () => {
+    // N33: 소셜 계정(phoneNumber null) 정리.
+    await prisma.socialAccount.deleteMany({}).catch(() => undefined);
+    await prisma.user.deleteMany({ where: { phoneNumber: null } }).catch(() => undefined);
     await prisma?.$disconnect();
     await moduleRef?.close();
   });
@@ -256,6 +271,66 @@ describeWithDb('AuthService', () => {
     await expect(service.refresh(refreshToken)).rejects.toThrow(
       UnauthorizedException,
     );
+  });
+
+  it('N33 socialLogin - 미가입 소셜 계정 생성 + isNewUser=true + 세션 발급', async () => {
+    const result = await service.socialLogin({
+      provider: 'kakao',
+      accessToken: 'kakao-token',
+    });
+
+    expect(result.isNewUser).toBe(true);
+    expect(result.id).toBeDefined();
+    // 온보딩 전까지 phone/birthDate null.
+    expect(result.phoneNumber).toBeNull();
+    expect(result.birthDate).toBeNull();
+    expect(result.name).toBe('카카오 테스터');
+    expect(result.accessToken).toBeDefined();
+    expect(result.refreshToken).toBeDefined();
+
+    // SocialAccount가 생성되어 같은 소셜 계정으로는 여러 계정이 생기지 않는다.
+    const accounts = await prisma.socialAccount.count({ where: { userId: result.id } });
+    expect(accounts).toBe(1);
+  });
+
+  it('N33 socialLogin - 기존 소셜 계정은 isNewUser=false로 같은 사용자 로그인', async () => {
+    const first = await service.socialLogin({
+      provider: 'kakao',
+      accessToken: 'kakao-token',
+    });
+    const second = await service.socialLogin({
+      provider: 'kakao',
+      accessToken: 'kakao-token',
+    });
+
+    expect(second.isNewUser).toBe(false);
+    expect(second.id).toBe(first.id);
+    // 같은 사용자라도 매 로그인마다 새 세션이 발급된다.
+    expect(second.refreshToken).not.toBe(first.refreshToken);
+  });
+
+  it('N33 linkPhone - OTP 검증 후 전화번호·생년월일 연결', async () => {
+    const social = await service.socialLogin({
+      provider: 'kakao',
+      accessToken: 'kakao-token-2',
+    });
+    expect(social.phoneNumber).toBeNull();
+
+    const linked = await service.linkPhone(social.id, {
+      phoneNumber: testPhone,
+      birthDate: '1998-03-03',
+    });
+    expect(linked.phoneNumber).toBe(testPhone);
+    expect(linked.birthDate).toBe('1998-03-03');
+
+    // 이미 연결된 번호를 다른 소셜 계정이 가져가면 409.
+    const other = await service.socialLogin({
+      provider: 'google',
+      accessToken: 'google-token',
+    });
+    await expect(
+      service.linkPhone(other.id, { phoneNumber: testPhone }),
+    ).rejects.toThrow(ConflictException);
   });
 
   it('refresh - 폐기된 토큰 401', async () => {

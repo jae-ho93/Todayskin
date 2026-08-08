@@ -64,5 +64,14 @@ N33 미머지면 F15는 건너뛰고 보고 (환각 OAuth 금지)
 - `GET /auth/me`, `PATCH /auth/me` { name?, gender? }
 - `GET`/`POST /consents` (기존)
 - N33 이후: Kakao/Google/Apple 소셜 토큰 교환·세션 (Swagger). 비밀번호/찾기 API 없음
+- N33 계약 (F15 대상):
+  - `POST /auth/social` { provider: 'kakao'|'google'|'apple', accessToken } →
+    `UserResponseDto + { isNewUser }` (accessToken/refreshToken 포함)
+    - kakao: 카카오 SDK access token / google: id_token / apple: identity token
+    - `isNewUser: true` → 온보딩: 동의(기존 /consents) + 선택 전화 연결
+    - 소셜 계정은 연결 전까지 `phoneNumber`/`birthDate`가 **null** — FE 타입 nullable 처리
+  - `POST /auth/social/link-phone` { phoneNumber, birthDate? } (JWT) — OTP(`social_link`) 본인확인 후 연결,
+    사용 중 번호 409. 미연결 상태에서도 세션은 정상 동작
+  - OTP: `/otp/send|verify` purpose `'social_link'` 추가
 
 모든 Task 사이클 끝나면: 마지막 merge 확인 + 브랜치/PR URL 목록 출력.

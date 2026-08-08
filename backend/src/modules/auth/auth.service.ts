@@ -14,14 +14,21 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
+import { SocialLoginDto } from './dto/social-login.dto';
+import { SocialLoginResponseDto } from './dto/social-login-response.dto';
+import { LinkPhoneDto } from './dto/link-phone.dto';
 import { TokenResponseDto } from './dto/token-response.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { Gender } from './enums/gender.enum';
+import { SocialAuthService } from './social/social-auth.service';
 import { JwtPayload } from '../../common/strategies/jwt.strategy';
 import { OtpService } from '../otp/otp.service';
 import { OtpPurpose } from '../otp/enums/otp-purpose.enum';
 import { JwtKeyService } from './jwt-key.service';
 import { SoftDeleteService } from '../../common/soft-delete/soft-delete.service';
+import { notDeletedWhere } from '../../common/soft-delete/soft-delete.policy';
+import { SocialProviderName } from './social/social-provider.interface';
+import type { User as UserModel } from '@prisma/client';
 
 /**
  * 토큰 만료 문자열(ex: "15m", "14d")을 초 단위로 변환.
@@ -65,6 +72,7 @@ export class AuthService {
     private readonly otpService: OtpService,
     private readonly jwtKeyService: JwtKeyService,
     private readonly softDelete: SoftDeleteService,
+    private readonly socialAuth: SocialAuthService,
   ) {}
 
   async signup(dto: SignupDto): Promise<UserResponseDto> {
@@ -155,6 +163,157 @@ export class AuthService {
       tokens.refreshToken,
       tokens.expiresIn,
     );
+  }
+
+  /**
+   * N33: 소셜 로그인 (Kakao·Google·Apple).
+   *
+   * 1) 제공자 API/JWKS로 토큰을 서버 검증한다 (클라이언트 토큰 신뢰 안 함).
+   * 2) (provider, providerUserId)로 연결된 계정을 찾으면 기존 refresh 세션으로 로그인.
+   * 3) 미가입이면 User + SocialAccount를 한 transaction으로 생성하고 isNewUser=true로
+   *    온보딩(동의 + 선택 전화 연결)을 안내한다. 세션은 기존 refresh 흐름을 그대로 쓴다.
+   * 4) 같은 소셜 계정으로 여러 계정이 생기지 않도록 unique(provider, providerUserId)로
+   *    보장하고, 동시 요청 P2002는 재조회로 수렴시킨다.
+   */
+  async socialLogin(dto: SocialLoginDto): Promise<SocialLoginResponseDto> {
+    const profile = await this.socialAuth.verify(dto.provider, dto.accessToken);
+
+    const account = await this.prisma.socialAccount.findUnique({
+      where: {
+        provider_providerUserId: {
+          provider: dto.provider,
+          providerUserId: profile.providerUserId,
+        },
+      },
+    });
+
+    let user: UserModel;
+    let isNewUser = false;
+
+    if (account) {
+      const existing = await this.prisma.user.findUnique({
+        where: { id: account.userId },
+      });
+      if (!existing || existing.deletedAt) {
+        throw new ConflictException('탈퇴한 계정입니다');
+      }
+      user = existing;
+    } else {
+      try {
+        user = await this.prisma.$transaction(async (tx) => {
+          const created = await tx.user.create({
+            data: {
+              // 전화번호/생년월일은 온보딩(link-phone)에서 연결한다.
+              phoneNumber: null,
+              name:
+                profile.name?.trim() ||
+                `${this.providerLabel(dto.provider)} 회원`,
+              birthDate: null,
+            },
+          });
+          await tx.socialAccount.create({
+            data: {
+              userId: created.id,
+              provider: dto.provider,
+              providerUserId: profile.providerUserId,
+              email: profile.email,
+            },
+          });
+          return created;
+        });
+        isNewUser = true;
+      } catch (e) {
+        if (prismaErrorCode(e) === 'P2002') {
+          // 동시 요청이 먼저 같은 소셜 계정을 만들었다 — 재조회해 수렴.
+          const linked = await this.prisma.socialAccount.findUnique({
+            where: {
+              provider_providerUserId: {
+                provider: dto.provider,
+                providerUserId: profile.providerUserId,
+              },
+            },
+            include: { user: true },
+          });
+          if (!linked?.user || linked.user.deletedAt) {
+            throw new ConflictException('탈퇴한 계정입니다');
+          }
+          user = linked.user;
+        } else {
+          throw e;
+        }
+      }
+    }
+
+    // 기존 refresh 세션 흐름 그대로 — access/refresh 토큰 발급.
+    const tokens = await this.issueTokens(user.id, user.role);
+    const res = this.toUserResponse(
+      user,
+      tokens.accessToken,
+      tokens.refreshToken,
+      tokens.expiresIn,
+    );
+    return { ...res, isNewUser };
+  }
+
+  /**
+   * N33: 소셜 계정에 전화번호 연결 (온보딩).
+   * OTP(social_link) 본인확인 후 phoneNumber(+선택 birthDate)를 저장한다.
+   * 이미 다른 계정이 쓴 번호는 409. 기존 전화 가입 계정과 합병은 범위 밖.
+   */
+  async linkPhone(userId: number, dto: LinkPhoneDto): Promise<UserResponseDto> {
+    const phoneNumber = this.normalizePhone(dto.phoneNumber);
+
+    const verified = await this.otpService.isVerified(
+      phoneNumber,
+      OtpPurpose.SOCIAL_LINK,
+    );
+    if (!verified) {
+      throw new UnauthorizedException('전화번호 본인확인(OTP)이 필요합니다');
+    }
+
+    const me = await this.prisma.user.findFirst({
+      where: notDeletedWhere({ id: userId }),
+    });
+    if (!me) {
+      throw new NotFoundException('사용자를 찾을 수 없습니다');
+    }
+
+    // N28 범위 결정 유지: 전화번호 변경은 이 경로로 하지 않는다.
+    // 이미 전화번호가 연결된 계정(전화 가입자 등)은 link-phone으로 번호를 바꿀 수 없다.
+    if (me.phoneNumber && me.phoneNumber !== phoneNumber) {
+      throw new ConflictException('이미 전화번호가 연결된 계정입니다');
+    }
+
+    const existing = await this.prisma.user.findUnique({
+      where: { phoneNumber },
+    });
+    if (existing && existing.id !== userId) {
+      throw new ConflictException('이미 가입된 휴대폰 번호입니다');
+    }
+    if (existing?.deletedAt) {
+      throw new ConflictException('탈퇴한 계정입니다');
+    }
+
+    try {
+      const updated = await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          phoneNumber,
+          birthDate: dto.birthDate ? parseBirthDate(dto.birthDate) : undefined,
+        },
+      });
+      // N2 패턴: 연결 성공 후 검증 내역 소비(재사용 방지).
+      await this.otpService.consumeVerification(
+        phoneNumber,
+        OtpPurpose.SOCIAL_LINK,
+      );
+      return this.toUserResponse(updated);
+    } catch (e) {
+      if (prismaErrorCode(e) === 'P2002') {
+        throw new ConflictException('이미 가입된 휴대폰 번호입니다');
+      }
+      throw e;
+    }
   }
 
   async logout(userId: number): Promise<void> {
@@ -370,12 +529,23 @@ export class AuthService {
     return phone.trim().replace(/-/g, '');
   }
 
+  private providerLabel(provider: SocialProviderName): string {
+    switch (provider) {
+      case 'kakao':
+        return '카카오';
+      case 'google':
+        return '구글';
+      case 'apple':
+        return '애플';
+    }
+  }
+
   private toUserResponse(
     user: {
       id: number;
-      phoneNumber: string;
+      phoneNumber: string | null;
       name: string;
-      birthDate: Date;
+      birthDate: Date | null;
       gender: Gender | null;
       role: string;
       createdAt: Date;
@@ -388,7 +558,10 @@ export class AuthService {
       id: user.id,
       phoneNumber: user.phoneNumber,
       name: user.name,
-      birthDate: user.birthDate.toISOString().slice(0, 10),
+      // N33: 소셜 계정은 생년월일 입력 전까지 null.
+      birthDate: user.birthDate
+        ? user.birthDate.toISOString().slice(0, 10)
+        : null,
       gender: user.gender as Gender | null,
       createdAt: user.createdAt.toISOString(),
     };

@@ -1058,10 +1058,21 @@ Jest coverageThreshold를 반영했다.
 
 브랜치: `feature/auth-social-oauth`
 
-- [ ] Kakao / Google / Apple 토큰 검증·계정 연결·세션(기존 refresh 흐름)
-- [ ] 미가입 소셜 → 온보딩(동의·필요 시 전화 연결) 계약
-- [ ] Apple은 스토어 미배포여도 API·설정 포함 (Dev 계정은 스토어 시점에)
-- [ ] 비밀번호/찾기 API 추가 금지
+- [x] Kakao / Google / Apple 토큰 검증·계정 연결·세션(기존 refresh 흐름)
+- [x] 미가입 소셜 → 온보딩(동의·필요 시 전화 연결) 계약
+- [x] Apple은 스토어 미배포여도 API·설정 포함 (Dev 계정은 스토어 시점에)
+- [x] 비밀번호/찾기 API 추가 금지
+
+> ✅ 완료 (PR, `feature/auth-social-oauth`):
+> - `POST /auth/social` { provider: kakao|google|apple, accessToken } — 서버 검증 후 기존 refresh 세션 발급.
+>   kakao는 kapi.kakao.com/v2/user/me REST 검증, google/apple은 id_token JWKS RS256 서명 검증
+>   (node:crypto, aud/iss/exp/kid 확인, JWKS 1h 캐시).
+> - `SocialAccount` 모델(provider+providerUserId unique) + `User.phoneNumber`/`birthDate` nullable 전환
+>   (migration `20260816000001_n33_social_auth`) — 미가입 소셜은 null로 생성, `isNewUser=true`로 온보딩 안내.
+> - `POST /auth/social/link-phone` — OTP(`social_link`) 본인확인 후 전화번호(+선택 생년월일) 연결.
+> - `MOCK_SOCIAL`(mockFlag, dev/test 전용)로 e2e가 외부 API 없이 검증. `GOOGLE_CLIENT_ID`/`APPLE_BUNDLE_ID`
+>   환경변수 등록 (미설정 시 해당 제공자 요청만 명시적 401). 비밀번호/찾기 API 없음.
+> - 검증: 259 passed(unit, +14 social), tsc/lint/build 통과. e2e(가입→로그인→link-phone→409) CI 검증 예정.
 - [ ] env.registry·Swagger·실패 계약(취소·거절·만료)
 
 완료 기준: 세 제공자로 가입·로그인·세션이 동작한다.
