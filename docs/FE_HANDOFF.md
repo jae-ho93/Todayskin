@@ -1,9 +1,10 @@
-# FE Handoff Prompt (복붙용)
+# FE Handoff (복붙용)
 
 아래 구분선 안 블록을 Cursor 에이전트에 **그대로** 붙여넣는다.
 사람은 복붙만 한다. git·PR·머지는 에이전트가 한다.
 
 BE가 `rec-fast-path`·관련 API를 `main`에 올린 뒤, API freeze 상태에서 실행한다.
+(**현재 freeze 완료** — `docs/BACKEND_TASKS.md` Next 참고.)
 
 ---
 
@@ -47,8 +48,7 @@ BE가 `rec-fast-path`·관련 API를 `main`에 올린 뒤, API freeze 상태에�
 
 상세 체크리스트: `docs/FRONTEND_TASKS.md`  
 하지 말 것: F11 구독 결제, EAS, backend/ 임의 변경  
-N33 미머지면 F15는 건너뛰고 보고 (환각 OAuth 금지)  
-`rec-fast-path` 미머지면 F1/F6은 건너뛰고 보고
+N33·`rec-fast-path`는 main에 머지됨 — F1/F6/F15 선행 충족. 계약이 Swagger와 다르면 멈추고 보고.
 
 ## API 계약 (freeze)
 

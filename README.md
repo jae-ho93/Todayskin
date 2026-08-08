@@ -1,86 +1,192 @@
 # Todayskin
 
-날씨·대기질과 피부 이미지 분석을 결합해 피부 상태와 스킨케어 추천을 제공하는 Expo 모바일 애플리케이션.
+날씨·대기질과 피부 이미지 분석을 결합해 피부 상태와 스킨케어 추천을 제공하는 모바일 애플리케이션.
 
+촬영한 얼굴과 그날의 UV·미세먼지 등을 함께 보고, 실제 화장품 추천과 기록·패턴을 제공합니다.  
+이 저장소는 **프론트 · 백엔드 · 프로젝트 매니저(PM)** 가 한곳에서 협업하는 모노레포입니다.
+
+<p align="center"><b>Frontend</b></p>
 <p align="center">
   <a href="https://docs.expo.dev/versions/v54.0.0/"><img src="https://img.shields.io/badge/Expo-SDK%2054-000020?style=for-the-badge&logo=expo&logoColor=white" alt="Expo SDK 54"></a>
-  <a href="https://reactnative.dev/"><img src="https://img.shields.io/badge/React%20Native-Expo%20Router-61DAFB?style=for-the-badge&logo=react&logoColor=white" alt="React Native"></a>
+  <a href="https://reactnative.dev/"><img src="https://img.shields.io/badge/React%20Native-0.81-61DAFB?style=for-the-badge&logo=react&logoColor=white" alt="React Native"></a>
+  <a href="https://docs.expo.dev/router/introduction/"><img src="https://img.shields.io/badge/Expo%20Router-6-000020?style=for-the-badge&logo=expo&logoColor=white" alt="Expo Router"></a>
+</p>
+<p align="center"><b>Backend</b></p>
+<p align="center">
   <a href="https://nestjs.com/"><img src="https://img.shields.io/badge/NestJS-11-E0234E?style=for-the-badge&logo=nestjs&logoColor=white" alt="NestJS 11"></a>
   <a href="https://www.prisma.io/"><img src="https://img.shields.io/badge/Prisma-7-2D3748?style=for-the-badge&logo=prisma&logoColor=white" alt="Prisma 7"></a>
   <a href="https://www.postgresql.org/"><img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL"></a>
+  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-MobileNetV3-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI inference"></a>
 </p>
 <p align="center">
-  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-MobileNetV3-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI inference"></a>
   <a href="https://redis.io/"><img src="https://img.shields.io/badge/Redis-cache-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis"></a>
   <a href="https://docs.bullmq.io/"><img src="https://img.shields.io/badge/BullMQ-queue-e6484c?style=for-the-badge" alt="BullMQ"></a>
   <a href="https://aws.amazon.com/ko/fargate/"><img src="https://img.shields.io/badge/AWS-ECS%20Fargate-FF9900?style=for-the-badge&logo=amazonaws&logoColor=white" alt="AWS ECS Fargate"></a>
   <a href="https://github.com/features/actions"><img src="https://img.shields.io/badge/GitHub%20Actions-CI%2FCD-2088FF?style=for-the-badge&logo=githubactions&logoColor=white" alt="GitHub Actions"></a>
 </p>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/T0--T14-완료-38A169?style=flat-square" alt="T0-T14 done">
-  <img src="https://img.shields.io/badge/N0--N22-완료-38A169?style=flat-square" alt="N0-N22 done">
-  <img src="https://img.shields.io/badge/N24--N34-버그픽스·제품-D69E2E?style=flat-square" alt="N24-N34 bugfix wave">
-  <img src="https://img.shields.io/badge/N16-AWS%20첫%20배포%20별도-D69E2E?style=flat-square" alt="N16 AWS deploy separate">
-</p>
+---
+
+## 제품이 하는 일
+
+| 영역 | 사용자 경험 |
+|------|-------------|
+| 온보딩 · 계정 | 전화+OTP, 카카오/구글/애플 소셜, 동의·위치 |
+| 홈 · 날씨 | 현재 기상·대기질, 측정 불가 시 명시적 unavailable |
+| 진단 | 카메라 가이드 → 부위별 점수 · 결과 화면 |
+| 추천 · 제품 | 실제 화장품 + 구매 링크, 빠른 응답 후 AI 결과로 갱신 |
+| 기록 · 패턴 | 날짜별 히스토리, 랜드마크(동의 시), 개인 패턴 |
+| 설정 | 프로필 · 동의 · 알림 선호 · 탈퇴 |
+
+> 얼굴 이미지는 **저장 동의한 경우만** 암호화 보관합니다. 미동의면 추론 후 보관하지 않습니다.
 
 ---
 
-## 개요
+## 기술 스택
 
-**NestJS가 인증·동의·진단·추천·날씨·데이터 영속화**를 담당하고, **FastAPI는 이미지 추론 결과만 반환**한다. 동의한 진단 이미지만 S3에 암호화 저장하며, 미동의 이미지는 추론 후 즉시 삭제한다.
+### Frontend (앱)
+
+| | |
+|---|---|
+| 런타임 | **Expo SDK 54** · React Native 0.81 · React 19 |
+| 라우팅 · UI | Expo Router 6 · Reanimated · SVG · Safe Area |
+| 디바이스 | Camera · Image Picker · Location · AsyncStorage · Linking |
+| 언어 | TypeScript |
+
+경로: `app/` (화면) · `src/` (API client · 컴포넌트 · 훅 · 타입 · 테마)
+
+### Backend (API · BFF)
+
+| | |
+|---|---|
+| 서버 | **NestJS 11** Modular Monolith |
+| 데이터 | **PostgreSQL** · **Prisma 7** |
+| 캐시 · 큐 | **Redis** · **BullMQ** (없으면 Inline fallback) |
+| 인증 | JWT access/refresh · OTP(SMS) · 소셜 토큰 검증 |
+| 저장소 | **S3** (동의 이미지) · 감사·동의 게이트 |
+| 관측 | Pino · Sentry · Helmet · Throttler |
+
+경로: `backend/src/` — 구조 지도는 [`backend/README.md`](backend/README.md)
+
+### AI (추론만)
+
+| | |
+|---|---|
+| 서버 | **FastAPI** (`backend/inference-service/`) |
+| 모델 | MobileNetV3 + MediaPipe landmarks |
+| 경계 | 점수·등급·랜드마크만 반환 · **DB/인증/비즈니스 로직 없음** |
+
+NestJS가 호출하고 결과를 영속화합니다. 원칙: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+
+### 테스트 (로컬)
+
+| | |
+|---|---|
+| 실행 | Expo + NestJS + Docker Compose |
+| DB · 캐시 | 로컬 PostgreSQL · Redis |
+| 추론 | `MOCK_INFERENCE` 또는 Compose `inference` profile |
+| 가이드 | [`docs/SETUP.md`](docs/SETUP.md) |
+
+### 실배포 (AWS)
+
+| | |
+|---|---|
+| 컴퓨팅 | **ECS Fargate** (NestJS · FastAPI 각각) |
+| 데이터 · 스토리지 | RDS · ElastiCache(Redis) · S3 |
+| CI/CD · 시크릿 | GitHub Actions → ECR · Secrets Manager · CloudWatch |
+| 가이드 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) |
+
+---
+
+## 시스템 한눈에
 
 ```mermaid
-flowchart LR
-    APP["📱 Expo App<br/>React Native · Expo Router"] -->|REST| API["NestJS 11<br/>Modular Monolith (BFF)"]
-    API --> PG[("PostgreSQL<br/>Prisma 7")]
-    API --> REDIS[("Redis<br/>날씨 캐시 · BullMQ broker")]
-    API -->|추론 요청| AI["FastAPI<br/>MobileNetV3 추론 서버"]
-    API -->|동의 시만| S3[("S3<br/>암호화 저장")]
-    REDIS --> QUEUE["BullMQ<br/>추천 · 패턴 · 알림"]
-    subgraph AWS["AWS ECS Fargate"]
-        API
-        AI
-    end
+flowchart TB
+  subgraph Client["Frontend"]
+    APP["Mobile App<br/>촬영 · 홈 · 추천 · 기록 · 설정"]
+  end
+  subgraph Server["Backend"]
+    API["NestJS<br/>인증 · 동의 · 진단 · 추천 · 날씨"]
+    PG[("PostgreSQL")]
+    REDIS[("Redis / BullMQ")]
+    S3[("S3 — 동의 이미지")]
+  end
+  subgraph AI["Inference"]
+    INF["FastAPI<br/>MobileNetV3"]
+  end
+  APP -->|REST + JWT| API
+  API --> PG
+  API --> REDIS
+  API -->|동의 시| S3
+  API -->|이미지 바이트| INF
+  INF -->|점수 · 등급 · landmarks| API
 ```
 
-## 구성
-
-| 레이어 | 스택 | 역할 |
-|---|---|---|
-| 프론트엔드 | Expo SDK 54 · React Native · Expo Router | 온보딩, 촬영, 진단 결과, 추천, 히스토리 UI |
-| 메인 백엔드 | NestJS 11 Modular Monolith · Prisma 7 · PostgreSQL | 인증·OTP·동의·진단·추천·날씨·데이터 영속화 |
-| AI 추론 | `backend/inference-service/` FastAPI + MobileNetV3 | 이미지 → 부위별 등급/수치 추론 결과만 반환 |
-| 비동기·캐시 | Redis · BullMQ | 날씨 캐시, 추천/패턴/알림 비동기 처리 |
-| 운영 | AWS ECS Fargate · RDS · S3 · CloudWatch · GitHub Actions | CI → ECR → Fargate 배포 |
+---
 
 ## 진행 상태
 
-- ✅ **T0~T14** — 초기 구조(NestJS/Prisma/인증/진단/추천 등 MVP 기능) 완료
-- ✅ **N0~N22** — 운영 보안·SMS OTP·S3 동의·BullMQ·ECS 배포·Soft Delete·캘린더·서버 소유 날씨 계약·inference 경계 보호·외부 AI 멱등성·세션·OTP 남용 방지 등 완료
-- 🚧 **N24~N34** — 실기기 버그픽스·실제품 카탈로그·`rec-fast-path`·소셜 로그인·설정 계약 (상세: [`docs/BACKEND_TASKS.md`](docs/BACKEND_TASKS.md))
-- ⏳ **N16** — AWS 운영 리소스 프로비저닝 및 첫 배포 (계정·시크릿·승인자 준비 후, 위 웨이브와 별도)
-
-프론트 작업 보드: [`docs/FRONTEND_TASKS.md`](docs/FRONTEND_TASKS.md) · FE 복붙 프롬프트: [`docs/FE_HANDOFF_PROMPT.md`](docs/FE_HANDOFF_PROMPT.md).  
-프론트에서 이미 끝난 N15/N18/N19 기록은 `docs/BACKEND_TASKS.md`의 `프론트 범위 완료 기록`에 있다. EAS(N23)·구독 결제는 보류.
-
-## 문서
-
-- [전체 설치 가이드](docs/SETUP.md)
-- [온보딩](docs/ONBOARDING.md)
-- [백엔드 아키텍처](docs/ARCHITECTURE.md)
-- [백엔드 실행과 API 개요](backend/README.md)
-- [백엔드 작업 현황과 다음 과정](docs/BACKEND_TASKS.md)
-- [프론트 작업 보드](docs/FRONTEND_TASKS.md)
-- [FE 핸드오프 프롬프트](docs/FE_HANDOFF_PROMPT.md)
-- [BE 핸드오프 프롬프트](docs/BE_HANDOFF_PROMPT.md)
-- [설계 결정](backend/decision.md)
-- [협업 규칙](CONTRIBUTING.md)
-
-## 관련 저장소
-
-- Todayskin Skin-AI (준비 중) — `backend/inference-service/`가 서빙하는 피부 진단 모델(백본 비교실험, 학습 파이프라인) 전용 저장소
+| | 상태 |
+|---|---|
+| 백엔드 MVP · 운영 기반 (T0~T14, N0~N22) | 완료 |
+| 실제품 · 추천 빠른 경로 · 소셜 · 설정 계약 (N24~N34) | 완료 · **API freeze** |
+| 프론트 제품 웨이브 (F0~F16) | **진행 예정 / 진행 중** — Task 보드 기준 |
+| AWS 첫 배포 (N16) | 계정·시크릿 준비 후 별도 |
+| EAS 스토어 · 구독 결제 | 보류 |
 
 ---
 
-<p align="center"><sub>날씨 × 피부 데이터를 결합한 개인 맞춤 스킨케어 추천 서비스</sub></p>
+## 빠른 시작
+
+```bash
+git clone https://github.com/jae-ho93/Todayskin.git
+cd Todayskin
+```
+
+전체 로컬 실행(앱 + API + DB)은 **[`docs/SETUP.md`](docs/SETUP.md)** 한 문서를 따릅니다.
+
+```bash
+# 프론트 (루트)
+cp .env.example .env && npm install && npm start
+
+# 백엔드 (별도 터미널)
+cd backend && cp .env.example .env && npm install
+docker compose up -d
+npm run prisma:generate && npm run prisma:migrate && npm run prisma:seed
+npm run start:dev
+```
+
+---
+
+## 저장소 구조
+
+```text
+Todayskin/
+├─ README.md · CONTRIBUTING.md     # GitHub 대문 · 협업 규칙
+├─ app/ · src/                     # Expo 앱
+├─ docs/                           # 문서 허브 → docs/README.md
+│  ├─ SETUP.md · ARCHITECTURE.md · DEPLOYMENT.md
+│  ├─ BACKEND_TASKS.md · FRONTEND_TASKS.md · FE_HANDOFF.md
+├─ backend/                        # NestJS + inference-service
+│  ├─ README.md                    # 모듈·디렉터리 구조 지도
+│  ├─ src/ · prisma/ · test/
+│  ├─ inference-service/
+│  └─ docker/                      # Compose · ECS task JSON (배포 본문은 docs/DEPLOYMENT.md)
+└─ ml/                             # 모델 학습 계획
+```
+
+## 문서 지도
+
+전체 목록: **[docs/README.md](docs/README.md)**
+
+| 역할 | 먼저 읽을 것 |
+|------|----------------|
+| 누구나 / 새로 합류 | 이 README → [SETUP](docs/SETUP.md) → [CONTRIBUTING](CONTRIBUTING.md) |
+| 프론트 | [FRONTEND_TASKS](docs/FRONTEND_TASKS.md) · [FE_HANDOFF](docs/FE_HANDOFF.md) · `app/`, `src/` |
+| 백엔드 | [ARCHITECTURE](docs/ARCHITECTURE.md) · [backend/README](backend/README.md) · [BACKEND_TASKS](docs/BACKEND_TASKS.md) |
+| 프로젝트 매니저 (PM) | FE/BE Task 보드 · CONTRIBUTING |
+| 인프라 | [DEPLOYMENT](docs/DEPLOYMENT.md) |
+
+---
+
+<p align="center"><sub>Todayskin — weather-aware skincare, built by FE · BE · Project Manager together</sub></p>

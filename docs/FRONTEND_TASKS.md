@@ -1,11 +1,11 @@
 # Todayskin Frontend Tasks
 
 Expo SDK 54 기준. 백엔드 규칙은 `docs/BACKEND_TASKS.md`, 협업은 `CONTRIBUTING.md` 참고.
-복붙 실행 지시서는 `docs/FE_HANDOFF_PROMPT.md`.
+복붙 실행 지시서는 `docs/FE_HANDOFF.md`.
 
 ## 운영 (이 웨이브)
 
-- BE가 실제품·`rec-fast-path`·필요 API(N24~N34 해당분)를 `main`에 올린 뒤에만 FE 시작.
+- **BE API freeze** (`docs/BACKEND_TASKS.md` Next). `rec-fast-path`·N24~N34 계약은 `main`에 있음.
 - **Task 하나 = 브랜치 하나 = PR 하나 = squash merge 후 `main` pull → 다음 Task(새 브랜치).**
 - `main`에서 작업·커밋 금지. merge 후 브랜치 삭제 금지 (`--delete-branch` 금지).
 - `backend/` 수정 금지. API를 새로 만들지 말 것. 이 문서·Swagger에 적힌 계약만 사용.
@@ -20,7 +20,7 @@ Expo SDK 54 기준. 백엔드 규칙은 `docs/BACKEND_TASKS.md`, 협업은 `CONT
 F0 → F1 → F2 → F3 → F6 → F4 → F16 → F8 → F10 → F15 → F13 → F7 → F9
 ```
 
-선행 BE: F1/F6은 **`feature/rec-fast-path` 머지 후**, F2는 N24(+N27), F15는 N33, F16은 N28(권장 N34).
+선행 BE: F1/F6·F2·F15·F16에 필요한 API는 **모두 main에 머지됨** (rec-fast-path, N24/N27, N33, N28/N34).
 
 ## Task
 

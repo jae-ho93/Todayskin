@@ -1,20 +1,19 @@
 # Todayskin Backend Tasks
 
 이 문서는 Todayskin 백엔드 구조와 운영·협업의 기준 문서다. 위치는 `docs/` (프론트 보드 `docs/FRONTEND_TASKS.md`와 동일).
-아키텍처 원칙은 `docs/ARCHITECTURE.md`, 결정 사항은 `backend/decision.md`를 따른다.
-예전 경로 `backend/BACKEND_TASKS.md`는 이동 안내 stub이다.
+아키텍처 원칙은 `docs/ARCHITECTURE.md`를 따른다.
 
 ## 목표
 
 NestJS를 메인 백엔드(BFF + 비즈니스 로직)로, FastAPI(inference-service)를 독립 AI 추론 서버로
 역할 분리한 운영 가능한 백엔드를 목표로 한다. NestJS는 Modular Monolith 구조로 auth, otp, admin,
-consent, storage, diagnosis, weather, recommendations, products, pattern, notifications, gemini, jobs
-모듈로 책임을 분리하고 모든 비즈니스 로직을 담당한다. FastAPI는 AI 모델 서빙과 피부 이미지 추론만 담당하며
+consent, storage, diagnosis, weather, recommendations, products, pattern, notifications, gemini, jobs,
+idempotency 모듈로 책임을 분리하고 모든 비즈니스 로직을 담당한다. FastAPI는 AI 모델 서빙과 피부 이미지 추론만 담당하며
 추론 결과만 NestJS로 전달한다.
 
 데이터는 PostgreSQL + Prisma(운영: AWS RDS), Redis(날씨 캐시·BullMQ broker),
 BullMQ(추천·패턴·알림 비동기)를 사용한다. Refresh Token은 PostgreSQL에 해시로 저장하고,
-현재 HTTP Rate Limit은 인스턴스 메모리 저장소를 사용한다. 이미지는 동의한 경우만 암호화해 S3에 저장하고
+HTTP Rate Limit은 Redis 분산 저장소(`THROTTLE_STORAGE=auto|redis`, N11)를 사용한다. 이미지는 동의한 경우만 암호화해 S3에 저장하고
 미동의 시 추론 후 즉시 삭제한다. 운영은 GitHub Actions → ECR → ECS Fargate 배포,
 RDS·S3·CloudWatch 연동, Pino·Sentry·Helmet·JWT·Swagger·Jest를 적용한다.
 
@@ -79,7 +78,6 @@ backend/
 
 ## 파일 매핑 (전환 완료)
 
-
 | 기존 FastAPI                 | NestJS                                         |
 | -------------------------- | ---------------------------------------------- |
 | main.py                    | main.ts, app.module.ts                         |
@@ -97,7 +95,6 @@ backend/
 | routers/recommendations.py | Recommendation/Product modules                 |
 | trend.tsx mock             | PatternController, PatternService              |
 | settings 로컬 상태             | NotificationController, NotificationService    |
-
 
 Controller는 HTTP 처리만 담당하고, 비즈니스 로직은 Service에 둔다. 외부 API는 Client,
 정책은 Policy로 분리한다. 단순 CRUD마다 Repository를 무조건 만들지는 않는다.
@@ -410,7 +407,7 @@ Recommendation(userId, diagnosisId, createdAt)
 
 Python inference-service 컨테이너와 ECS 배포는 N5에서 추가되었다.
 
-참고: Dockerfile, docker-compose backend 서비스, CI migration diff 검사 단계, 배포 전략 문서(`docker/DEPLOYMENT.md`)를 추가했다. CI는 `prisma generate`, build, 단위/E2E 테스트와 lint를 실행한다. migration diff 검사는 별도 shadow DB(`todayskin_shadow`)를 사용한다.
+참고: Dockerfile, docker-compose backend 서비스, CI migration diff 검사 단계, 배포 전략 문서(`docs/DEPLOYMENT.md`)를 추가했다. CI는 `prisma generate`, build, 단위/E2E 테스트와 lint를 실행한다. migration diff 검사는 별도 shadow DB(`todayskin_shadow`)를 사용한다.
 
 ## 데이터 설계 기준
 
@@ -438,7 +435,6 @@ Recommendation
 
 ## API 계약 기준
 
-
 | 현재 API                           | NestJS 책임                               |
 | -------------------------------- | --------------------------------------- |
 | `POST /auth/signup`              | `AuthController.signup()`               |
@@ -452,7 +448,6 @@ Recommendation
 | `POST /recommendations/generate` | `RecommendationController.generate()`   |
 | `GET /recommendations/:id`       | `RecommendationController.getById()`    |
 | `GET /products`                  | `ProductController.list()`              |
-
 
 가능하면 기존 `camelCase` 응답 필드와 `Authorization: Bearer ...` 헤더 계약을 유지합니다.
 
@@ -525,7 +520,7 @@ chore: configure backend CI workflow
 - 리뷰어가 확인할 위험 지점
 
 PR 하나는 하나의 기능 또는 하나의 설계 주제만 다룹니다. 권장 병합 방식은 `Squash and merge`입니다.
-N24~N34 / FE 웨이브에서는 `CONTRIBUTING.md`의 한시적 예외(작업자 self-merge)를 따른다.
+FE F0~F16 웨이브에서는 `CONTRIBUTING.md`의 한시적 예외(작업자 self-merge)를 따른다. BE는 API freeze.
 
 ### 코드 리뷰 기준
 
@@ -597,21 +592,17 @@ Refresh Token
 
 ## 다음 과정 (Next)
 
-> T0~~T14와 N0~~N22 구현은 완료. 실기기 테스트·제품 전략에 따른 **버그픽스/제품 웨이브(N24~N34)** 가 남아 있다.
-> N16(AWS 첫 배포)는 계정·시크릿·승인자가 준비된 뒤 **별도**로 진행한다 (이 웨이브와 병행하지 않음).
-> 4개 핵심 결정(T2-03/T3-04/T3-05/T9-03)은 decision.md에서 2026-08-07 확정. 제품·인증 추가 결정은 2026-08-08.
+> **BE 버그픽스/제품 웨이브(N24~N34) 완료 · API freeze** (main `42897d5` / PR #59~#66).
+> 다음 구현은 **FE** (`docs/FRONTEND_TASKS.md` + `docs/FE_HANDOFF.md`).
+> N16(AWS 첫 배포)는 계정·시크릿·승인자가 준비된 뒤 **별도**. EAS·구독 결제는 보류.
 >
-> **이 웨이브 운영**
-> - BE(아키텍처·계약·실제품·rec-fast-path·소셜) 먼저 → API freeze → FE는 `docs/FRONTEND_TASKS.md` + `docs/FE_HANDOFF_PROMPT.md`.
-> - Task 하나 = 브랜치 하나 = PR 하나. **예외: N29+N31+N32는 epic `feature/rec-fast-path` 한 PR.**
-> - **`main` 작업 금지.** merge 후 브랜치 **삭제 금지**. 다음 Task는 항상 새 브랜치.
-> - 리뷰어 1명 강제 **일시 해제**. 작업자가 `gh pr merge --squash`(delete 없이) 후 `main` pull → 다음 Task. (`CONTRIBUTING.md` 참고)
-> - 비밀번호·아이디/비번 찾기 신설 금지. 가상 제품·가짜 구독 카드 금지. 크롤링 없이 큐레이션 시드.
+> **FE 웨이브 운영** (BE는 freeze — 계약 변경 시 Task/Swagger 먼저)
+> - Task 하나 = 브랜치 하나 = PR 하나.
+> - **`main` 작업 금지.** merge 후 브랜치 **삭제 금지**.
+> - 리뷰어 1명 강제 **일시 해제**(FE F0~F16). `gh pr merge --squash`(`--delete-branch` 금지) 후 `main` pull → 새 브랜치.
+> - 비밀번호·아이디/비번 찾기 UI 금지. 가상 제품·가짜 구독 카드·목업 로그인 금지.
 >
-> **BE 구현 순서**: N24+N27 → **rec-fast-path(N31+N32+N29)** → N33 → (선택) N34 → freeze → FE.
-> N25·N26·N28은 경로상 독립적으로 끼워 넣을 수 있다. N30은 취소.
->
-> 프론트 완료 기록(N15/N18/N19)은 아래 `프론트 범위 완료 기록`에 보존. EAS(N23)·구독 결제는 보류.
+> 아래 Task 체크리스트는 **이력·계약 기준**으로 유지한다 (삭제하지 않음).
 
 ### N0. 운영 보안·HTTP 보호
 
@@ -698,7 +689,7 @@ S3_BUCKET 미설정 시 개발/테스트는 Memory store를 사용한다. 운영
 
 참고: `.github/workflows/deploy-ecs.yml`, `backend/docker/ecs/*.json`,
 `backend/inference-service/Dockerfile`, `RUN_MIGRATIONS_ON_START` entrypoint,
-`backend/docker/DEPLOYMENT.md`에 절차·시크릿·롤백을 정리했다.
+`docs/DEPLOYMENT.md`에 절차·시크릿·롤백을 정리했다.
 실제 AWS ECR/ECS/RDS/OIDC는 계정 시크릿 설정 후 워크플로로 실행한다.
 
 완료 기준: CI 통과 후 ECR에 이미지가 push되고, 승인 후 NestJS와 FastAPI가 각각 Fargate에 배포된다.
@@ -843,8 +834,6 @@ Jest coverageThreshold를 반영했다.
 
 완료 기준: 날씨 기반 제품 생성이 인증된 서버 데이터만 사용하고 외부 API 장애에도 명시적인 cached/unavailable 정책을 유지한다.
 
-> ✅ 완료 (PR #44, `fix/server-owned-weather-contract`): `JwtAuthGuard` 추가 + `WeatherBasedRequestDto`(lat/lon만) 도입. 서비스가 `WeatherService.getCurrentWeather` → LIVE/CACHED → UNAVAILABLE 시 최근 스냅샷(7일, 지역 우선, source=CACHED) → 없으면 503. 프론트 `api.generateWeatherProducts(coords)`로 마이그레이션. e2e: 비인증 401, Gemini 실패 503(날씨 LIVE mock), 생성 200 계약. 검증: tsc/test/build/lint/프론트 tsc 모두 통과.
-
 ### N13. inference-service 내부 경계 보호
 
 브랜치: `feature/inference-service-hardening`
@@ -857,8 +846,6 @@ Jest coverageThreshold를 반영했다.
 
 완료 기준: inference-service가 내부망 오배치나 직접 호출에도 무제한 이미지 처리 endpoint로 노출되지 않는다.
 
-> ✅ 완료 (PR, `feature/inference-service-hardening`): `X-Inference-Key`(INFERENCE_SHARED_SECRET) 내부 인증 + 미설정 시 fail-closed(503). FastAPI 업로드 상한을 NestJS와 동일(10MB/413, jpeg·png·webp/415)하게 적용. 추론 timeout(25s→503) + lock 대기/실행 시간·in-flight·status 카운터를 의존성 없는 `/metrics`(Prometheus 텍스트)로 노출. ECS SG(backend만 `/infer` 접근)·secret 주입·DEPLOYMENT 문서화. 계약 테스트(401/413/415/422/500/503/200)는 pytest로 모델 스택을 stub해 의존성 없이 실행.
-
 ### N14. 외부 AI 호출 멱등성
 
 브랜치: `refactor/external-call-idempotency`
@@ -870,8 +857,6 @@ Jest coverageThreshold를 반영했다.
 - [x] 동시 요청 테스트 추가
 
 완료 기준: 동시 재시도에서도 외부 AI 비용이 중복 발생하지 않고 DB 결과가 하나로 수렴한다.
-
-> ✅ 완료 (PR, `refactor/external-call-idempotency`): `ai_call_reservations`(unique scopeKey) 테이블로 외부 AI 호출 **전에** in-flight 예약. 진단 `diagnosis:{userId}`(완료/실패 시 release — 순수 in-flight 가드, 동시 409), 추천 `recommendation:{diagnosisId}`(성공 시 COMPLETED 보존 → 동일 결과 재반환, 실패 시 release, 동시 409). PENDING lease 60s + FAILED/만료 takeover로 stuck 예약 회수. e2e: 같은 diagnosisId 동시 요청 2건 → Gemini 1회 호출 + 200/409 검증. unit: idempotency 10 + diagnosis 3 + recommendation 6케이스.
 
 ### N16. AWS 운영 리소스 프로비저닝·첫 배포
 
@@ -937,9 +922,9 @@ Jest coverageThreshold를 반영했다.
 
 완료 기준: SMS 게이트웨이 활성화 상태에서도 임의 번호 대상 OTP 도배가 불가능하다.
 
-### N24. Product.purchaseUrl — P0
+### N24. Product.purchaseUrl
 
-브랜치: `feature/product-purchase-url` (N27과 같은 PR 권장)
+브랜치: `feature/product-purchase-url` (N27과 동일 PR 권장)
 
 - [x] Prisma `Product.purchaseUrl String?` + migration
 - [x] Product DTO/응답에 `purchaseUrl` 노출 (목록·관련 제품·weather-based)
@@ -947,11 +932,7 @@ Jest coverageThreshold를 반영했다.
 
 완료 기준: 노출되는 실제품마다 FE가 `Linking.openURL` 할 수 있는 URL이 있다.
 
-> ✅ 완료 (PR, `feature/real-product-catalog`): `Product.purchaseUrl`(migration `20260815000000_n24_product_purchase_url`)
-> + ProductDto/CalendarProductDto 노출. weather-based 응답도 실제품 + `purchaseUrl`(가상 제품 없음).
-> URL은 큐레이션 초안(Olive Young 직링크 10건 리서치 기반 + 안정적 검색 URL)이라 **배포 전 사람 검증** 필요.
-
-### N25. 날씨 수집 병렬·워밍 — P1
+### N25. 날씨 수집 병렬·워밍
 
 브랜치: `fix/weather-collect-parallel`
 
@@ -961,12 +942,7 @@ Jest coverageThreshold를 반영했다.
 
 완료 기준: 홈/날씨 첫 로드가 눈에 띄게 빨라지고 unavailable 계약이 깨지지 않는다.
 
-> ✅ 완료 (PR, `fix/weather-collect-parallel`): 기본 지역·근사표(meta) 수집은 UV+대기질을 `Promise.all`로 병렬화,
-> 좌표 수집은 근접측정소+UV 병렬 유지(대기질은 측정소 의존이라 순차). 스케줄러는 근사표 meta로
-> 측정소 조회를 생략하고 부팅 직후 즉시 1회 수집(2s 지연), `WeatherWarmupService`가 기본 지역 응답 캐시를
-> 1초 뒤 워밍(수집 전담 task 게이트 공유). 실패는 기존 계약 유지 — 목업 수치 없음.
-
-### N26. 랜드마크·저장 동의 정합 — P1
+### N26. 랜드마크·저장 동의 정합
 
 브랜치: `fix/landmarks-storage-consent`
 
@@ -976,30 +952,20 @@ Jest coverageThreshold를 반영했다.
 
 완료 기준: 저장 동의 진단에서 landmarks가 일관되게 저장·조회된다.
 
-> ✅ 완료 (PR, `fix/landmarks-storage-consent`): 영속화 조건(`storeImage && landmarks`)은 이미 정합 — 감사만.
-> 실질 수정은 **조회 노출 정합**: 저장 동의여도 이미지가 없으면(저장 실패·soft-delete·철회 잔재)
-> landmarks를 함께 숨긴다(얼굴 기하 정보는 저장된 이미지와 함께만 노출). 회귀 테스트 4건 추가
-> (동의 시 영속화 / 미동의 시 미영속화 / 이미지 soft-delete / 이미지 row 없음) + 캘린더 e2e 1건.
+### N27. 실제 화장품 카탈로그·매칭
 
-### N27. 실제 화장품 카탈로그·매칭 — P0
-
-브랜치: `feature/real-product-catalog` (N24와 함께 권장)
+브랜치: `feature/real-product-catalog` (N24와 동일 PR 권장)
 
 - [x] 허구 Skinlab/Greenfield 시드 삭제
 - [x] 실제 화장품 30~50개 큐레이션 시드 (오프라인 Gemini 초안 + 사람 검증 가능). **크롤링 없음**
 - [x] `purchaseUrl` 필수에 가깝게 채움 (N24)
-- [x] 성분 매칭: 기존 `ALLOWED_INGREDIENTS` whitelist 유지. Gemini는 가능하면 **productId 선택** 우선
+- [x] 성분 매칭: 기존 `ALLOWED_INGREDIENTS` whitelist 유지. Gemini는 가능하면 **productId** 선택 우선
 - [x] 매칭 0건 시 규칙 기반 실제품 fallback (가상 `gemini-product-*` 생성 금지)
 - [x] Gemini 담당과 선택 품질·프롬프트 조율
 
 완료 기준: 추천/날씨 제품이 DB 실제품(+purchaseUrl)만 가리키고, 허구 브랜드가 seed/응답에 없다.
 
-> ✅ 완료 (PR, `feature/real-product-catalog`): 허구 시드 삭제, 실제 화장품 33개 큐레이션 시드(`prisma/seed-data.ts`).
-> Gemini 날씨 제품 계약을 카탈로그 `productId` 선택으로 전환(가상 name/brand 생성 금지), 선택 무효/중복/매칭 0건은
-> 규칙 기반 실제품 fallback. `prisma/seed.ts`·seed-migration e2e가 seed-data를 단일 소스로 사용.
-> **남은 일**: URL 최종 검증·교체(사람), Gemini 실응답 프롬프트 튜닝은 rec-fast-path epic에서 계속.
-
-### N28. PATCH /auth/me — P1
+### N28. PATCH /auth/me
 
 브랜치: `feature/auth-patch-me`
 
@@ -1009,52 +975,47 @@ Jest coverageThreshold를 반영했다.
 
 완료 기준: 설정 프로필 수정이 서버에 반영된다.
 
-> ✅ 완료 (PR, `feature/auth-patch-me`): `PATCH /auth/me` 추가 — name/gender만 허용(phone·birthDate 금지),
-> 빈 본문 400, gender null = 미선택 초기화. 소유자는 JWT sub, 응답은 GET /auth/me와 동일한
-> UserResponseDto. Swagger + e2e 7건·unit 4건(DB 게이트, CI 실행) 추가.
+### N29. 비동기 LIVE 교체
 
-### N30. 비밀번호·아이디 찾기 — 취소
-
-> 전화+OTP 유지. 비밀번호·아이디/비번 찾기·이름+생일 찾기는 **하지 않는다**. N33 소셜로 진입 부담을 줄인다.
-
-### Epic: `feature/rec-fast-path` (N31 + N32 + N29 — 한 브랜치/한 PR)
-
-> **선행**: N24+N27 main 머지 후. 세 Task를 나눠 merge하지 말 것.
-
-#### N31. 실제품만 추천 경로 — P0
-
-- [x] weather/diagnosis 추천이 DB 실제품만 사용
-- [x] 가상 weather 제품·`gemini-product-*` 경로 제거/차단
-- [x] 응답 제품에 `purchaseUrl` 포함
-
-#### N32. Redis SWR + 규칙 FALLBACK — P0
-
-- [x] Redis SWR: hit → `source: CACHED` 즉시 실제품
-- [x] miss → 규칙 기반 실제품 `source: FALLBACK` 즉시 반환 (빈 화면·긴 동기 Gemini 대기 금지)
-- [x] stale/갱신 중 메타는 FE가 표시할 수 있게
-
-#### N29. 비동기 LIVE 교체 — P0
+브랜치: `feature/rec-fast-path` (N31+N32+N29 한 PR)
 
 - [x] FALLBACK/CACHED 응답과 함께 job enqueue (기존 jobs 모듈 활용)
 - [x] 완료 시 `source: LIVE`로 교체 가능한 결과
 - [x] `GET /jobs/:id` 계약 유지·문서화. 동기 `POST /recommendations/generate` 의존 제거는 FE(F1)와 freeze 시 합의
 
-완료 기준(epic): 첫 응답에 실제품이 즉시 오고, 이후 LIVE로 갱신되며, 가상 제품이 없다.
+완료 기준: FALLBACK/CACHED 직후 job으로 LIVE 교체가 가능하고, 가상 제품이 없다.
 
-> ✅ 완료 (PR, `feature/rec-fast-path` — N31+N32+N29 한 PR):
-> - **N31**: weather/diagnosis 추천·FALLBACK 응답 모두 DB 실제품(+`purchaseUrl`)만 사용. 가상 `gemini-product-*`
->   경로는 N27에 제거 + 이 에픽에서 FALLBACK 생성기도 실제품만(단위/e2e로 고정).
-> - **N32**: Redis SWR — `rec:fast:{userId}:{diagnosisId}` / `prod:weather:{지역}:{KST날짜}` 키.
->   hit → `source: CACHED` 즉시, stale(30분) → 재검증 job enqueue + jobId. miss → 규칙 기반 실제품
->   `source: FALLBACK` 즉시 반환(빈 화면·긴 동기 Gemini 대기 금지). `generatedAt` 메타로 FE stale 표시 지원.
-> - **N29**: `POST /recommendations/generate/fast` 신설 — FALLBACK/CACHED 응답과 함께 기존 jobs 모듈로
->   `RECOMMENDATION_GENERATE` enqueue, 완료 시 `GET /jobs/:id`에서 `{ recommendations }`(LIVE) 교체.
->   weather-based도 동일 패턴 — 신규 `WEATHER_PRODUCTS_GENERATE` job(AsyncJobType + migration), job 완료 시
->   `{ products }` + Redis SWR 갱신. job dedup(진행 중/완료 job 재사용)으로 중복 enqueue 방지.
-> - 동기 `POST /recommendations/generate` 의존 제거는 FE(F1)와 freeze 시 합의. 검증: 242 passed(unit),
->   tsc/lint/build 통과. e2e는 CI 검증 예정(로컬 Postgres 미기동).
+### N30. 비밀번호·아이디 찾기 — 취소
 
-### N33. 소셜 로그인 (Kakao · Google · Apple) — P1
+브랜치: 없음 (구현하지 않음)
+
+- [x] 전화+OTP 유지 결정
+- [x] 비밀번호·아이디/비번 찾기·이름+생일 찾기 API/UI 추가 금지
+- [x] 소셜 로그인(N33)으로 진입 부담 완화
+
+완료 기준: 비밀번호·찾기 관련 API가 없다.
+
+### N31. 실제품만 추천 경로
+
+브랜치: `feature/rec-fast-path` (N31+N32+N29 한 PR)
+
+- [x] weather/diagnosis 추천이 DB 실제품만 사용
+- [x] 가상 weather 제품·`gemini-product-*` 경로 제거/차단
+- [x] 응답 제품에 `purchaseUrl` 포함
+
+완료 기준: 추천 경로에 가상 제품이 없고 실제품+purchaseUrl만 노출된다.
+
+### N32. Redis SWR + 규칙 FALLBACK
+
+브랜치: `feature/rec-fast-path` (N31+N32+N29 한 PR)
+
+- [x] Redis SWR: hit → `source: CACHED` 즉시 실제품
+- [x] miss → 규칙 기반 실제품 `source: FALLBACK` 즉시 반환 (빈 화면·긴 동기 Gemini 대기 금지)
+- [x] stale/갱신 중 메타는 FE가 표시할 수 있게
+
+완료 기준: 첫 응답에 실제품이 즉시 오고, stale 메타로 갱신 중 표시가 가능하다.
+
+### N33. 소셜 로그인 (Kakao · Google · Apple)
 
 브랜치: `feature/auth-social-oauth`
 
@@ -1062,38 +1023,19 @@ Jest coverageThreshold를 반영했다.
 - [x] 미가입 소셜 → 온보딩(동의·필요 시 전화 연결) 계약
 - [x] Apple은 스토어 미배포여도 API·설정 포함 (Dev 계정은 스토어 시점에)
 - [x] 비밀번호/찾기 API 추가 금지
-
-> ✅ 완료 (PR, `feature/auth-social-oauth`):
-> - `POST /auth/social` { provider: kakao|google|apple, accessToken } — 서버 검증 후 기존 refresh 세션 발급.
->   kakao는 kapi.kakao.com/v2/user/me REST 검증, google/apple은 id_token JWKS RS256 서명 검증
->   (node:crypto, aud/iss/exp/kid 확인, JWKS 1h 캐시).
-> - `SocialAccount` 모델(provider+providerUserId unique) + `User.phoneNumber`/`birthDate` nullable 전환
->   (migration `20260816000001_n33_social_auth`) — 미가입 소셜은 null로 생성, `isNewUser=true`로 온보딩 안내.
-> - `POST /auth/social/link-phone` — OTP(`social_link`) 본인확인 후 전화번호(+선택 생년월일) 연결.
-> - `MOCK_SOCIAL`(mockFlag, dev/test 전용)로 e2e가 외부 API 없이 검증. `GOOGLE_CLIENT_ID`/`APPLE_BUNDLE_ID`
->   환경변수 등록 (미설정 시 해당 제공자 요청만 명시적 401). 비밀번호/찾기 API 없음.
-> - 검증: 259 passed(unit, +14 social), tsc/lint/build 통과. e2e(가입→로그인→link-phone→409) CI 검증 예정.
-- [ ] env.registry·Swagger·실패 계약(취소·거절·만료)
+- [x] env.registry·Swagger·실패 계약(취소·거절·만료)
 
 완료 기준: 세 제공자로 가입·로그인·세션이 동작한다.
 
-### N34. 설정·알림 계약 보강 (선택) — P2
+### N34. 설정·알림 계약 보강
 
 브랜치: `feature/settings-notification-contract`
 
 - [x] 푸시 미구현 구간을 FE가 거짓 토글로 오해하지 않도록 플래그/문서 (`pushDeliveryAvailable` 등)
-  - `GET/PUT /notifications/preferences` 응답에 읽기 전용 `pushDeliveryAvailable: boolean` 추가.
-  - `PUSH_DELIVERY_AVAILABLE` env.registry 등록 (기본 false). false면 알림 토글은 "선호 저장"일 뿐 실제 발송 없음.
 - [x] `morningReminder` 등 미사용 필드 정리 또는 명시적 unsupported
-  - `morningReminder`는 저장 전용이며 발송 스케줄 미구현 — Swagger description + FE 핸드오프에 명시.
-  - `pushDeliveryAvailable=false`가 모든 push 토글(마스터/UV/먼지/아침)의 실제 발송 불가를 서버 계약으로 막는다.
-- [x] F16 설정 전면 재구성과 맞춤 — FE 핸드오프(FE_HANDOFF_PROMPT.md)에 계약 명시 (F16 참고)
+- [x] F16 설정 전면 재구성과 맞춤 — FE 핸드오프에 계약 명시
 
 완료 기준: 설정 UI가 “되는 것처럼 보이는” 토글을 서버 계약으로 막을 수 있다.
-
-> ✅ 완료 (PR, `feature/settings-notification-contract`): `NotificationPreferenceDto.pushDeliveryAvailable`(읽기 전용,
-> env `PUSH_DELIVERY_AVAILABLE` 기본 false) 추가. `morningReminder`는 저장 전용·발송 스케줄 미구현으로 Swagger에 명시.
-> unit(+2), e2e(jobs-async preferences 단언) 반영.
 
 ## 프론트 범위 완료 기록 (참고용)
 

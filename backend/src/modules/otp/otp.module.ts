@@ -13,7 +13,7 @@ import { SmsOtpProvider } from './providers/sms-otp.provider';
  * - production: SmsOtpProvider (실제 SMS 게이트웨이 — 운영 공개 전 구현)
  * - 그외(dev/test): MockOtpProvider (로그만 출력)
  *
- * decision.md T3-04: 개발은 allowlisted test phone / mock OTP,
+ * OTP policy: 개발은 allowlisted test phone / mock OTP,
  * 운영은 실제 OTP + 시도/만료/재전송 제한.
  */
 @Module({
