@@ -955,11 +955,16 @@ Jest coverageThreshold를 반영했다.
 
 브랜치: `fix/weather-collect-parallel`
 
-- [ ] UV/기상관측/대기질 수집을 가능한 범위에서 병렬화
-- [ ] 콜드 스타트·스케줄러 워밍으로 첫 요청 지연 완화
-- [ ] 실패 시 기존 LIVE/CACHED/UNAVAILABLE 계약 유지 (목업 수치 금지)
+- [x] UV/기상관측/대기질 수집을 가능한 범위에서 병렬화
+- [x] 콜드 스타트·스케줄러 워밍으로 첫 요청 지연 완화
+- [x] 실패 시 기존 LIVE/CACHED/UNAVAILABLE 계약 유지 (목업 수치 금지)
 
 완료 기준: 홈/날씨 첫 로드가 눈에 띄게 빨라지고 unavailable 계약이 깨지지 않는다.
+
+> ✅ 완료 (PR, `fix/weather-collect-parallel`): 기본 지역·근사표(meta) 수집은 UV+대기질을 `Promise.all`로 병렬화,
+> 좌표 수집은 근접측정소+UV 병렬 유지(대기질은 측정소 의존이라 순차). 스케줄러는 근사표 meta로
+> 측정소 조회를 생략하고 부팅 직후 즉시 1회 수집(2s 지연), `WeatherWarmupService`가 기본 지역 응답 캐시를
+> 1초 뒤 워밍(수집 전담 task 게이트 공유). 실패는 기존 계약 유지 — 목업 수치 없음.
 
 ### N26. 랜드마크·저장 동의 정합 — P1
 

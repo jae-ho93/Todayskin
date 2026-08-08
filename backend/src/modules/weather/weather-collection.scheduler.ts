@@ -18,6 +18,13 @@ import { REGIONS } from './regions/region.registry';
  */
 const REGION_STAGGER_MS = 3_000;
 
+/**
+ * N25: 부팅 직후 첫 수집 시작 지연. 스케줄러 주기(기본 1시간)를 기다리지 않고
+ * 콜드 스타트 직후 백그라운드로 한 번 수집을 시작해 DB 히스토리를 미리 채운다.
+ * (응답 캐시 워밍은 WeatherWarmupService가 담당)
+ */
+const INITIAL_TICK_DELAY_MS = 2_000;
+
 @Injectable()
 export class WeatherCollectionScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(WeatherCollectionScheduler.name);
@@ -51,8 +58,14 @@ export class WeatherCollectionScheduler implements OnModuleInit, OnModuleDestroy
       void this.collectAllRegions();
     }, interval);
     this.timer.unref?.();
+    // N25: 콜드 스타트 워밍 — 첫 주기를 기다리지 않고 부팅 직후 한 번 수집을 시작한다.
+    // 실행은 비동기(fire-and-forget)라 부팅 경로를 막지 않는다.
+    const initialTick = setTimeout(() => {
+      void this.collectAllRegions();
+    }, INITIAL_TICK_DELAY_MS);
+    initialTick.unref?.();
     this.logger.log(
-      `Weather collection scheduler started intervalMs=${interval} regions=${REGIONS.length}`,
+      `Weather collection scheduler started intervalMs=${interval} regions=${REGIONS.length} warmup=${INITIAL_TICK_DELAY_MS}ms`,
     );
   }
 
@@ -75,7 +88,14 @@ export class WeatherCollectionScheduler implements OnModuleInit, OnModuleDestroy
     try {
       for (const region of REGIONS) {
         try {
-          await this.weatherService.getOrCreateSnapshot(region.lat, region.lon);
+          // N25: 근사표 메타를 넘겨 근접측정소 조회를 생략하고 UV+대기질을 병렬 호출한다
+          // (지역별 왕복 1회 단축 + 측정소 조회 API 호출 절약).
+          await this.weatherService.getOrCreateSnapshot(region.lat, region.lon, {
+            areaNo: region.kmaAreaNo,
+            stationName: region.airkoreaStationName,
+            regionName: region.cityName,
+            cityName: region.cityName,
+          });
           ok++;
         } catch (e) {
           failed++;

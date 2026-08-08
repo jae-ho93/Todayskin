@@ -299,6 +299,46 @@ describe('WeatherService', () => {
     expect(prisma.weatherSnapshot.create).toHaveBeenCalledTimes(1);
   });
 
+  it('N25: meta(근사표) 제공 시 근접측정소 조회를 생략하고 UV+대기질을 병렬 수집한다', async () => {
+    kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 6 }));
+    airKoreaClient.fetchAirQuality.mockResolvedValue(air({ pm25: 15 }));
+    prisma.weatherSnapshot.findFirst.mockResolvedValue(null);
+    prisma.weatherSnapshot.create.mockResolvedValue({ id: 'snap-meta' });
+
+    const result = await service.getOrCreateSnapshot(37.5, 127.0, {
+      areaNo: '1111000000',
+      stationName: '종로구',
+      regionName: '서울특별시',
+      cityName: '서울특별시',
+    });
+
+    expect(result?.id).toBe('snap-meta');
+    // 스케줄러 워밍 경로: 측정소 조회 없이 UV+대기질만 호출한다.
+    expect(stationClient.fetchNearestStation).not.toHaveBeenCalled();
+    expect(kmaClient.fetchUvIndex).toHaveBeenCalledWith('1111000000');
+    expect(airKoreaClient.fetchAirQuality).toHaveBeenCalledWith('종로구');
+    // 저장 row의 지역/측정소 메타는 전달받은 근사표 값을 사용한다.
+    const arg = prisma.weatherSnapshot.create.mock.calls[0][0];
+    expect(arg.data.regionName).toBe('서울특별시');
+    expect(arg.data.airkoreaStation).toBe('종로구');
+    expect(arg.data.kmaAreaNo).toBe('1111000000');
+  });
+
+  it('N25: 기본 지역(좌표 없음)은 UV와 대기질을 병렬로 모두 호출한다', async () => {
+    kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 5 }));
+    airKoreaClient.fetchAirQuality.mockResolvedValue(air({ pm25: 12 }));
+    prisma.weatherSnapshot.findFirst.mockResolvedValue(null);
+    prisma.weatherSnapshot.create.mockResolvedValue({ id: 'snap-default' });
+
+    const result = await service.getCurrentWeather();
+
+    expect(result.source).toBe(WeatherSource.LIVE);
+    expect(kmaClient.fetchUvIndex).toHaveBeenCalledTimes(1);
+    expect(airKoreaClient.fetchAirQuality).toHaveBeenCalledTimes(1);
+    // 기본 지역은 근접측정소 조회가 필요 없다.
+    expect(stationClient.fetchNearestStation).not.toHaveBeenCalled();
+  });
+
   it('getOrCreateSnapshot은 UNAVAILABLE이면 null을 반환한다', async () => {
     kmaClient.fetchUvIndex.mockResolvedValue(uv());
     airKoreaClient.fetchAirQuality.mockResolvedValue(air());
