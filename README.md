@@ -1,17 +1,31 @@
 # Todayskin
 
-**날씨·대기질 × 피부 진단**으로 오늘의 스킨케어를 알려 주는 모바일 앱.
+날씨·대기질과 피부 이미지 분석을 결합해 피부 상태와 스킨케어 추천을 제공하는 Expo 모바일 애플리케이션.
 
-촬영한 얼굴 이미지와 그날의 UV·미세먼지 등을 함께 보고, 실제 화장품 추천과 기록·패턴을 제공합니다.  
+촬영한 얼굴과 그날의 UV·미세먼지 등을 함께 보고, 실제 화장품 추천과 기록·패턴을 제공합니다.  
 이 저장소는 **프론트 · 백엔드 · 제품(PM)** 이 한곳에서 협업하는 모노레포입니다.
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Expo-SDK%2054-000020?style=flat-square&logo=expo&logoColor=white" alt="Expo SDK 54" />
-  <img src="https://img.shields.io/badge/React%20Native-0.81-61DAFB?style=flat-square&logo=react&logoColor=white" alt="React Native" />
-  <img src="https://img.shields.io/badge/NestJS-11-E0234E?style=flat-square&logo=nestjs&logoColor=white" alt="NestJS" />
-  <img src="https://img.shields.io/badge/FastAPI-inference-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
-  <img src="https://img.shields.io/badge/PostgreSQL-Prisma%207-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL" />
-  <img src="https://img.shields.io/badge/AWS-ECS%20Fargate-FF9900?style=flat-square&logo=amazonaws&logoColor=white" alt="AWS" />
+  <a href="https://docs.expo.dev/versions/v54.0.0/"><img src="https://img.shields.io/badge/Expo-SDK%2054-000020?style=for-the-badge&logo=expo&logoColor=white" alt="Expo SDK 54"></a>
+  <a href="https://reactnative.dev/"><img src="https://img.shields.io/badge/React%20Native-Expo%20Router-61DAFB?style=for-the-badge&logo=react&logoColor=white" alt="React Native"></a>
+  <a href="https://nestjs.com/"><img src="https://img.shields.io/badge/NestJS-11-E0234E?style=for-the-badge&logo=nestjs&logoColor=white" alt="NestJS 11"></a>
+  <a href="https://www.prisma.io/"><img src="https://img.shields.io/badge/Prisma-7-2D3748?style=for-the-badge&logo=prisma&logoColor=white" alt="Prisma 7"></a>
+  <a href="https://www.postgresql.org/"><img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL"></a>
+</p>
+<p align="center">
+  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-MobileNetV3-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI inference"></a>
+  <a href="https://redis.io/"><img src="https://img.shields.io/badge/Redis-cache-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis"></a>
+  <a href="https://docs.bullmq.io/"><img src="https://img.shields.io/badge/BullMQ-queue-e6484c?style=for-the-badge" alt="BullMQ"></a>
+  <a href="https://aws.amazon.com/ko/fargate/"><img src="https://img.shields.io/badge/AWS-ECS%20Fargate-FF9900?style=for-the-badge&logo=amazonaws&logoColor=white" alt="AWS ECS Fargate"></a>
+  <a href="https://github.com/features/actions"><img src="https://img.shields.io/badge/GitHub%20Actions-CI%2FCD-2088FF?style=for-the-badge&logo=githubactions&logoColor=white" alt="GitHub Actions"></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/T0--T14-완료-38A169?style=flat-square" alt="T0-T14 done">
+  <img src="https://img.shields.io/badge/N0--N22-완료-38A169?style=flat-square" alt="N0-N22 done">
+  <img src="https://img.shields.io/badge/N24--N34-완료·API%20freeze-38A169?style=flat-square" alt="N24-N34 done API freeze">
+  <img src="https://img.shields.io/badge/FE%20F0--F16-제품%20웨이브-D69E2E?style=flat-square" alt="FE F0-F16 wave">
+  <img src="https://img.shields.io/badge/N16-AWS%20첫%20배포%20별도-D69E2E?style=flat-square" alt="N16 AWS deploy separate">
 </p>
 
 ---
