@@ -525,7 +525,7 @@ chore: configure backend CI workflow
 - 리뷰어가 확인할 위험 지점
 
 PR 하나는 하나의 기능 또는 하나의 설계 주제만 다룹니다. 권장 병합 방식은 `Squash and merge`입니다.
-N24~N34 / FE 웨이브에서는 `CONTRIBUTING.md`의 한시적 예외(작업자 self-merge)를 따른다.
+FE F0~F16 웨이브에서는 `CONTRIBUTING.md`의 한시적 예외(작업자 self-merge)를 따른다. BE는 API freeze.
 
 ### 코드 리뷰 기준
 
@@ -597,21 +597,17 @@ Refresh Token
 
 ## 다음 과정 (Next)
 
-> T0~~T14와 N0~~N22 구현은 완료. 실기기 테스트·제품 전략에 따른 **버그픽스/제품 웨이브(N24~N34)** 가 남아 있다.
-> N16(AWS 첫 배포)는 계정·시크릿·승인자가 준비된 뒤 **별도**로 진행한다 (이 웨이브와 병행하지 않음).
-> 4개 핵심 결정(T2-03/T3-04/T3-05/T9-03)은 decision.md에서 2026-08-07 확정. 제품·인증 추가 결정은 2026-08-08.
+> **BE 버그픽스/제품 웨이브(N24~N34) 완료 · API freeze** (main `42897d5` / PR #59~#66).
+> 다음 구현은 **FE** (`docs/FRONTEND_TASKS.md` + `docs/FE_HANDOFF_PROMPT.md`).
+> N16(AWS 첫 배포)는 계정·시크릿·승인자가 준비된 뒤 **별도**. EAS·구독 결제는 보류.
 >
-> **이 웨이브 운영**
-> - BE(아키텍처·계약·실제품·rec-fast-path·소셜) 먼저 → API freeze → FE는 `docs/FRONTEND_TASKS.md` + `docs/FE_HANDOFF_PROMPT.md`.
-> - Task 하나 = 브랜치 하나 = PR 하나. **예외: N29+N31+N32는 epic `feature/rec-fast-path` 한 PR.**
-> - **`main` 작업 금지.** merge 후 브랜치 **삭제 금지**. 다음 Task는 항상 새 브랜치.
-> - 리뷰어 1명 강제 **일시 해제**. 작업자가 `gh pr merge --squash`(delete 없이) 후 `main` pull → 다음 Task. (`CONTRIBUTING.md` 참고)
-> - 비밀번호·아이디/비번 찾기 신설 금지. 가상 제품·가짜 구독 카드 금지. 크롤링 없이 큐레이션 시드.
+> **FE 웨이브 운영** (BE는 freeze — 계약 변경 시 Task/Swagger 먼저)
+> - Task 하나 = 브랜치 하나 = PR 하나.
+> - **`main` 작업 금지.** merge 후 브랜치 **삭제 금지**.
+> - 리뷰어 1명 강제 **일시 해제**(FE F0~F16). `gh pr merge --squash`(`--delete-branch` 금지) 후 `main` pull → 새 브랜치.
+> - 비밀번호·아이디/비번 찾기 UI 금지. 가상 제품·가짜 구독 카드·목업 로그인 금지.
 >
-> **BE 구현 순서**: N24+N27 → **rec-fast-path(N31+N32+N29)** → N33 → (선택) N34 → freeze → FE.
-> N25·N26·N28은 경로상 독립적으로 끼워 넣을 수 있다. N30은 취소.
->
-> 프론트 완료 기록(N15/N18/N19)은 아래 `프론트 범위 완료 기록`에 보존. EAS(N23)·구독 결제는 보류.
+> 아래 Task 체크리스트는 **이력·계약 기준**으로 유지한다 (삭제하지 않음).
 
 ### N0. 운영 보안·HTTP 보호
 
@@ -1073,7 +1069,10 @@ Jest coverageThreshold를 반영했다.
 > - `MOCK_SOCIAL`(mockFlag, dev/test 전용)로 e2e가 외부 API 없이 검증. `GOOGLE_CLIENT_ID`/`APPLE_BUNDLE_ID`
 >   환경변수 등록 (미설정 시 해당 제공자 요청만 명시적 401). 비밀번호/찾기 API 없음.
 > - 검증: 259 passed(unit, +14 social), tsc/lint/build 통과. e2e(가입→로그인→link-phone→409) CI 검증 예정.
-- [ ] env.registry·Swagger·실패 계약(취소·거절·만료)
+- [x] env.registry·Swagger·실패 계약(취소·거절·만료)
+  - `GOOGLE_CLIENT_ID` / `APPLE_BUNDLE_ID` / `MOCK_SOCIAL` registry 등록.
+  - Swagger `@ApiOperation` + DTO. 토큰 거절·만료·설정 누락 → `SocialProviderError` → 401.
+  - 클라이언트 취소는 FE UX(요청 미전송). 운영에서 mock 금지.
 
 완료 기준: 세 제공자로 가입·로그인·세션이 동작한다.
 

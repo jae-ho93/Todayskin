@@ -101,7 +101,7 @@ N8은 다음을 추가합니다.
 - `.github/workflows/deploy-ecs.yml`
 - `backend/docker/DEPLOYMENT.md`
 
-운영 migration은 앱 컨테이너가 아니라 승인된 release task에서 수행합니다. `schema.prisma` 상단의 FK 정책과 `backend/decision.md`의 보존 결정을 함께 확인합니다.
+운영 migration은 앱 컨테이너가 아니라 승인된 release task에서 수행합니다. `schema.prisma` 상단의 FK 정책과 `backend/decision.md`의 Soft Delete·보존 요약을 함께 확인합니다.
 
 ### 8) 프론트 연결
 
