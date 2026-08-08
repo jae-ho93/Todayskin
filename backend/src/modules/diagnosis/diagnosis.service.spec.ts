@@ -252,6 +252,83 @@ describe('DiagnosisService', () => {
       expect(result.id).toBe('snap-abc');
     });
 
+    it('N26: 저장 동의 시에만 landmarks를 영속화한다', async () => {
+      consentService.hasActive.mockResolvedValue(true);
+      inferenceProvider.infer.mockResolvedValue({
+        ...validInference,
+        landmarks: { version: 'mediapipe-face-landmarker-v1', points: [[0.4, 0.3]] },
+      });
+      imageStorage.storeDiagnosisImage.mockResolvedValue({ uri: 'memory://bucket/key' });
+      let captured: any;
+      prisma.$transaction.mockImplementation(async (cb: any) => {
+        const created = {
+          id: 'snap-lm',
+          userId: 1,
+          capturedAt: new Date(),
+          overallScore: 78,
+          thumbnailUri: null,
+          status: 'COMPLETED',
+          modelVersion: 'mock-v0.1.0',
+          weatherSnapshotId: null,
+        };
+        const tx = {
+          diagnosis: {
+            findFirst: jest.fn().mockResolvedValue(null),
+            create: jest.fn().mockImplementation((args: any) => {
+              captured = args;
+              return Promise.resolve(created);
+            }),
+          },
+          $executeRaw: jest.fn().mockResolvedValue(1),
+          skinMetric: { createMany: jest.fn().mockResolvedValue({ count: 6 }) },
+        };
+        return cb(tx);
+      });
+
+      await service.submit(1, validImages);
+      expect(captured.data.landmarks).toEqual({
+        version: 'mediapipe-face-landmarker-v1',
+        points: [[0.4, 0.3]],
+      });
+    });
+
+    it('N26: 미동의면 inference가 landmarks를 제공해도 저장하지 않는다', async () => {
+      // beforeEach 기본 hasActive=false (저장 미동의)
+      inferenceProvider.infer.mockResolvedValue({
+        ...validInference,
+        landmarks: { version: 'mediapipe-face-landmarker-v1', points: [[0.4, 0.3]] },
+      });
+      let captured: any;
+      prisma.$transaction.mockImplementation(async (cb: any) => {
+        const created = {
+          id: 'snap-nolm',
+          userId: 1,
+          capturedAt: new Date(),
+          overallScore: 78,
+          thumbnailUri: null,
+          status: 'COMPLETED',
+          modelVersion: 'mock-v0.1.0',
+          weatherSnapshotId: null,
+        };
+        const tx = {
+          diagnosis: {
+            findFirst: jest.fn().mockResolvedValue(null),
+            create: jest.fn().mockImplementation((args: any) => {
+              captured = args;
+              return Promise.resolve(created);
+            }),
+          },
+          $executeRaw: jest.fn().mockResolvedValue(1),
+          skinMetric: { createMany: jest.fn().mockResolvedValue({ count: 6 }) },
+        };
+        return cb(tx);
+      });
+
+      await service.submit(1, validImages);
+      expect(captured.data.landmarks).toBeUndefined();
+      expect(imageStorage.storeDiagnosisImage).not.toHaveBeenCalled();
+    });
+
     it('날씨 스냅샷 정상 시 weatherSnapshotId 연결', async () => {
       weatherService.getOrCreateSnapshot.mockResolvedValue({ id: 'ws-1' });
       let captured: any;
@@ -423,6 +500,56 @@ describe('DiagnosisService', () => {
       expect(result.date).toBe('2026-08-06');
       expect(result.diagnoses).toHaveLength(1);
       expect(result.diagnoses[0].weather?.regionName).toBe('서울특별시');
+      expect(result.diagnoses[0].image).toBeNull();
+      expect(result.diagnoses[0].landmarks).toBeNull();
+      expect(imageStorage.getPresignedUrlForDiagnosis).not.toHaveBeenCalled();
+    });
+
+    it('N26: 저장 동의지만 이미지가 soft-deleted면 image·landmarks 모두 숨긴다 (이미지 없음)', async () => {
+      consentService.hasActive.mockResolvedValue(true);
+      prisma.diagnosis.findMany.mockResolvedValue([
+        {
+          id: 'snap-deleted-img',
+          userId: 1,
+          capturedAt: new Date('2026-08-05T16:30:00.000Z'),
+          overallScore: 81,
+          status: 'COMPLETED',
+          modelVersion: 'mock-v0.1.0',
+          // DB에는 남아 있지만(감사 보존) 이미지가 삭제된 상태 — landmarks도 노출하면 안 된다.
+          landmarks: { version: 'v1', points: [[0.1, 0.2]] },
+          skinMetrics: [],
+          weatherSnapshot: null,
+          recommendations: [],
+          image: { deletedAt: new Date() },
+        },
+      ]);
+
+      const result = await service.getHistoryByDate(1, '2026-08-06');
+      expect(result.diagnoses[0].image).toBeNull();
+      expect(result.diagnoses[0].landmarks).toBeNull();
+      expect(imageStorage.getPresignedUrlForDiagnosis).not.toHaveBeenCalled();
+    });
+
+    it('N26: 저장 동의지만 이미지 row가 없으면 image·landmarks 모두 null (이미지 없음)', async () => {
+      consentService.hasActive.mockResolvedValue(true);
+      prisma.diagnosis.findMany.mockResolvedValue([
+        {
+          id: 'snap-no-img',
+          userId: 1,
+          capturedAt: new Date('2026-08-05T16:30:00.000Z'),
+          overallScore: 81,
+          status: 'COMPLETED',
+          modelVersion: 'mock-v0.1.0',
+          // 저장 실패 등으로 이미지가 아예 없는 진단 (landmarks는 잔재로 남아 있을 수 있음).
+          landmarks: { version: 'v1', points: [[0.1, 0.2]] },
+          skinMetrics: [],
+          weatherSnapshot: null,
+          recommendations: [],
+          image: null,
+        },
+      ]);
+
+      const result = await service.getHistoryByDate(1, '2026-08-06');
       expect(result.diagnoses[0].image).toBeNull();
       expect(result.diagnoses[0].landmarks).toBeNull();
       expect(imageStorage.getPresignedUrlForDiagnosis).not.toHaveBeenCalled();

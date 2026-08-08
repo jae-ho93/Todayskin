@@ -254,6 +254,8 @@ export class DiagnosisService {
           modelVersion: inference.modelVersion,
           weatherSnapshotId,
           // N8: 저장 동의 시에만 랜드마크 보존(얼굴 기하 정보).
+          // N26: 랜드마크 영속화 조건 = 저장 동의(storeImage) && 추론이 랜드마크 제공.
+          // 미동의면 DB에 아예 기록하지 않는다 (N8 미노출 계약의 근거).
           landmarks:
             storeImage && inference.landmarks
               ? (inference.landmarks as unknown as Prisma.InputJsonValue)
@@ -633,10 +635,17 @@ export class DiagnosisService {
         dto.image = signed
           ? this.toCalendarImageDto(signed)
           : null;
+        // N26: 랜드마크(얼굴 기하 정보)는 저장된 이미지와 함께만 노출한다.
+        // 이미지가 없으면(저장 실패·soft delete·철회 잔재) landmarks도 노출하지 않는다.
+        // 저장 동의 계약(diagnosis_image_storage)과 영속화·노출 조건을 일치시킨다.
+        // 노출 기준은 이미지 row 존재(hasImage)다 — presigned URL 생성 실패(일시적 스토리지
+        // 장애)로 dto.image가 null이어도 row가 있으면 landmarks는 노출한다(의도된 트레이드오프).
+        dto.landmarks = this.toLandmarksDto(d.landmarks);
       } else {
+        // 이미지 없음 → image/landmarks 모두 미노출.
         dto.image = null;
+        dto.landmarks = null;
       }
-      dto.landmarks = this.toLandmarksDto(d.landmarks);
     } else {
       dto.image = null;
       dto.landmarks = null;
