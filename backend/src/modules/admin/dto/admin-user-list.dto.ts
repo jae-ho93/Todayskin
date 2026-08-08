@@ -9,14 +9,15 @@ export class AdminUserItemDto {
   @ApiProperty()
   id!: number;
 
-  @ApiProperty()
-  phoneNumber!: string;
+  // N33: 소셜 계정은 전화번호/생년월일이 null일 수 있다.
+  @ApiProperty({ nullable: true })
+  phoneNumber!: string | null;
 
   @ApiProperty()
   name!: string;
 
-  @ApiProperty()
-  birthDate!: string;
+  @ApiProperty({ nullable: true })
+  birthDate!: string | null;
 
   @ApiPropertyOptional({ enum: Role })
   role!: Role;

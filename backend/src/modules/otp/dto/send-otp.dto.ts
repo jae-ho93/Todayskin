@@ -19,6 +19,6 @@ export class SendOtpDto {
   phoneNumber!: string;
 
   @ApiProperty({ enum: OtpPurpose, example: 'login', description: 'OTP 용도' })
-  @IsEnum(OtpPurpose, { message: 'purpose는 signup 또는 login이어야 합니다' })
+  @IsEnum(OtpPurpose, { message: 'purpose는 signup, login 또는 social_link여야 합니다' })
   purpose!: OtpPurpose;
 }

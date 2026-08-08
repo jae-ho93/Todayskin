@@ -73,6 +73,11 @@ export const ENV_REGISTRY: EnvVarDefinition[] = [
   { key: 'GEMINI_API_KEY', owner: 'ai', description: 'Gemini API key', requiredIn: 'never', secret: true },
   { key: 'GEMINI_MODEL', owner: 'ai', description: 'Gemini model id', requiredIn: 'never', safeDefault: 'gemini-flash-latest', secret: false },
   { key: 'MOCK_GEMINI', owner: 'ai', description: 'Use Gemini mock responses (dev/test only)', requiredIn: 'never', safeDefault: 'false', secret: false, mockFlag: true, expiry: '2027-01-01' },
+
+  // N33: 소셜 로그인 — 제공자 검증용 설정. 미설정 시 해당 제공자 요청만 401(명시적 실패).
+  { key: 'GOOGLE_CLIENT_ID', owner: 'auth', description: 'Google OAuth client id (id_token aud 검증)', requiredIn: 'never', safeDefault: '', secret: false },
+  { key: 'APPLE_BUNDLE_ID', owner: 'auth', description: 'Apple 번들 id (identity token aud 검증)', requiredIn: 'never', safeDefault: '', secret: false },
+  { key: 'MOCK_SOCIAL', owner: 'auth', description: '소셜 토큰 검증 mock (dev/test only)', requiredIn: 'never', safeDefault: 'false', secret: false, mockFlag: true, expiry: '2027-01-01' },
   { key: 'MOCK_INFERENCE', owner: 'diagnosis', description: 'Use mock diagnosis inference (dev/test only)', requiredIn: 'never', safeDefault: 'false', secret: false, mockFlag: true, expiry: '2027-01-01' },
   { key: 'INFERENCE_SERVICE_URL', owner: 'diagnosis', description: 'Python inference service base URL', requiredIn: 'never', secret: false },
   // N13: NestJS↔inference-service 내부망 인증 shared secret (INFERENCE_SERVICE_URL과 함께 설정).
