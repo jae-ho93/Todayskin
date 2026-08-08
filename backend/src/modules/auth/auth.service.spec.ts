@@ -1,7 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { ConflictException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthService } from './auth.service';
 import { SoftDeleteService } from '../../common/soft-delete/soft-delete.service';
@@ -155,6 +160,60 @@ describeWithDb('AuthService', () => {
   it('login - 미가입 전화번호 404', async () => {
     const dto: LoginDto = { phoneNumber: '01088888888' };
     await expect(service.login(dto)).rejects.toThrow(NotFoundException);
+  });
+
+  it('N28 updateMe - name/gender 수정 및 GET /me 형태 정합', async () => {
+    const signupRes = await service.signup({
+      phoneNumber: testPhone,
+      name: '테스터',
+      birthDate: '2000-01-01',
+      gender: 'male' as never,
+    });
+
+    const updated = await service.updateMe(signupRes.id, {
+      name: '새이름',
+      gender: 'female' as never,
+    });
+    expect(updated.id).toBe(signupRes.id);
+    expect(updated.name).toBe('새이름');
+    expect(updated.gender).toBe('female');
+    expect(updated.accessToken).toBeUndefined(); // GET /me 형태 — 토큰 없음
+
+    const me = await service.getMe(signupRes.id);
+    expect(me.name).toBe('새이름');
+    expect(me.gender).toBe('female');
+    expect(me.phoneNumber).toBe(testPhone);
+  });
+
+  it('N28 updateMe - gender null이면 미선택으로 초기화', async () => {
+    const signupRes = await service.signup({
+      phoneNumber: testPhone,
+      name: '테스터',
+      birthDate: '2000-01-01',
+      gender: 'male' as never,
+    });
+
+    const updated = await service.updateMe(signupRes.id, {
+      gender: null,
+    });
+    expect(updated.gender).toBeNull();
+  });
+
+  it('N28 updateMe - 존재하지 않는 사용자 404', async () => {
+    await expect(
+      service.updateMe(999999, { name: '새이름' }),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('N28 updateMe - 수정 필드 없으면 400', async () => {
+    const signupRes = await service.signup({
+      phoneNumber: testPhone,
+      name: '테스터',
+      birthDate: '2000-01-01',
+    });
+    await expect(service.updateMe(signupRes.id, {})).rejects.toThrow(
+      BadRequestException,
+    );
   });
 
   it('logout - 세션 폐기', async () => {

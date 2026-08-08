@@ -261,6 +261,95 @@ describe('AuthController (e2e)', () => {
     });
   });
 
+  describe('PATCH /auth/me (N28)', () => {
+    let accessToken: string;
+
+    beforeEach(async () => {
+      const signupRes = await signupWithOtp(app, testPhone, {
+        name: '이이보',
+        birthDate: '1995-05-05',
+        gender: 'male',
+      });
+      expect(signupRes.status).toBe(201);
+      accessToken = signupRes.body.accessToken;
+    });
+
+    it('토큰 없으면 401', async () => {
+      await request(app.getHttpServer())
+        .patch('/auth/me')
+        .send({ name: '새이름' })
+        .expect(401);
+    });
+
+    it('name 수정 → 200, GET /auth/me와 동일 형태', async () => {
+      const res = await request(app.getHttpServer())
+        .patch('/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ name: '새이름' })
+        .expect(200);
+      expect(res.body.id).toBeDefined();
+      expect(res.body.name).toBe('새이름');
+      expect(res.body.phoneNumber).toBe(testPhone);
+      expect(res.body.accessToken).toBeUndefined();
+
+      // GET /auth/me와 정합 — 수정된 값이 그대로 조회된다.
+      const me = await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+      expect(me.body.name).toBe('새이름');
+      expect(me.body.id).toBe(res.body.id);
+    });
+
+    it('gender 수정 → 200, null 보내면 미선택으로 초기화', async () => {
+      const res = await request(app.getHttpServer())
+        .patch('/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ gender: 'female' })
+        .expect(200);
+      expect(res.body.gender).toBe('female');
+
+      const cleared = await request(app.getHttpServer())
+        .patch('/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ gender: null })
+        .expect(200);
+      expect(cleared.body.gender).toBeNull();
+    });
+
+    it('잘못된 gender → 400', async () => {
+      await request(app.getHttpServer())
+        .patch('/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ gender: 'other' })
+        .expect(400);
+    });
+
+    it('빈 본문(수정 필드 없음) → 400', async () => {
+      await request(app.getHttpServer())
+        .patch('/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({})
+        .expect(400);
+    });
+
+    it('허용되지 않은 필드(phoneNumber) → 400 (forbidNonWhitelisted)', async () => {
+      await request(app.getHttpServer())
+        .patch('/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ phoneNumber: '01000000000' })
+        .expect(400);
+    });
+
+    it('이름 21자 → 400', async () => {
+      await request(app.getHttpServer())
+        .patch('/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ name: '가'.repeat(21) })
+        .expect(400);
+    });
+  });
+
   describe('POST /auth/refresh', () => {
     it('유효한 refresh token → 200, 새 토큰', async () => {
       await signupWithOtp(app, testPhone, {

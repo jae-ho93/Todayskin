@@ -1003,11 +1003,15 @@ Jest coverageThreshold를 반영했다.
 
 브랜치: `feature/auth-patch-me`
 
-- [ ] `PATCH /auth/me` — name, gender (phone 변경은 OTP 별도·이번 범위 밖)
-- [ ] DTO 검증, 소유자만 수정, Swagger
-- [ ] 기존 `GET /auth/me`와 응답 형태 정합
+- [x] `PATCH /auth/me` — name, gender (phone 변경은 OTP 별도·이번 범위 밖)
+- [x] DTO 검증, 소유자만 수정, Swagger
+- [x] 기존 `GET /auth/me`와 응답 형태 정합
 
 완료 기준: 설정 프로필 수정이 서버에 반영된다.
+
+> ✅ 완료 (PR, `feature/auth-patch-me`): `PATCH /auth/me` 추가 — name/gender만 허용(phone·birthDate 금지),
+> 빈 본문 400, gender null = 미선택 초기화. 소유자는 JWT sub, 응답은 GET /auth/me와 동일한
+> UserResponseDto. Swagger + e2e 7건·unit 4건(DB 게이트, CI 실행) 추가.
 
 ### N30. 비밀번호·아이디 찾기 — 취소
 
