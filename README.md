@@ -103,7 +103,7 @@ NestJS가 호출하고 결과를 영속화합니다. 원칙: [`docs/ARCHITECTURE
 ```mermaid
 flowchart TB
   subgraph Client["Frontend"]
-    APP["Expo App<br/>촬영 · 홈 · 추천 · 기록 · 설정"]
+    APP["Mobile App<br/>촬영 · 홈 · 추천 · 기록 · 설정"]
   end
   subgraph Server["Backend"]
     API["NestJS<br/>인증 · 동의 · 진단 · 추천 · 날씨"]
