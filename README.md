@@ -78,24 +78,23 @@
 
 NestJS가 호출하고 결과를 영속화합니다. 원칙: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 
-### Infra · 배포
+### 테스트 (로컬)
 
 | | |
 |---|---|
-| CI/CD | GitHub Actions → ECR → **ECS Fargate** |
-| 클라우드 | RDS · ElastiCache(Redis) · S3 · Secrets Manager · CloudWatch |
-| 로컬 | Docker Compose (Postgres · Redis · 선택적 inference) |
+| 실행 | Expo + NestJS + Docker Compose |
+| DB · 캐시 | 로컬 PostgreSQL · Redis |
+| 추론 | `MOCK_INFERENCE` 또는 Compose `inference` profile |
+| 가이드 | [`docs/SETUP.md`](docs/SETUP.md) |
 
-배포 절차: [`backend/docker/DEPLOYMENT.md`](backend/docker/DEPLOYMENT.md)
-
-### 협업 · 프로젝트 매니저 (PM)
+### 실배포 (AWS)
 
 | | |
 |---|---|
-| Task 보드 | [`docs/FRONTEND_TASKS.md`](docs/FRONTEND_TASKS.md) · [`docs/BACKEND_TASKS.md`](docs/BACKEND_TASKS.md) |
-| FE 실행 지시 | [`docs/FE_HANDOFF_PROMPT.md`](docs/FE_HANDOFF_PROMPT.md) |
-| 협업 규칙 | [`CONTRIBUTING.md`](CONTRIBUTING.md) — `main` 직접 작업 금지 · merge 후 브랜치 삭제 금지 |
-| 셋업 | [`docs/SETUP.md`](docs/SETUP.md) |
+| 컴퓨팅 | **ECS Fargate** (NestJS · FastAPI 각각) |
+| 데이터 · 스토리지 | RDS · ElastiCache(Redis) · S3 |
+| CI/CD · 시크릿 | GitHub Actions → ECR · Secrets Manager · CloudWatch |
+| 가이드 | [`backend/docker/DEPLOYMENT.md`](backend/docker/DEPLOYMENT.md) |
 
 ---
 
