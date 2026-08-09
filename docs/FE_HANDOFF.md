@@ -45,6 +45,7 @@ BE가 `rec-fast-path`·관련 API를 `main`에 올린 뒤, API freeze 상태에�
 10. F13 — `fix/auth-screens-cleanup` — 찾기/비번 UI 없이 OTP+소셜만
 11. F7 — `fix/history-recommendation-ui-cleanup` — UI 정리
 12. F9 — `feature/history-month-calendar` — 월간 캘린더
+13. F17 — `feature/otp-mo-ui` — OTP MO 화면 전환 (코드 표시 + sms: 딥링크, **OTP MO 전환 후**)
 
 상세 체크리스트: `docs/FRONTEND_TASKS.md`  
 하지 말 것: F11 구독 결제, EAS, backend/ 임의 변경  
@@ -73,6 +74,12 @@ N33·`rec-fast-path`는 main에 머지됨 — F1/F6/F15 선행 충족. 계약이
   - `POST /auth/social/link-phone` { phoneNumber, birthDate? } (JWT) — OTP(`social_link`) 본인확인 후 연결,
     사용 중 번호 409. 미연결 상태에서도 세션은 정상 동작
   - OTP: `/otp/send|verify` purpose `'social_link'` 추가
+- **OTP MO 계약 (F17 대상 — 백엔드 OCTOMO 전환)**:
+  - `POST /otp/send` 응답: `{ code, recipientNumber, message }` — 백엔드가 문자를 **발송하지 않음**
+  - `code`를 화면에 표시하고 `recipientNumber`(기본 1666-3538)로 문자를 보내게 안내 (sms: 딥링크 권장)
+  - `POST /otp/verify`는 사용자가 보낸 문자의 **수신 여부**로 검증 — 401 `"인증 문자가 확인되지 않았습니다"`는
+    아직 문자를 안 보낸 상태이므로 재시도 안내 (시도 횟수 소모 없음)
+  - 개발 allowlist 번호: `code` = 고정 `123456`
 - N34 계약 (F16 설정 전면 재구성 대상):
   - `GET/PUT /notifications/preferences` 응답에 **읽기 전용 `pushDeliveryAvailable: boolean`** 추가.
     - `false`(현재 기본)면 pushEnabled/uvAlertEnabled/dustAlertEnabled/morningReminder는 **선호 저장일 뿐**

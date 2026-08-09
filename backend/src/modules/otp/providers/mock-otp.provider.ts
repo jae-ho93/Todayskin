@@ -2,18 +2,22 @@ import { Injectable, Logger } from '@nestjs/common';
 import { OtpProvider } from './otp-provider.interface';
 
 /**
- * 개발/테스트용 mock OTP provider.
+ * 개발/테스트용 mock OTP provider (MO).
  *
  * OTP policy: 개발 환경은 allowlisted test phone / mock OTP 사용.
- * - allowlisted 번호: 고정 코드 "123456" 발송 (로그만 출력)
- * - 그 외 번호: 무작위 6자리 코드 생성 후 로그만 출력 (실제 SMS 미발송)
+ * - allowlisted 번호: 고정 코드 "123456" (로그만 출력)
+ * - 그 외 번호: 무작위 6자리 코드 (OtpService가 생성, 로그만 출력)
  *
- * 운영(NODE_ENV=production)에서는 SmsOtpProvider로 교체해야 한다.
+ * MO 방식이지만 개발 환경에서는 실제 문자 수신이 없으므로
+ * verifySent는 항상 true를 반환한다 — 코드 일치(해시 비교)만으로 검증 통과.
+ * 운영(NODE_ENV=production)에서는 OctomoOtpProvider로 교체해야 한다.
  */
 @Injectable()
 export class MockOtpProvider implements OtpProvider {
   private readonly logger = new Logger(MockOtpProvider.name);
   readonly name = 'mock';
+  // 개발 환경에서 표시용 — 실제 문자 발송은 없으므로 사용되지 않는다.
+  readonly recipientNumber = '0000';
 
   // 개발용 고정 OTP를 허용할 테스트 전화번호 목록 (쉼표 구분).
   // 환경변수 OTP_ALLOWLIST_PHONES로 주입. 비워두면 모두 무작위 코드.
@@ -30,12 +34,20 @@ export class MockOtpProvider implements OtpProvider {
     );
   }
 
-  async send(phoneNumber: string, code: string): Promise<void> {
-    // 민감정보(전화번호)는 마스킹하여 로그에 남기지 않는다.
-    // 실제 코드 값은 운영 로그에 노출되면 안 되지만, 개발 환경이므로
-    // 디버깅 편의를 위해 마스킹 없이 출력한다 (production 비활성).
+  /**
+   * MO 검증 mock — 개발 환경에서는 실제 문자 수신 확인이 없으므로
+   * 항상 true (코드 정합성은 OtpService의 해시 비교가 담당).
+   */
+  async verifySent(phoneNumber: string): Promise<boolean> {
     this.logger.log(
-      `[MOCK OTP] dev allowlisted=${this.allowlisted.has(phoneNumber)} -> code=${code}`,
+      `[MOCK OTP] verifySent phone=${this.maskPhone(phoneNumber)} allowlisted=${this.allowlisted.has(phoneNumber)} -> true`,
     );
+    return true;
+  }
+
+  /** 로그에 전화번호를 마스킹해 남긴다 (중간 4자리 제거). */
+  private maskPhone(phoneNumber: string): string {
+    if (phoneNumber.length < 7) return '***';
+    return `${phoneNumber.slice(0, 3)}****${phoneNumber.slice(-4)}`;
   }
 }

@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Injectable,
   Logger,
   ServiceUnavailableException,
@@ -80,14 +79,19 @@ export class OtpService {
   }
 
   /**
-   * OTP 코드를 생성·저장·발송한다.
+   * OTP 챌린지를 생성·저장하고 화면 표시용 코드와 수신 번호를 반환한다 (MO).
+   *
+   * MO(Mobile Originated) 방식: 서비스가 문자를 발송하지 않고,
+   * 반환된 코드를 앱 화면에 표시해 사용자가 수신 번호로 문자를 보내게 안내한다.
+   * 실제 검증은 verifyOtp()에서 provider.verifySent()로 수행한다.
+   *
    * 재전송 제한을 검사하고, 미검증 코드 개수를 제한한다.
    */
   async sendOtp(
     phoneNumber: string,
     purpose: OtpPurpose,
     provider: OtpProvider,
-  ): Promise<void> {
+  ): Promise<{ code: string; recipientNumber: string }> {
     const now = new Date();
 
     // N22: 번호별 하루 발송 글로벌 제한 (KST 자정 기준). allowlisted 개발 번호는 예외.
@@ -146,7 +150,7 @@ export class OtpService {
     }
 
     // N22: 코드는 평문이 아닌 SHA-256(salt + code) 해시로 저장한다.
-    // provider.send에는 발송용 원문 코드만 전달한다.
+    // MO 방식은 문자 발송이 없으므로 코드는 화면 표시용으로 응답에 포함한다.
     const { code, salt } = this.generateCodeWithSalt(phoneNumber);
     const expiresAt = new Date(now.getTime() + this.ttlSeconds * 1000);
 
@@ -162,37 +166,15 @@ export class OtpService {
       },
     });
 
-    try {
-      await provider.send(phoneNumber, code);
-    } catch (e) {
-      // 발송 실패 시 생성한 코드를 폐기해 검증에 사용되지 않게 한다.
-      // (방금 생성한 코드만 폐기 — 동일 번호·용도의 다른 코드는 건드리지 않음)
-      await this.prisma.otpCode.deleteMany({
-        where: { phoneNumber, purpose, codeHash: hashOtpCode(salt, code) },
-      });
-      // N9: 게이트웨이 자체 문제(설정 누락·HTTP 오류·네트워크 장애)는 서버 측 오류이므로
-      // 503으로 매핑한다 — 클라이언트 입력 문제(400)와 구분한다. 가짜 성공은 절대 금지.
-      if (e instanceof OtpGatewayError) {
-        this.logger.error(`OTP 발송 실패 (provider=${provider.name}): ${e.name}`);
-        throw new ServiceUnavailableException(
-          'OTP 발송 서비스에 문제가 있어요. 잠시 후 다시 시도해주세요.',
-        );
-      }
-      this.logger.error(`OTP 발송 실패 (provider=${provider.name})`);
-      throw new BadRequestException('OTP 발송에 실패했습니다');
-    }
-
-    // N22: 발송 성공 시 전용 로그 기록 — 일일 한도 집계 기반.
-    // provider.send 성공 후에만 기록되므로 한도가 정확히 집계된다.
-    // 로그 기록 실패는 발송 자체(이미 성공한 SMS)를 실패로 만들지 않도록
-    // 비치명적으로 처리한다. (실패 시 코드 폐기로 이어지면 수신자는 받은
-    // 코드를 쓸 수 없게 된다)
+    // N22: 챌린지 생성 로그 — 일일 한도 집계 기반.
+    // MO는 외부 발송이 없으므로 생성 즉시 기록하며, 로그 기록 실패는
+    // 챌린지 생성 자체를 실패로 만들지 않도록 비치명적으로 처리한다.
     try {
       await this.prisma.otpSendLog.create({
         data: { phoneNumber, purpose, sentAt: now },
       });
     } catch (logErr) {
-      // 발송 로그 기록 실패는 발송 자체를 실패로 만들지 않는다.
+      // 로그 기록 실패는 챌린지 생성을 실패로 만들지 않는다.
       // 실패 원인(DB 오류 등)을 남겨 일일 한도 집계 누락을 디버깅할 수 있게 하되,
       // 전화번호 등 민감정보가 로그에 남지 않도록 마스킹한다 (N9 로그 정책).
       this.logger.warn(
@@ -201,6 +183,8 @@ export class OtpService {
         )}`,
       );
     }
+
+    return { code, recipientNumber: provider.recipientNumber };
   }
 
   /**
@@ -214,6 +198,7 @@ export class OtpService {
     phoneNumber: string,
     purpose: OtpPurpose,
     inputCode: string,
+    provider: OtpProvider,
   ): Promise<void> {
     const record = await this.prisma.otpCode.findFirst({
       where: { phoneNumber, purpose, verified: false },
@@ -252,7 +237,27 @@ export class OtpService {
       );
     }
 
-   // 검증 성공: verified=true로 전환, 동일 번호·용도의 다른 미검증 코드 폐기.
+    // MO: 실제 문자 수신 여부를 게이트웨이로 검증 (OCTOMO exists API).
+    // verified=false는 "아직 문자가 수신되지 않음"이므로 시도 횟수를 소모하지 않고
+    // 재시도 가능한 오류로 응답한다. 게이트웨이 장애는 503으로 매핑(가짜 성공 금지).
+    try {
+      const sent = await provider.verifySent(phoneNumber, inputCode);
+      if (!sent) {
+        throw new UnauthorizedException(
+          '인증 문자가 확인되지 않았습니다. 안내된 번호로 문자를 보낸 후 다시 시도해주세요.',
+        );
+      }
+    } catch (e) {
+      if (e instanceof OtpGatewayError) {
+        this.logger.error(`OTP 검증 실패 (provider=${provider.name}): ${e.name}`);
+        throw new ServiceUnavailableException(
+          'OTP 인증 서비스에 문제가 있어요. 잠시 후 다시 시도해주세요.',
+        );
+      }
+      throw e;
+    }
+
+    // 검증 성공: verified=true로 전환, 동일 번호·용도의 다른 미검증 코드 폐기.
     // Prisma 7: $transaction은 콜백 형식으로 원자성을 보장한다.
     await this.prisma.$transaction(async (tx) => {
       await tx.otpCode.update({

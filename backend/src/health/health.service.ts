@@ -90,12 +90,12 @@ export class HealthService {
       detail: missing.length ? `missing=${missing.join(',')}` : undefined,
     });
 
-    // N11: 운영 필수 외부 의존성 — inference·SMS.
+    // N11: 운영 필수 외부 의존성 — inference·OTP 게이트웨이(OCTOMO).
     // inference: MOCK_INFERENCE=false인 운영에서 INFERENCE_SERVICE_URL 누락 시
     //   진단 기능이 불가능하므로 ready를 실패시킨다(required).
-    // SMS: N9에서 env.registry requiredIn production으로 이미 required_config에 포함.
+    // OTP: N9에서 env.registry requiredIn production으로 이미 required_config에 포함.
     this.pushInferenceDependency(dependencies);
-    this.pushSmsDependency(dependencies);
+    this.pushOctomoDependency(dependencies);
 
     // Redis — 선택적. 다운이어도 ready를 무조건 실패시키지 않음.
     try {
@@ -168,26 +168,27 @@ export class HealthService {
   }
 
   /**
-   * N11: SMS 의존성. 운영에서 SMS 설정이 없으면 ready 실패(N9 readiness 게이트와 정합).
-   * 개발/테스트는 MockOtpProvider 사용 가능하므로 skipped로 취급한다.
+   * N11: OTP 게이트웨이(OCTOMO) 의존성. 운영에서 설정이 없으면 ready 실패
+   * (env.registry requiredIn production과 정합). 개발/테스트는 MockOtpProvider
+   * 사용 가능하므로 skipped로 취급한다.
    */
-  private pushSmsDependency(dependencies: HealthDependencyDto[]): void {
+  private pushOctomoDependency(dependencies: HealthDependencyDto[]): void {
     const isProduction = this.config.get<string>('NODE_ENV') === 'production';
-    const configured =
-      Boolean((this.config.get<string>('SMS_API_KEY') ?? '').trim()) &&
-      Boolean((this.config.get<string>('SMS_SENDER') ?? '').trim());
+    const configured = Boolean(
+      (this.config.get<string>('OCTOMO_API_KEY') ?? '').trim(),
+    );
 
     if (configured) {
-      dependencies.push({ name: 'sms', status: 'up', required: isProduction });
+      dependencies.push({ name: 'octomo', status: 'up', required: isProduction });
       return;
     }
     dependencies.push({
-      name: 'sms',
+      name: 'octomo',
       status: isProduction ? 'down' : 'skipped',
       required: isProduction,
       detail: isProduction
-        ? 'SMS_API_KEY/SMS_SENDER unset in production'
-        : 'SMS unset (dev: MockOtpProvider)',
+        ? 'OCTOMO_API_KEY unset in production'
+        : 'OCTOMO unset (dev: MockOtpProvider)',
     });
   }
 }

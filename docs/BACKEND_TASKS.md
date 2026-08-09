@@ -604,6 +604,18 @@ Refresh Token
 >
 > 아래 Task 체크리스트는 **이력·계약 기준**으로 유지한다 (삭제하지 않음).
 
+### OTP MO 전환 — OCTOMO (feature/otp-octomo-mo, 2026-08)
+
+알리고(MT — 서비스가 SMS 발송, 사업자등록증 필수)를 **OCTOMO(MO — 사용자가 문자 발송, 수신 여부 검증, 발송 비용 0원)** 로 교체.
+
+- [x] `OtpProvider` 인터페이스 변경: `send(phone, code)` → `recipientNumber` + `verifySent(phone, text)`
+- [x] `OctomoOtpProvider` 신규 — POST `/octomo/v1/public/message/exists`,
+      `Authorization: Octomo {key}`, `{ mobileNum, text }` → `{ verified }` (기본 5분 조회)
+- [x] `/otp/send` 응답 변경: `{ code, recipientNumber, message }` — MO는 코드를 화면에 표시해야 하므로 **프론트 계약 변경**
+- [x] env: `SMS_*` 제거 → `OCTOMO_API_KEY`(production required)·`OCTOMO_ENDPOINT`·`OCTOMO_RECIPIENT_NUMBER`(기본 1666-3538)·`OCTOMO_TIMEOUT_MS`·`OCTOMO_MAX_RETRIES`
+- [x] health ready 의존성 `sms` → `octomo` / provider 단위 테스트 교체 / OTP·auth e2e 유지 확인
+- [ ] 프론트: OTP 화면 "코드 입력" → "수신 번호로 코드 발송 안내" 전환 (`docs/FRONTEND_TASKS.md` F17)
+
 ### N0. 운영 보안·HTTP 보호
 
 브랜치: `feature/runtime-security-http`

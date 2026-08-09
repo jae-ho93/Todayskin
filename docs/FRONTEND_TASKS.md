@@ -163,6 +163,23 @@ F0 → F1 → F2 → F3 → F6 → F4 → F16 → F8 → F10 → F15 → F13 →
 
 완료: 기록 있는 날짜가 달력으로 보임.
 
+### F17. OTP MO 화면 전환 — P0 (백엔드 OTP MO 전환 후)
+
+브랜치: `feature/otp-mo-ui`
+
+백엔드가 알리고(MT — 서비스가 문자 발송) → **OCTOMO(MO — 사용자가 문자 발송)** 로 전환됨.
+`POST /otp/send`가 더 이상 문자를 보내지 않으므로 **응답의 `code`를 화면에 표시**하고,
+사용자가 `recipientNumber`(1666-3538)로 그 코드를 문자 보내게 안내한다.
+
+- [ ] `src/api/client.ts` — `sendOtp` 응답 타입에 `code`·`recipientNumber` 추가
+- [ ] `app/onboarding/signup.tsx`·`login.tsx` OTP 단계: "인증번호 입력" → "아래 번호로 '인증코드 XXXX'를 보내주세요" 안내
+- [ ] `Linking.openURL('sms:1666-3538?body=인증코드 XXXX')` — 문자앱 자동 열기 (iOS/Android)
+- [ ] "문자를 보냈어요" 버튼 → `POST /otp/verify` (401 "확인되지 않았습니다"면 재시도 안내)
+- [ ] 재전송: `/otp/send` 재호출 → 새 코드 표시 (기존 재전송 쿨다운 유지)
+- [ ] 소셜 전화 연결(`social_link`) OTP 화면도 동일 적용
+
+완료: 가입/로그인 OTP가 "문자 보내기" 방식으로 동작. (개발 allowlist 번호는 화면에 고정 코드 `123456` 표시)
+
 ### F11. 구독 화면 — 보류
 
 결제·권한 범위 미정. 이번 웨이브 제외. 설정에 가짜 가격 카드 넣지 말 것.
