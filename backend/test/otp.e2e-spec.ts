@@ -75,12 +75,16 @@ describe('OTP (e2e)', () => {
     });
   });
 
-  it('POST /otp/send → 200', async () => {
+  it('POST /otp/send → 200 (MO: code + recipientNumber 반환)', async () => {
     const res = await request(app.getHttpServer())
       .post('/otp/send')
       .send({ phoneNumber: phone, purpose: 'signup' })
       .expect(200);
     expect(res.body.message).toContain('발송');
+    // MO(Mobile Originated): 서비스가 문자를 발송하지 않으므로
+    // 화면 표시용 인증코드와 수신 번호가 응답에 포함된다 (프론트 안내용).
+    expect(res.body.code).toBe('123456'); // allowlisted 고정 OTP
+    expect(res.body.recipientNumber).toBeDefined();
   });
 
   it('잘못된 전화번호 → 400', async () => {

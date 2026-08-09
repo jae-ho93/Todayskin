@@ -15,8 +15,7 @@ describe('HealthService', () => {
       // 개발/테스트는 mock inference를 사용한다고 가정
       if (key === 'MOCK_INFERENCE') return 'true';
       if (key === 'INFERENCE_SERVICE_URL') return '';
-      if (key === 'SMS_API_KEY') return '';
-      if (key === 'SMS_SENDER') return '';
+      if (key === 'OCTOMO_API_KEY') return '';
       return undefined;
     }),
   };
@@ -60,8 +59,7 @@ describe('HealthService', () => {
       if (key === 'REDIS_URL') return '';
       if (key === 'MOCK_INFERENCE') return 'false';
       if (key === 'INFERENCE_SERVICE_URL') return '';
-      if (key === 'SMS_API_KEY') return 'key';
-      if (key === 'SMS_SENDER') return '01012345678';
+      if (key === 'OCTOMO_API_KEY') return 'key';
       return undefined;
     });
     prisma.$queryRaw.mockResolvedValue([{ '?column?': 1 }]);
@@ -75,7 +73,7 @@ describe('HealthService', () => {
     expect(body.status).toBe('error');
   });
 
-  it('N11: production에서 SMS 미설정이면 required down', async () => {
+  it('N11: production에서 OCTOMO 미설정이면 required down', async () => {
     config.get.mockImplementation((key: string) => {
       if (key === 'NODE_ENV') return 'production';
       if (key === 'DATABASE_URL') return 'postgresql://x';
@@ -84,8 +82,7 @@ describe('HealthService', () => {
       if (key === 'REDIS_URL') return '';
       if (key === 'MOCK_INFERENCE') return 'false';
       if (key === 'INFERENCE_SERVICE_URL') return 'http://inference:8000';
-      if (key === 'SMS_API_KEY') return '';
-      if (key === 'SMS_SENDER') return '';
+      if (key === 'OCTOMO_API_KEY') return '';
       return undefined;
     });
     prisma.$queryRaw.mockResolvedValue([{ '?column?': 1 }]);
@@ -93,9 +90,9 @@ describe('HealthService', () => {
 
     const body = await service.ready();
 
-    const sms = body.dependencies.find((d) => d.name === 'sms');
-    expect(sms?.status).toBe('down');
-    expect(sms?.required).toBe(true);
+    const octomo = body.dependencies.find((d) => d.name === 'octomo');
+    expect(octomo?.status).toBe('down');
+    expect(octomo?.required).toBe(true);
     expect(body.status).toBe('error');
   });
 });

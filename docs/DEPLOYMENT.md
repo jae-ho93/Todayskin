@@ -199,7 +199,7 @@ inference-service는 **내부망 전용** 서비스다. 무제한 이미지 처�
 - `S3_BUCKET` (Memory fallback 금지)
 - `INFERENCE_SERVICE_URL`
 - `INFERENCE_SHARED_SECRET` (inference 서비스와 동일한 값 — N13)
-- 실제 SMS OTP 게이트웨이 구현 완료 후 `SMS_API_KEY`, `SMS_SENDER`, `SMS_ENDPOINT`
+- OTP 게이트웨이 `OCTOMO_API_KEY` (MO 인증 — 사용자가 문자를 보내면 수신 여부를 API로 검증, 발송 비용 0원. 가입: octomo.octoverse.kr)
 
 ### 날씨 수집 스케줄러 (N21 싱글턴)
 
@@ -237,6 +237,6 @@ docker build -t todayskin-inference:$(git rev-parse HEAD) \
 - N6: health live/ready 분리, Soft Delete, pagination, env registry (완료)
 - N7: 레거시 `backend/app/` FastAPI 정리 (완료) — CI는 NestJS + inference-service만 검증
 - N8: 히스토리 캘린더 기능 (완료)
-- 실제 SMS OTP 게이트웨이 연결과 timeout·재시도·전송 실패 정책
+- ~~실제 SMS OTP 게이트웨이 연결~~ → OCTOMO MO 인증 적용 완료 (feature/otp-octomo-mo, 2026-08)
 - S3 객체 삭제 실패 재처리와 orphan reconciliation 운영 작업
 - 실제 AWS 계정에 ECR/ECS/RDS/Secrets/OIDC role 프로비저닝 (인프라 최초 1회)
