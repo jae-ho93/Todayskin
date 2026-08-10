@@ -91,30 +91,38 @@ export default function RecommendationDetailScreen() {
           {recommendation.ingredientTags.map((tag) => (
             <IngredientChip key={tag} label={tag} />
           ))}
-        </View>
-      </View>
-
-      {relatedProducts.length > 0 && (
-        <View>
-          <Text style={styles.sectionTitle}>관련 제품</Text>
-          <View style={styles.productList}>
-            {relatedProducts.map((p) => (
-              <Card key={p.id} style={styles.productCard}>
-                <View style={styles.productThumb}>
-                  <Ionicons name="flask-outline" size={22} color={colors.gray400} />
-                </View>
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={styles.productBrand}>{p.brand}</Text>
-                  <Text style={styles.productName}>{p.name}</Text>
-                </View>
-                <EvidenceBadge grade={p.matchedGrade} />
-              </Card>
-            ))}
+       {relatedProducts.length > 1 ? (
+  <View>
+    <Text style={styles.sectionTitle}>관련 제품</Text>
+    <View style={styles.productList}>
+      {relatedProducts.map((p) => (
+        <Card key={p.id} style={styles.productCard}>
+          <View style={styles.productThumb}>
+            <Ionicons name="flask-outline" size={22} color={colors.gray400} />
           </View>
-        </View>
-      )}
-    </ScreenContainer>
-  );
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={styles.productBrand}>{p.brand}</Text>
+            <Text style={styles.productName}>{p.name}</Text>
+          </View>
+          <EvidenceBadge grade={p.matchedGrade} />
+        </Card>
+      ))}
+    </View>
+  </View>
+) : relatedProducts.length === 1 ? (
+  <View style={{gap: spacing.sm}}>
+    <Card style={styles.productCard}>
+      <View style={styles.productThumb}>
+        <Ionicons name="flask-outline" size={22} color={colors.gray400} />
+      </View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={styles.productBrand}>{relatedProducts[0].brand}</Text>
+        <Text style={styles.productName}>{relatedProducts[0].name}</Text>
+      </View>
+      <EvidenceBadge grade={relatedProducts[0].matchedGrade} />
+    </Card>
+  </View>
+) : null}
 }
 
 const styles = StyleSheet.create({
