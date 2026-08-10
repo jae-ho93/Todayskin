@@ -91,6 +91,16 @@ export default function HomeDashboard() {
     setLoadingRecommendations(false);
   }, [coords]);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
+
   return (
     <View style={styles.flex}>
       <ScreenContainer style={styles.content} refreshing={refreshing} onRefresh={handleRefresh}>
