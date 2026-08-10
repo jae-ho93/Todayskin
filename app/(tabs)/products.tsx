@@ -8,6 +8,7 @@ import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { useUserLocation } from '../../src/hooks/useUserLocation';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type { Product, ProductTiming } from '../../src/types';
+import type { WeatherProductsFastResponse, Job } from '../src/types';
 
 const CATEGORY_FILTERS: { key: Product['category'] | 'all'; label: string }[] = [
   { key: 'all', label: '전체' },
@@ -34,8 +35,25 @@ export default function ProductsScreen() {
   const load = useCallback(async () => {
     // N12: 날씨는 서버가 직접 조회한다. 클라이언트는 좌표만 전달하고 weather 본문을
     // 보내지 않으므로 조작된 날씨로 추천을 왜곡할 수 없다.
-    const products = await api.generateWeatherProducts(coords ?? undefined);
-    setWeatherProducts(products);
+    const weatherResponse = await api.getWeatherProductsFast(coords ?? undefined);
+
+let products = weatherResponse?.items ?? null;
+if (products !== null) {
+  setWeatherProducts(products);
+}
+
+// F2: LIVE 폴링
+if (weatherResponse?.source === 'LIVE' && weatherResponse?.jobId) {
+  const pollInterval = setInterval(async () => {
+    const job = await api.pollJob<Product[]>(weatherResponse.jobId);
+    if (job?.status === 'COMPLETED' && job.result) {
+      clearInterval(pollInterval);
+      setWeatherProducts(job.result);
+    } else if (job?.status === 'FAILED') {
+      clearInterval(pollInterval);
+    }
+  }, 1000);
+}
   }, [coords]);
 
   useEffect(() => {
