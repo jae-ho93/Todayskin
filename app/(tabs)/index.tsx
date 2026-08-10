@@ -12,6 +12,7 @@ import { useUserLocation } from '../../src/hooks/useUserLocation';
 import { getSession } from '../../src/lib/session';
 import { colors, radius, shadow, spacing, typography } from '../../src/theme';
 import type { Recommendation, SkinScoreSnapshot, WeatherSnapshot } from '../../src/types';
+import type { RecommendationsFastResponse, Job } from '../src/types';
 
 export default function HomeDashboard() {
   const { coords, loading: locationLoading } = useUserLocation();
@@ -58,30 +59,37 @@ export default function HomeDashboard() {
 
     // A등급(공인 가이드라인)은 날씨만으로 즉시 판단, B등급은 진단 ID만 서버에
     // 전달해 서버가 소유권을 확인한 뒤 저장된 피부·날씨 데이터를 사용한다.
-    const [aGrade, bGrade] = await Promise.all([
+    const [aGrade, bGradeResponse] = await Promise.all([
       api.getRecommendations('A'),
-      api.generateRecommendations(skinResult.data.id),
+      api.generateRecommendationsFast(skinResult.data.id),
     ]);
+
+    // F1: fast-path 응답 처리
+    // source: CACHED/FALLBACK → 즉시 표시
+    // source: LIVE + jobId → 폴링 시작, stale/갱신 중 표시
+    let bGrade = bGradeResponse?.recommendations ?? null;
     if (aGrade === null && bGrade === null) {
       setRecommendations(null);
     } else {
       setRecommendations([...(aGrade ?? []), ...(bGrade ?? [])]);
     }
+
+    // F1: LIVE 폴링 (기다리지 않고 백그라운드에서)
+    if (bGradeResponse?.source === 'LIVE' && bGradeResponse?.jobId) {
+      const pollInterval = setInterval(async () => {
+        const job = await api.pollJob<Recommendation[]>(bGradeResponse.jobId);
+        if (job?.status === 'COMPLETED' && job.result) {
+          clearInterval(pollInterval);
+          setRecommendations([...(aGrade ?? []), ...job.result]);
+        } else if (job?.status === 'FAILED') {
+          clearInterval(pollInterval);
+          // 실패: 기존 FALLBACK 유지
+        }
+      }, 1000); // 1초마다 폴링
+    }
+
     setLoadingRecommendations(false);
   }, [coords]);
-
-  useEffect(() => {
-    // 위치 권한 응답(허용/거부)이 결정될 때까지 기다렸다가 조회 — 거부돼도 coords만 없을 뿐
-    // getWeather가 서버 기본 지역(서울)으로 알아서 폴백하므로 화면은 그대로 진행된다
-    if (locationLoading) return;
-    load();
-  }, [locationLoading, load]);
-
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await load();
-    setRefreshing(false);
-  }, [load]);
 
   return (
     <View style={styles.flex}>
