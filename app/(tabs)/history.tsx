@@ -406,7 +406,7 @@ function MediaBlock({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
           <Ionicons name="image-outline" size={14} color={colors.textTertiary} />
           <Text style={styles.mediaNoticeText}>보관 이미지가 없어요</Text>
         </View>
-      )}
+      )
       {landmarks && (
         <Text style={styles.landmarkCaption}>
           얼굴 랜드마크 {landmarks.points.length}점 · {landmarks.version}

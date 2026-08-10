@@ -8,7 +8,6 @@ import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { useUserLocation } from '../../src/hooks/useUserLocation';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type { Product, ProductTiming } from '../../src/types';
-import type { WeatherProductsFastResponse, Job } from '../src/types';
 
 const CATEGORY_FILTERS: { key: Product['category'] | 'all'; label: string }[] = [
   { key: 'all', label: '전체' },
