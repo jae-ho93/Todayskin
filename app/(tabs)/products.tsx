@@ -8,7 +8,7 @@ import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { useUserLocation } from '../../src/hooks/useUserLocation';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type { Product, ProductTiming } from '../../src/types';
-import type { WeatherProductsFastResponse, Job } from '../src/types';
+import type { WeatherProductsFastResponse, Job } from '../../src/types';
 
 const CATEGORY_FILTERS: { key: Product['category'] | 'all'; label: string }[] = [
   { key: 'all', label: '전체' },
@@ -44,8 +44,9 @@ if (products !== null) {
 
 // F2: LIVE 폴링
 if (weatherResponse?.source === 'LIVE' && weatherResponse?.jobId) {
+  const jobId = weatherResponse.jobId;
   const pollInterval = setInterval(async () => {
-    const job = await api.pollJob<Product[]>(weatherResponse.jobId);
+    const job = await api.pollJob<Product[]>(jobId);
     if (job?.status === 'COMPLETED' && job.result) {
       clearInterval(pollInterval);
       setWeatherProducts(job.result);
