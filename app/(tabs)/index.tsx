@@ -12,7 +12,7 @@ import { useUserLocation } from '../../src/hooks/useUserLocation';
 import { getSession } from '../../src/lib/session';
 import { colors, radius, shadow, spacing, typography } from '../../src/theme';
 import type { Recommendation, SkinScoreSnapshot, WeatherSnapshot } from '../../src/types';
-import type { RecommendationsFastResponse, Job } from '../src/types';
+import type { RecommendationsFastResponse, Job } from '../../src/types';
 
 export default function HomeDashboard() {
   const { coords, loading: locationLoading } = useUserLocation();
@@ -76,8 +76,9 @@ export default function HomeDashboard() {
 
     // F1: LIVE 폴링 (기다리지 않고 백그라운드에서)
     if (bGradeResponse?.source === 'LIVE' && bGradeResponse?.jobId) {
+      const jobId = bGradeResponse.jobId;
       const pollInterval = setInterval(async () => {
-        const job = await api.pollJob<Recommendation[]>(bGradeResponse.jobId);
+        const job = await api.pollJob<Recommendation[]>(jobId);
         if (job?.status === 'COMPLETED' && job.result) {
           clearInterval(pollInterval);
           setRecommendations([...(aGrade ?? []), ...job.result]);
