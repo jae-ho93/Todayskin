@@ -361,49 +361,46 @@ function MediaBlock({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
 
   return (
     <View style={styles.mediaBlock}>
-      {img ? (
-        expired ? (
-          <View style={styles.imageBox}>
-            <Ionicons name="time-outline" size={22} color={colors.textTertiary} />
-            <Text style={styles.imageExpiredText}>
-              이미지 링크가 만료됐어요 — 새로고침으로 다시 받아주세요
-            </Text>
-          </View>
-        ) : (
-          <View
-            style={styles.imageBox}
-            onLayout={(e) => setBoxWidth(e.nativeEvent.layout.width)}
-          >
-            {displaySize ? (
-              <View style={{ width: displaySize.width, height: displaySize.height }}>
-                <Image
-                  source={{ uri: img.url }}
-                  style={StyleSheet.absoluteFill}
-                  resizeMode="contain"
-                  onLoad={(e) => {
-                    const { width, height } = e.nativeEvent.source;
-                    if (width > 0 && height > 0) setImageRatio(height / width);
-                  }}
-                />
-                {landmarks && (
-                  <Svg
-                    style={StyleSheet.absoluteFill}
-                    width="100%"
-                    height="100%"
-                    viewBox="0 0 1 1"
-                    preserveAspectRatio="none"
-                  >
-                    {landmarks.points.map(([x, y], i) => (
-                      <Circle key={i} cx={x} cy={y} r={0.01} fill="rgba(107,181,164,0.9)" />
-                    ))}
-                  </Svg>
-                )}
-              </View>
-            ) : (
-              <ActivityIndicator color={colors.sage} />
-            )}
-          </View>
-        )
+     {landmarks ? (
+  <View style={styles.mediaBlock}>
+    <Svg
+      style={StyleSheet.absoluteFill}
+      width="100%"
+      height="100%"
+      viewBox="0 0 1 1"
+      preserveAspectRatio="none"
+    >
+      {landmarks.points.map(([x, y], i) => (
+        <Circle key={i} cx={x} cy={y} r={0.01} fill="rgba(107,181,164,0.9)" />
+      ))}
+    </Svg>
+  </View>
+) : img ? (
+  <View style={styles.mediaBlock}>
+    <View
+      style={styles.imageBox}
+      onLayout={(e) => setBoxWidth(e.nativeEvent.layout.width)}
+    >
+      {displaySize ? (
+        <View style={{ width: displaySize.width, height: displaySize.height }}>
+          <Image
+            source={{ uri: img.url }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="contain"
+            onLoad={(e) => {
+              const { width, height } = e.nativeEvent.source;
+              if (width > 0 && height > 0) setImageRatio(height / width);
+            }}
+          />
+        </View>
+      ) : (
+        <ActivityIndicator color={colors.sage} />
+      )}
+    </View>
+  </View>
+) : (
+  <Text style={styles.noRec}>0| 진단에는 추천이 없어요</Text>
+)}
       ) : (
         <View style={styles.mediaNotice}>
           <Ionicons name="image-outline" size={14} color={colors.textTertiary} />
