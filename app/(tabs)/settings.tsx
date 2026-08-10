@@ -16,8 +16,7 @@ import { Card } from '../../src/components/Card';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { clearSession } from '../../src/lib/session';
 import { colors, radius, spacing, typography } from '../../src/theme';
-import type { ConsentPurpose, ConsentPurposeInfo, ConsentRecord } from '../../src/types';
-
+import type { ConsentPurpose, ConsentPurposeInfo, ConsentRecord, User } from '../../src/types'
 function SettingsRow({
   icon,
   label,
@@ -56,6 +55,7 @@ export default function SettingsScreen() {
   const [recommendAlert, setRecommendAlert] = useState(false);
   const [prefsLoading, setPrefsLoading] = useState(true);
   const [prefsError, setPrefsError] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   // 낙관적 갱신 중 연타로 요청이 뒤섞이지 않도록 저장 완료까지 토글을 잠근다.
   const prefsSavingRef = useRef(false);
 
@@ -84,8 +84,9 @@ export default function SettingsScreen() {
   }, []);
 
   useEffect(() => {
-    loadPreferences();
-  }, [loadPreferences]);
+  loadPreferences();
+  api.getMe().then(setUser).catch(console.error);
+}, [loadPreferences]);
 
   const toggleWeatherAlert = async (value: boolean) => {
     if (prefsSavingRef.current) return;
@@ -182,7 +183,20 @@ export default function SettingsScreen() {
   return (
     <ScreenContainer>
       <Text style={styles.title}>설정</Text>
-
+{/* 프로필 헤더 */}
+{user && (
+  <Card style={styles.profileCard}>
+    <View style={styles.profileContent}>
+      <View>
+        <Text style={styles.profileName}>{user.name}</Text>
+        <Text style={styles.profilePhone}>{user.phoneNumber}</Text>
+      </View>
+      <Pressable onPress={() => {}}>
+        <Text style={styles.profileEdit}>수정</Text>
+      </Pressable>
+    </View>
+  </Card>
+)}
       <View>
         <Text style={styles.sectionTitle}>개인정보 관리</Text>
         <Card>
@@ -402,6 +416,11 @@ const styles = StyleSheet.create({
   prefsLoading: { paddingVertical: spacing.lg, alignItems: 'center' },
   errorText: { ...typography.caption, color: colors.coralDark, marginTop: spacing.sm },
   planRow: { flexDirection: 'row', gap: spacing.md },
+  profileCard: { marginBottom: spacing.md },
+profileContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md },
+profileName: { ...typography.subtitle, fontWeight: '600', color: colors.textPrimary },
+profilePhone: { ...typography.caption, color: colors.textTertiary },
+profileEdit: { ...typography.body, color: colors.sage },
   planCard: { flex: 1, gap: spacing.xs },
   planCardActive: { backgroundColor: colors.sage },
   planName: { ...typography.subtitle, color: colors.textPrimary },
