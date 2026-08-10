@@ -76,6 +76,7 @@ export interface Product {
   matchedGrade: EvidenceGrade;
   matchedIngredients: string[];
   category: 'moisture' | 'elasticity' | 'brightening' | 'barrier';
+  purchaseUrl?: string; // F0: 제품 구매 링크 (FE가 Linking.openURL 할 주소)
   recommendationId?: string;
   reason?: string; // 별도 Recommendation 레코드 없이 바로 보여주는 근거 설명 (예: 날씨 기반 추천)
   timing?: ProductTiming; // 하루 중 이 제품을 쓰면 좋은 상황 (예: 날씨 기반 추천)
@@ -90,7 +91,7 @@ export interface HistoryEntry {
 
 export type Gender = 'male' | 'female';
 
-export type OtpPurpose = 'signup' | 'login';
+export type OtpPurpose = 'signup' | 'login' | 'social_link'; // F0: social_link 추가 (N33)
 
 export interface SignupRequest {
   phoneNumber: string;
@@ -149,6 +150,7 @@ export interface NotificationPreferences {
   uvAlertEnabled: boolean;
   dustAlertEnabled: boolean;
   morningReminder: boolean;
+  pushDeliveryAvailable?: boolean; // N34: 푸시 실제 발송 가능 여부 (false면 토글 비활성)
   updatedAt?: string;
 }
 
@@ -184,6 +186,7 @@ export interface CalendarProduct {
   brand: string;
   imageUri?: string | null;
   category: string;
+  purchaseUrl?: string | null; // F0 추가
   reason?: string | null;
   timing?: string | null;
 }
@@ -271,4 +274,34 @@ export interface PatternSummary {
   observationalDisclaimer?: string;
   correlations: PatternCorrelation[];
   recommendationIds: string[];
+}
+
+// ── 비동기 job 모델 (N4 BullMQ, F0 추가) ────────────────────────
+
+export type JobStatus = 'PENDING' | 'COMPLETED' | 'FAILED';
+
+export interface Job<T = unknown> {
+  id: string;
+  status: JobStatus;
+  type: string; // 'RECOMMENDATION_GENERATE' | 'WEATHER_PRODUCTS_GENERATE' | ...
+  result?: T | null; // COMPLETED일 때만 채워짐 (Recommendation[] | Product[] 등)
+  error?: string | null; // FAILED일 때만 채워짐
+  createdAt: string; // ISO timestamp
+  completedAt?: string; // ISO timestamp (COMPLETED/FAILED일 때만)
+}
+
+// ── Fast path 응답 구조 (F0/F1/F6 추가) ────────────────────────
+
+export interface RecommendationsFastResponse {
+  source: 'CACHED' | 'FALLBACK' | 'LIVE';
+  jobId?: string; // source가 CACHED/FALLBACK일 때 polling 대상 jobId
+  generatedAt?: string; // 메타: stale 여부 판단용 ISO timestamp
+  recommendations: Recommendation[];
+}
+
+export interface WeatherProductsFastResponse {
+  source: 'CACHED' | 'FALLBACK' | 'LIVE';
+  jobId?: string;
+  generatedAt?: string;
+  items: Product[];
 }
