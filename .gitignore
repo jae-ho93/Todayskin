@@ -27,6 +27,11 @@ yarn-debug.*
 yarn-error.*
 *.log
 
+# editor swap/backup files
+*.swp
+*.swo
+*~
+
 # macOS
 .DS_Store
 ._*
