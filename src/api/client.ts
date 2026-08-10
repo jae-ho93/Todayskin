@@ -6,16 +6,20 @@ import type {
   ConsentRecord,
   EvidenceGrade,
   HistoryEntry,
+  Job,
   NotificationPreferences,
   OtpPurpose,
   Product,
   Recommendation,
+  RecommendationsFastResponse,
+  WeatherProductsFastResponse,
   ScoreSeries,
   SignupRequest,
   SkinScoreSnapshot,
   User,
   WeatherSnapshot,
   PatternSummary,
+  Gender,
 } from '../types';
 import { clearSession, getRefreshToken, getToken, updateTokens } from '../lib/session';
 
@@ -279,35 +283,97 @@ export const api = {
     if (!res.ok) throw new Error(extractErrorMessage(data, res.status));
     return data as SkinScoreSnapshot;
   },
+  // 기존 추천 (동기 생성 — F1에서 제거 예정)
   getRecommendations: (grade?: EvidenceGrade) =>
     safeFetch<Recommendation[]>(grade ? `/recommendations?grade=${grade}` : '/recommendations'),
   getRecommendationById: (id: string) =>
     authFetch<Recommendation>(`/recommendations/${id}`).then((result) =>
       result.status === 'ok' ? result.data : null,
     ),
-  // B등급(사진+날씨 매칭): Gemini에게 오늘 피부 측정값 + 날씨를 함께 전달해 추천 생성
+  // 기존 추천 생성 (동기 — F1에서 제거 예정)
   generateRecommendations: (diagnosisId: string) =>
     safePostJson<Recommendation[]>('/recommendations/generate', { diagnosisId }),
+
+  // ──────────────── F0 추가: 빠른 경로 (fast-path) ────────────────
+
+  // F0/F1: 추천 빠른 경로 — CACHED|FALLBACK 즉시 + jobId로 LIVE 교체 가능
+  // source: 'CACHED' → Redis SWR hit, 즉시 실제품 추천 반환
+  // source: 'FALLBACK' → Redis miss, 규칙 기반 실제품 추천 즉시 반환
+  // source: 'LIVE' → Gemini 완료, 완전 AI 추천 (jobId 있으면 polling으로 교체)
+  generateRecommendationsFast: (diagnosisId: string) =>
+    safePostJson<RecommendationsFastResponse>(
+      '/recommendations/generate/fast',
+      { diagnosisId },
+      20000, // Gemini 추론 최대 시간 고려
+    ),
+
+  // F0/F6: 날씨 기반 제품 빠른 경로 — CACHED|FALLBACK 즉시 + jobId로 LIVE 교체 가능
+  // 기존 generateWeatherProducts()와 응답 형태가 다름 (items 배열)
+  getWeatherProductsFast: (coords?: { latitude: number; longitude: number }) =>
+    safePostJson<WeatherProductsFastResponse>(
+      '/products/weather-based',
+      { lat: coords?.latitude, lon: coords?.longitude },
+      20000,
+    ),
+
+  // F0: job polling 유틸 — jobId로 상태 조회 (PENDING → COMPLETED/FAILED)
+  // 호출부가 interval을 제어하므로 이 함수는 1회만 호출 후 결과 확인
+  pollJob: async <T = unknown>(jobId: string): Promise<Job<T> | null> => {
+    const result = await authFetch<Job<T>>(`/jobs/${jobId}`);
+    return result.status === 'ok' ? result.data : null;
+  },
+
+  // ──────────────── F0 추가: 사용자 프로필 ────────────────
+
+  // F0: 현재 로그인 유저 조회 (N28 설정 프로필 표시)
+  getMe: async (): Promise<User | null> => {
+    const result = await authFetch<User>('/auth/me');
+    return result.status === 'ok' ? result.data : null;
+  },
+
+  // F0: 현재 로그인 유저 부분 갱신 — name, gender (N28 설정에서 호출)
+  // phone 변경은 별도 OTP 흐름 (이번 범위 밖)
+  updateMe: (patch: { name?: string; gender?: Gender }) =>
+    authPutJson<User>('/auth/me', patch),
+
+  // ──────────────── 기존 제품·추천 ────────────────
+
   getProducts: (category?: Product['category']) =>
     safeFetch<Product[]>(category ? `/products?category=${category}` : '/products'),
-  // 날씨 기반(A등급) 제품 추천 (N12): 클라이언트는 좌표만 보내고 서버가 오늘 날씨/대기질을
-  // 직접 조회해 상황(세안 후/외출 전/외출 후)별 화장품을 Gemini에게 하나씩 추천받는다.
-  // weather 본문을 보내지 않으므로 조작된 날씨로 추천을 왜곡할 수 없다.
+  // 기존 날씨 기반 추천 (동기 — F1/F6에서 fast path로 대체)
   generateWeatherProducts: (coords?: { latitude: number; longitude: number }) =>
     safePostJson<Product[]>('/products/weather-based', {
       lat: coords?.latitude,
       lon: coords?.longitude,
     }),
-  // 가입/로그인 모두 이 두 개를 먼저 통과해야 한다 — 서버가 전화번호 본인확인(OTP)을 강제한다
+
+  // ──────────────── 인증 (OTP, 가입, 로그인) ────────────────
+
   sendOtp: (phoneNumber: string, purpose: OtpPurpose) =>
     postJson<{ message: string }>('/otp/send', { phoneNumber, purpose }),
   verifyOtp: (phoneNumber: string, code: string, purpose: OtpPurpose) =>
     postJson<{ message: string }>('/otp/verify', { phoneNumber, code, purpose }),
   signup: (payload: SignupRequest) => postJson<User>('/auth/signup', payload),
   login: (phoneNumber: string) => postJson<User>('/auth/login', { phoneNumber }),
-  // 동의 목적/버전 registry. 인증 불필요 — 가입 전(온보딩) 화면에서도 조회 가능.
+
+  // F0: N33 이후 소셜 로그인 자리 — 아직 구현 안 함
+  // 예상 계약 (F15에서 실제 구현):
+  //
+  // socialLogin: (provider: 'kakao' | 'google' | 'apple', accessToken: string) =>
+  //   postJson<User & { isNewUser: boolean }>('/auth/social', {
+  //     provider,
+  //     accessToken,
+  //   }),
+  //
+  // socialLinkPhone: (phoneNumber: string, birthDate?: string) =>
+  //   authPostJson<User>('/auth/social/link-phone', {
+  //     phoneNumber,
+  //     birthDate,
+  //   }),
+
+  // ──────────────── 동의 & 알림 설정 ────────────────
+
   getConsentRegistry: () => safeFetch<ConsentPurposeInfo[]>('/consents/registry'),
-  // 동의/철회 upsert. 로그인 상태에서만 호출 가능 — 온보딩에서는 가입 성공 직후(토큰 발급 후)에 호출한다.
   upsertConsent: (purpose: ConsentPurpose, agreed: boolean) =>
     authPostJson<{ purpose: string; agreed: boolean }>('/consents', { purpose, agreed }),
   // N19: 내 동의 상태 목록 (설정 화면 철회 UI).
@@ -330,6 +396,9 @@ export const api = {
   // N19: 회원 탈퇴 (N6 soft delete — PII 스크럽, purgeAfter 후 물리 삭제).
   withdrawAccount: () =>
     authPostJson<{ deletedAt: string; purgeAfter: string }>('/auth/withdraw', {}),
+
+  // ──────────────── 세션 & 로그아웃 ────────────────
+
   // 서버 토큰 무효화는 최선 노력만 하고, 실패해도 로컬 세션 정리는 항상 진행되도록 에러를 삼킨다
   logout: async () => {
     try {
@@ -343,6 +412,9 @@ export const api = {
       // best-effort
     }
   },
+
+  // ──────────────── 패턴 분석 ────────────────
+
   // 개인 패턴 분석 (T10). 데이터 부족 시 null이 아니라 LOCKED 상태의 응답을 반환한다.
   // authFetch를 써서 200(LOCKED/READY)과 실패(error)를 구분한다.
   getPattern: async (): Promise<PatternSummary | null> => {
