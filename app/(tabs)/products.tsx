@@ -29,7 +29,7 @@ export default function ProductsScreen() {
   // 보내 하루 중 실제로 화장품을 쓰는 상황(세안 후/외출 전/외출 후)별로 하나씩 추천받는다.
   // 피부 기반 / 날씨+피부 기반은 아직 이 화면에 연결하지 않아 구역만 둔다.
   const [weatherProducts, setWeatherProducts] = useState<Product[] | null>(null);
-  const [weatherProductsLoading, setWeatherProductsLoading] = useState(true);
+  const [weatherProductsLoading, setWeatherProductsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
