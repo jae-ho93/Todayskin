@@ -630,6 +630,29 @@ Refresh Token
 
 완료 기준: 개발 모드에서도 화면에 1666-3538이 표시되고, 키가 있으면 로컬에서 실제 MO 검증이 동작.
 
+### BE-2026-08-12. 개발 스토리지 논리 URI(`memory://`) → http 정규화 (신규, 2026-08-12)
+
+> **배경**: 로컬 `S3_BUCKET` 미설정 시 `MemoryImageObjectStore` 사용. PR #109에서
+> `getPresignedUrl`은 `http://<DEV_STORAGE_BASE_URL>/dev-storage/...`로 바뀌었지만,
+> ① `putObject`의 `uri`(DB `thumbnailUri`에 저장)는 여전히 `memory://`이고,
+> ② 스냅샷 응답(`/diagnosis/latest`·제출 응답)이 저장된 `thumbnailUri`를 **그대로** 내보내
+> RN `Image`가 `memory://`를 처리하지 못해 실기기 크래시 (2026-08-12 04:29 재발).
+>
+> **수정 방향**:
+> - `ImageObjectStore`에 `toPublicUrl(uri)` 추가 — Memory는 `memory://bucket/key` →
+>   `${baseUrl}/dev-storage/bucket/key`, S3는 그대로 반환(논리 `s3://` URI 유지)
+> - `MemoryImageObjectStore.putObject`의 `uri`도 http dev-storage URL로 발급
+> - `ImageStorageService.toPublicUrl` 노출 → 진단 스냅샷 DTO(`toSnapshotDto`·
+>   `toSnapshotDtoFromDb`)에서 저장된 `thumbnailUri`를 정규화해 반환 (레거시 DB분 포함)
+> - spec: memory store `uri`/`toPublicUrl` 단위 테스트 + 스냅샷 DTO 정규화 어서션
+
+- [ ] `providers/image-object-store.interface.ts` — `toPublicUrl(uri: string): string`
+- [ ] `providers/memory-image-object-store.ts` — 구현 + `putObject` uri http화
+- [ ] `providers/s3-image-object-store.ts` — pass-through 구현
+- [ ] `image-storage.service.ts` — `toPublicUrl` 노출
+- [ ] `diagnosis.service.ts` — 스냅샷 DTO thumbnailUri 정규화 (레거시 DB분 포함)
+- [ ] spec 테스트 갱신
+
 ### N0. 운영 보안·HTTP 보호
 
 브랜치: `feature/runtime-security-http`
