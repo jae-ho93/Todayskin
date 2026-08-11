@@ -107,9 +107,8 @@ export default function HistoryScreen() {
     return [...Array.from({ length: firstWeekday }, () => null), ...Array.from({ length: count }, (_, index) => `${currentMonth}-${String(index + 1).padStart(2, '0')}`)];
   }, [currentMonth]);
   const recordedDates = useMemo(() => new Set(scoreSeries?.points.map((point) => point.date) ?? []), [scoreSeries]);
-  // F40: moveMonth를 useCallback으로 감싸고 최신 참조를 ref에 보관한다.
-  // PanResponder는 첫 렌더에 1회만 생성되므로(성능) 클로저가 moveMonthRef를 통해
-  // 항상 최신 상태를 읽도록 한다 — stale 클로저로 인한 왼쪽 무반응/2개월 점프 해결.
+  // F40: moveMonth를 useCallback으로 감싸 최신 상태를 안정적으로 읽는다.
+  // (PanResponder는 첫 렌더에 1회만 생성되므로 slideInMonth처럼 안정적인 콜백만 참조한다.)
   const moveMonth = useCallback((offset: number) => {
     setCurrentMonth((prev) => {
       const [year, month] = prev.split('-').map(Number);
@@ -117,10 +116,6 @@ export default function HistoryScreen() {
       return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`;
     });
   }, []);
-  const moveMonthRef = useRef(moveMonth);
-  useEffect(() => {
-    moveMonthRef.current = moveMonth;
-  }, [moveMonth]);
 
   // F37: 캘린더 좌우 스와이프로 앞/뒤 월 이동.
   // 가로 움직임이 우세할 때만 잡아서 세로 ScrollView(pull-to-refresh 포함)와 충돌하지 않게 한다.
@@ -128,6 +123,24 @@ export default function HistoryScreen() {
   const swipeX = useRef(new Animated.Value(0)).current;
   const cardWidthRef = useRef(0);
   const swipeHandledRef = useRef(false);
+  // F50: 월이 바뀌면 새 달이 스와이프 방향과 반대쪽(다음 달 = 오른쪽, 이전 달 = 왼쪽)에서
+  // 밀려 들어오도록 translateX를 오프셋에서 시작해 스프링으로 0까지 스냅한다.
+  // overshootClamping으로 튕김 없이 매끄럽게 들어온다.
+  const slideInMonth = useCallback(
+    (offset: number) => {
+      const width = cardWidthRef.current || 320;
+      moveMonth(offset);
+      swipeX.setValue(offset * width);
+      Animated.spring(swipeX, {
+        toValue: 0,
+        useNativeDriver: true,
+        damping: 26,
+        stiffness: 300,
+        overshootClamping: true,
+      }).start();
+    },
+    [moveMonth, swipeX],
+  );
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, g) =>
@@ -141,11 +154,9 @@ export default function HistoryScreen() {
         swipeHandledRef.current = true;
         const width = cardWidthRef.current || 320;
         if (g.dx <= -width * 0.25) {
-          moveMonthRef.current(1);
-          swipeX.setValue(0);
+          slideInMonth(1);
         } else if (g.dx >= width * 0.25) {
-          moveMonthRef.current(-1);
-          swipeX.setValue(0);
+          slideInMonth(-1);
         } else {
           Animated.spring(swipeX, { toValue: 0, useNativeDriver: true }).start();
         }
@@ -211,9 +222,9 @@ export default function HistoryScreen() {
           {...panResponder.panHandlers}
         >
         <View style={styles.calendarHeader}>
-          <Pressable onPress={() => moveMonth(-1)} hitSlop={10}><Ionicons name="chevron-back" size={20} color={colors.textSecondary} /></Pressable>
+          <Pressable onPress={() => slideInMonth(-1)} hitSlop={10}><Ionicons name="chevron-back" size={20} color={colors.textSecondary} /></Pressable>
           <Text style={styles.calendarTitle}>{currentMonth.slice(0, 4)}년 {Number(currentMonth.slice(5, 7))}월</Text>
-          <Pressable onPress={() => moveMonth(1)} hitSlop={10}><Ionicons name="chevron-forward" size={20} color={colors.textSecondary} /></Pressable>
+          <Pressable onPress={() => slideInMonth(1)} hitSlop={10}><Ionicons name="chevron-forward" size={20} color={colors.textSecondary} /></Pressable>
         </View>
         <View style={styles.weekRow}>{WEEKDAYS.map((day) => <Text key={day} style={styles.weekday}>{day}</Text>)}</View>
         <View style={styles.calendarGrid}>

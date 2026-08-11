@@ -32,13 +32,12 @@ export default function ProductsScreen() {
   const [weatherProductsLoading, setWeatherProductsLoading] = useState(false);
   const [weatherProductsRefreshing, setWeatherProductsRefreshing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // SSE/polling job 대기 취소용 — 재호출·언마운트 시 이전 대기를 중단한다.
+  const jobAbortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
-    if (pollTimerRef.current) {
-      clearInterval(pollTimerRef.current);
-      pollTimerRef.current = null;
-    }
+    jobAbortRef.current?.abort();
+    jobAbortRef.current = null;
     setWeatherProductsRefreshing(false);
     // N12: 날씨는 서버가 직접 조회한다. 클라이언트는 좌표만 전달하고 weather 본문을
     // 보내지 않으므로 조작된 날씨로 추천을 왜곡할 수 없다.
@@ -48,26 +47,21 @@ export default function ProductsScreen() {
     setWeatherProducts(products);
 
     if (weatherResponse?.source !== 'LIVE' && weatherResponse?.jobId) {
+      // SSE 우선, 실패 시 폴링 폴백 — waitForJob 내부에서 처리 (F0)
       setWeatherProductsRefreshing(true);
-      let attempts = 0;
-      pollTimerRef.current = setInterval(async () => {
-        attempts += 1;
-        const job = await api.pollJob<Product[]>(weatherResponse.jobId);
+      const controller = new AbortController();
+      jobAbortRef.current = controller;
+      void api.waitForJob<Product>(weatherResponse.jobId, { signal: controller.signal }).then((job) => {
+        if (jobAbortRef.current === controller) jobAbortRef.current = null;
         if (job?.status === 'COMPLETED' && job.result) {
-          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-          pollTimerRef.current = null;
-          setWeatherProductsRefreshing(false);
           // F38: job.result는 { products: [...] } 래핑 객체 — 배열로 언랩
           const live =
             (job.result as { products?: Product[] } | null)?.products ?? [];
           setWeatherProducts(live);
-        } else if (job?.status === 'FAILED' || attempts >= 20) {
-          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-          pollTimerRef.current = null;
-          setWeatherProductsRefreshing(false);
-          // 실패/timeout: 현재 CACHED/FALLBACK 실제품을 유지한다.
         }
-      }, 1000);
+        // 실패/timeout/취소: 현재 CACHED/FALLBACK 실제품을 유지한다.
+        setWeatherProductsRefreshing(false);
+      });
     }
   }, [coords]);
 
@@ -80,10 +74,8 @@ export default function ProductsScreen() {
     });
     return () => {
       cancelled = true;
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current);
-        pollTimerRef.current = null;
-      }
+      jobAbortRef.current?.abort();
+      jobAbortRef.current = null;
     };
   }, [locationLoading, load]);
 

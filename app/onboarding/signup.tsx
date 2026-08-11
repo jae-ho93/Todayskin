@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
+  InputAccessoryView,
   Keyboard,
   KeyboardAvoidingView,
   Linking,
@@ -257,6 +258,8 @@ export default function SignupScreen() {
                   onBlur={() => setFocusedField(null)}
                   maxLength={13}
                   editable={!phoneVerified}
+                  // F48: iOS number-pad 완료 바
+                  inputAccessoryViewID={Platform.OS === 'ios' ? 'done-bar' : undefined}
                 />
                 {/* number-pad 키보드는 iOS에 리턴키가 없어서, 버튼을 화면에 직접 둔다 */}
                 {!otpSent && !phoneVerified && (
@@ -379,6 +382,8 @@ export default function SignupScreen() {
                   onFocus={() => setFocusedField('birthDate')}
                   onBlur={() => setFocusedField(null)}
                   maxLength={10}
+                  // F48: iOS number-pad 완료 바
+                  inputAccessoryViewID={Platform.OS === 'ios' ? 'done-bar' : undefined}
                 />
               </View>
 
@@ -443,6 +448,22 @@ export default function SignupScreen() {
           </ScrollView>
         )}
       </KeyboardAvoidingView>
+      {/* F48: number-pad 완료 바 (iOS 전용) — 토스/카카오 패턴 */}
+      {Platform.OS === 'ios' && (
+        <InputAccessoryView nativeID="done-bar">
+          <View style={styles.doneBar}>
+            <Pressable
+              onPress={() => Keyboard.dismiss()}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="키패드 닫기"
+              style={styles.doneBarButton}
+            >
+              <Text style={styles.doneBarText}>완료</Text>
+            </Pressable>
+          </View>
+        </InputAccessoryView>
+      )}
     </SafeAreaView>
   );
 }
@@ -497,6 +518,18 @@ const styles = StyleSheet.create({
   verifiedText: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },
   error: { ...typography.bodySm, color: colors.coralDark },
   footer: { gap: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.md },
+  // F48: 키보드 위 완료 바
+  doneBar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    backgroundColor: colors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  doneBarButton: { paddingHorizontal: spacing.md, paddingVertical: 2 },
+  doneBarText: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },
   cta: {
     backgroundColor: colors.sage,
     borderRadius: radius.md,
