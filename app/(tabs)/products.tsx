@@ -133,7 +133,12 @@ export default function ProductsScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>날씨 기반 추천</Text>
-        {weatherProductsRefreshing && <Text style={styles.refreshingLabel}>최신 제품으로 갱신 중…</Text>}
+        {weatherProductsRefreshing && (
+          <View style={styles.refreshingRow}>
+            <ActivityIndicator size="small" color={colors.sage} />
+            <Text style={styles.refreshingLabel}>최신 제품으로 갱신 중…</Text>
+          </View>
+        )}
         {weatherProductsLoading ? (
           <View style={styles.loadingRow}>
             <ActivityIndicator color={colors.sage} />
@@ -211,6 +216,7 @@ const styles = StyleSheet.create({
   section: { gap: spacing.sm },
   sectionTitle: { ...typography.headline, color: colors.textPrimary },
   emptyText: { ...typography.bodySm, color: colors.textTertiary },
+  refreshingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   refreshingLabel: { ...typography.caption, color: colors.sageDark },
   loadingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   list: { gap: spacing.md },

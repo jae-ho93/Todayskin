@@ -206,6 +206,15 @@ export class ImageStorageService {
   }
 
   /**
+   * BE-2026-08-12: DB에 저장된 논리 URI(thumbnailUri)를 클라이언트 로드 가능한
+   * 공개 URL로 변환한다. Memory는 memory:// → dev-storage http, 그 외는 그대로.
+   * 진단 스냅샷 DTO가 RN Image로 로드 가능한 값을 내보내도록 보장한다.
+   */
+  toPublicUrl(uri: string): string {
+    return this.store.toPublicUrl(uri);
+  }
+
+  /**
    * 소유권 확인 후 presigned URL 발급. 이미지 없으면 404.
    */
   async getPresignedUrlForOwnedDiagnosis(params: {

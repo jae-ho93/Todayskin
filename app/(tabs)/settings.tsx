@@ -249,7 +249,7 @@ export default function SettingsScreen() {
 )}
       <View>
         <Text style={styles.sectionTitle}>개인정보 관리</Text>
-        <Card>
+        <Card style={styles.listCard}>
           <SettingsRow
             icon="shield-checkmark-outline"
             label="데이터 처리 동의 관리"
@@ -261,7 +261,7 @@ export default function SettingsScreen() {
 
       <View>
         <Text style={styles.sectionTitle}>알림 설정</Text>
-        <Card>
+        <Card style={styles.listCard}>
           {prefsLoading ? (
             <View style={styles.prefsLoading}>
               <ActivityIndicator color={colors.sage} size="small" />
@@ -304,7 +304,7 @@ export default function SettingsScreen() {
 
       <View>
         <Text style={styles.sectionTitle}>계정</Text>
-        <Card>
+        <Card style={styles.listCard}>
           <SettingsRow
             icon="people-outline"
             label="소셜 계정"
@@ -334,7 +334,7 @@ export default function SettingsScreen() {
 
       <View>
         <Text style={styles.sectionTitle}>앱</Text>
-        <Card>
+        <Card style={styles.listCard}>
           <SettingsRow icon="information-circle-outline" label="버전" right={<Text style={styles.versionText}>{appVersion}</Text>} />
           <View style={styles.divider} />
           <SettingsRow
@@ -470,13 +470,15 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   title: { ...typography.displaySm, color: colors.textPrimary },
   sectionTitle: { ...typography.subtitle, color: colors.textSecondary, marginBottom: spacing.sm },
+  // F55: 행 높이는 minHeight(터치 타겟)로만 고정 — 패딩 중복 제거로 뚱뚱함 해소
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     minHeight: 52,
-    paddingVertical: spacing.sm,
   },
+  // F55: 설정 카드 — 카드 안 패딩 최소화 (토스식 리스트 질감)
+  listCard: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   rowPressed: { opacity: 0.6 },
   rowLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   rowLabel: { ...typography.body, color: colors.textPrimary },

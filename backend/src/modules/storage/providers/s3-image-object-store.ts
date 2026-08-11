@@ -96,6 +96,14 @@ export class S3ImageObjectStore implements ImageObjectStore {
   }
 
   /**
+   * BE-2026-08-12: S3 논리 URI(`s3://`)는 그대로 반환한다.
+   * 클라이언트가 썸네일을 로드해야 하면 getPresignedUrl 경로를 사용한다.
+   */
+  toPublicUrl(uri: string): string {
+    return uri;
+  }
+
+  /**
    * N10: bucket 내 모든 객체 key를 나열한다(prefix 필터, 페이징 처리).
    * orphan 객체 탐지 dry-run/정리에 사용.
    */

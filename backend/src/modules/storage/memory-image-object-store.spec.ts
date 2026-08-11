@@ -30,6 +30,28 @@ describe('MemoryImageObjectStore', () => {
     expect(url).toBe('http://127.0.0.1:3000/dev-storage/test-bucket/diagnoses/1/front.jpg');
   });
 
+  it('putObject의 uri는 memory://가 아닌 dev-storage http URL이다 (DB thumbnailUri 오염 방지)', async () => {
+    const store = new MemoryImageObjectStore('test-bucket', 'http://127.0.0.1:3000');
+    const ref = await store.putObject({
+      key: 'diagnoses/1/front.jpg',
+      body: Buffer.from('jpeg-data'),
+      contentType: 'image/jpeg',
+    });
+    expect(ref.uri).toBe('http://127.0.0.1:3000/dev-storage/test-bucket/diagnoses/1/front.jpg');
+  });
+
+  it('toPublicUrl은 memory:// 논리 URI(레거시 DB분)를 dev-storage http URL로 정규화한다', () => {
+    const store = new MemoryImageObjectStore('test-bucket', 'http://192.168.0.5:3000');
+    expect(store.toPublicUrl('memory://test-bucket/diagnoses/1/front.jpg')).toBe(
+      'http://192.168.0.5:3000/dev-storage/test-bucket/diagnoses/1/front.jpg',
+    );
+    // 이미 http/s3인 URI는 그대로
+    expect(store.toPublicUrl('http://x/dev-storage/a/b.jpg')).toBe('http://x/dev-storage/a/b.jpg');
+    expect(store.toPublicUrl('s3://prod-bucket/diagnoses/1/front.jpg')).toBe(
+      's3://prod-bucket/diagnoses/1/front.jpg',
+    );
+  });
+
   it('getObject는 저장된 바이트와 contentType을 반환하고, 없으면 null', async () => {
     const store = new MemoryImageObjectStore('test-bucket');
     await store.putObject({

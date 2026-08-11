@@ -40,6 +40,13 @@ export interface ImageObjectStore {
    * DB 메타데이터 없는 orphan 객체 탐지·정리에 사용한다.
    */
   listObjects(params: { bucket: string; prefix?: string }): Promise<string[]>;
+
+  /**
+   * DB에 저장된 논리 URI(`memory://`·`s3://`)를 클라이언트가 로드 가능한
+   * 공개 URL로 변환한다. Memory는 dev-storage http URL, S3는 논리 URI를 그대로
+   * 반환한다(스냅샷 thumbnailUri는 이 값으로 내려간다).
+   */
+  toPublicUrl(uri: string): string;
 }
 
 export const IMAGE_OBJECT_STORE = Symbol('IMAGE_OBJECT_STORE');

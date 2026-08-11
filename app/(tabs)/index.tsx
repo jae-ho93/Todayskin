@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../src/api/client';
@@ -7,6 +7,7 @@ import { Card } from '../../src/components/Card';
 import { CircularGauge } from '../../src/components/CircularGauge';
 import { RecommendationCard } from '../../src/components/RecommendationCard';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
+import { useToast } from '../../src/components/Toast';
 import { WeatherCard } from '../../src/components/WeatherCard';
 import { useUserLocation } from '../../src/hooks/useUserLocation';
 import { getSession } from '../../src/lib/session';
@@ -28,6 +29,12 @@ export default function HomeDashboard() {
   const [hasCaptured, setHasCaptured] = useState<boolean | null>(null);
   const [skinScoreUnavailable, setSkinScoreUnavailable] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // F52: in-flight 가드·최초 로드 완료·기존 데이터 유무 마커
+  // (새로고침 버튼·당겨서 갱신·포커스 자동 갱신 중복 호출 방지 + 오류 시 화면 유지)
+  const loadInFlightRef = useRef(false);
+  const initialLoadDoneRef = useRef(false);
+  const hasDataRef = useRef(false);
+  const { showToast } = useToast();
 
   useEffect(() => {
     getSession().then((user) => setUserName(user?.name ?? null));
@@ -37,18 +44,23 @@ export default function HomeDashboard() {
   }, []);
 
   const load = useCallback(async () => {
-    if (pollTimerRef.current) {
-      clearInterval(pollTimerRef.current);
-      pollTimerRef.current = null;
-    }
-    setRecommendationsRefreshing(false);
-    setWeatherLoading(true);
-    setLoadingRecommendations(true);
-    setSkinScoreUnavailable(false);
+    // F52: 이미 갱신 중이면 중복 호출을 차단한다 (무한 폴링/시간 밀림 방지).
+    if (loadInFlightRef.current) return;
+    loadInFlightRef.current = true;
+    try {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+      setRecommendationsRefreshing(false);
+      setWeatherLoading(true);
+      setLoadingRecommendations(true);
+      setSkinScoreUnavailable(false);
 
-    const weatherSnapshot = await api.getWeather(coords ?? undefined);
-    setWeather(weatherSnapshot);
-    setWeatherLoading(false);
+      const weatherSnapshot = await api.getWeather(coords ?? undefined);
+      setWeather(weatherSnapshot);
+      setWeatherLoading(false);
+      hasDataRef.current = true;
 
     const skinResult = await api.getSkinScore();
 
@@ -106,8 +118,22 @@ export default function HomeDashboard() {
       }, 1000);
     }
 
-    setLoadingRecommendations(false);
-  }, [coords]);
+      setLoadingRecommendations(false);
+    } catch {
+      // F52: 오류 시 기존 데이터 유지 — 화면 블랭크/무한 스피너 방지.
+      // 이미 데이터가 있으면 토스트만 띄우고 그대로 둔다.
+      setWeatherLoading(false);
+      setLoadingRecommendations(false);
+      if (hasDataRef.current) {
+        showToast('새로고침하지 못했어요 — 기존 정보를 유지합니다', { type: 'error' });
+      } else {
+        setSkinScoreUnavailable(true);
+      }
+    } finally {
+      loadInFlightRef.current = false;
+      initialLoadDoneRef.current = true;
+    }
+  }, [coords, showToast]);
 
   // F24 복원: 첫 진입 시 데이터 로드 — 위치 권한 응답(허용/거부)이 결정될 때까지 기다렸다가
   // 조회한다. 거부돼도 coords만 없을 뿐 getWeather가 서버 기본 지역(서울)으로 폴백하므로
@@ -116,6 +142,15 @@ export default function HomeDashboard() {
     if (locationLoading) return;
     load();
   }, [locationLoading, load]);
+
+  // F52: 화면 포커스 복귀 시 1회 자동 갱신 (첫 진입은 위 effect가 처리).
+  // in-flight 가드가 중복 호출을 막아 시간 밀림을 방지한다.
+  useFocusEffect(
+    useCallback(() => {
+      if (!initialLoadDoneRef.current) return;
+      load();
+    }, [load]),
+  );
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -126,7 +161,22 @@ export default function HomeDashboard() {
   return (
     <View style={styles.flex}>
       <ScreenContainer style={styles.content} refreshing={refreshing} onRefresh={handleRefresh}>
-        <Text style={styles.greeting}>안녕하세요, {userName ?? '회원'}님</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.greeting}>안녕하세요, {userName ?? '회원'}님</Text>
+          <Pressable
+            onPress={handleRefresh}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="새로고침"
+            style={styles.refreshButton}
+          >
+            {refreshing ? (
+              <ActivityIndicator size="small" color={colors.sage} />
+            ) : (
+              <Ionicons name="refresh" size={20} color={colors.sageDark} />
+            )}
+          </Pressable>
+        </View>
 
         {weather ? (
           <WeatherCard weather={weather} />
@@ -211,7 +261,22 @@ export default function HomeDashboard() {
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.background },
   content: { paddingBottom: spacing.xxxl * 2 },
-  greeting: { ...typography.displaySm, color: colors.textPrimary },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  greeting: { ...typography.displaySm, color: colors.textPrimary, flexShrink: 1 },
+  refreshButton: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    ...shadow.card,
+  },
   weatherLoading: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
   weatherLoadingText: { ...typography.bodySm, color: colors.textSecondary },
   emptyState: {

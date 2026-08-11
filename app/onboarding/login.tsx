@@ -190,9 +190,8 @@ export default function LoginScreen() {
             )}
 
             {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-          </View>
 
-          <View style={styles.footer}>
+            {/* F54: CTA를 입력 필드 직하로 (토스식) — 하단 고정 footer와 분리 */}
             <Pressable
               onPress={handleSubmit}
               disabled={!otpSent || submitting}
@@ -212,6 +211,9 @@ export default function LoginScreen() {
             <Pressable onPress={() => router.replace('/onboarding/signup')} hitSlop={8}>
               <Text style={styles.signupLink}>아직 계정이 없으신가요? 회원가입</Text>
             </Pressable>
+          </View>
+
+          <View style={styles.footer}>
             <SocialLoginButtons compact busyProvider={busyProvider} onToken={handleSocialToken} onError={setError} />
             <Text style={styles.terms}>
               계속하면{' '}
@@ -235,7 +237,8 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.xl },
   keyboardAvoiding: { flex: 1 },
   body: { flex: 1, paddingVertical: spacing.xl },
-  middle: { flex: 1, justifyContent: 'center', gap: spacing.xl },
+  // F54: 필드를 중앙보다 살짝 위(상단 25~35%)로, CTA는 middle 안에서 필드 직하에 붙는다
+  middle: { flex: 1, justifyContent: 'flex-start', gap: spacing.xl, marginTop: spacing.xxl },
   headline: { ...typography.displayLg, color: colors.textPrimary },
   subtitle: { ...typography.body, color: colors.textSecondary, marginTop: spacing.sm },
   field: { gap: spacing.sm },
