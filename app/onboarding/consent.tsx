@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,6 +15,9 @@ export default function OnboardingConsent() {
   const [registry, setRegistry] = useState<ConsentPurposeInfo[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [agreed, setAgreed] = useState<Partial<Record<ConsentPurpose, boolean>>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const { social } = useLocalSearchParams<{ social?: string }>();
 
   useEffect(() => {
     let cancelled = false;
@@ -31,8 +34,21 @@ export default function OnboardingConsent() {
   const requiredPurposes = registry?.filter((r) => r.required) ?? [];
   const allRequiredAgreed = requiredPurposes.every((r) => agreed[r.purpose]);
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!registry) return;
+    if (social === '1') {
+      setSubmitting(true);
+      setSubmitError(null);
+      try {
+        await Promise.all(registry.map((item) => api.upsertConsent(item.purpose, agreed[item.purpose] ?? false)));
+        router.replace('/onboarding/social-phone');
+      } catch (error) {
+        setSubmitError(error instanceof Error ? error.message : '동의를 저장하지 못했습니다. 다시 시도해주세요.');
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
     for (const item of registry) {
       setPendingConsent(item.purpose, agreed[item.purpose] ?? false);
     }
@@ -106,16 +122,18 @@ export default function OnboardingConsent() {
         })}
       </ScrollView>
 
+      {submitError && <Text style={styles.submitError}>{submitError}</Text>}
+
       <Pressable
         onPress={handleContinue}
-        disabled={!allRequiredAgreed}
+        disabled={!allRequiredAgreed || submitting}
         style={({ pressed }) => [
           styles.cta,
-          !allRequiredAgreed && styles.ctaDisabled,
-          pressed && allRequiredAgreed && styles.ctaPressed,
+          (!allRequiredAgreed || submitting) && styles.ctaDisabled,
+          pressed && allRequiredAgreed && !submitting && styles.ctaPressed,
         ]}
       >
-        <Text style={styles.ctaText}>동의하고 계속하기</Text>
+        {submitting ? <ActivityIndicator color={colors.textInverse} /> : <Text style={styles.ctaText}>동의하고 계속하기</Text>}
       </Pressable>
     </SafeAreaView>
   );
@@ -185,4 +203,5 @@ const styles = StyleSheet.create({
     ...typography.headline,
     color: colors.textInverse,
   },
+  submitError: { ...typography.bodySm, color: colors.coralDark, textAlign: 'center' },
 });

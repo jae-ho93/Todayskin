@@ -102,9 +102,9 @@ export interface SignupRequest {
 
 export interface User {
   id: number;
-  phoneNumber: string;
+  phoneNumber: string | null;
   name: string;
-  birthDate: string; // "YYYY-MM-DD"
+  birthDate: string | null; // "YYYY-MM-DD"; 소셜 가입 직후에는 null
   gender?: Gender;
   createdAt: string;
   accessToken: string;
@@ -112,6 +112,12 @@ export interface User {
   refreshToken?: string;
   // access token 만료(초) — 백엔드 기본 15m(900s).
   expiresIn?: number;
+}
+
+export type SocialProvider = 'kakao' | 'google' | 'apple';
+
+export interface SocialLoginResponse extends User {
+  isNewUser: boolean;
 }
 
 // ── 동의(consent) ──────────────────────────────

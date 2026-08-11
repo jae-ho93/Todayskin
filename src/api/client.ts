@@ -15,6 +15,8 @@ import type {
   WeatherProductsFastResponse,
   ScoreSeries,
   SignupRequest,
+  SocialLoginResponse,
+  SocialProvider,
   SkinScoreSnapshot,
   User,
   WeatherSnapshot,
@@ -356,20 +358,10 @@ export const api = {
   signup: (payload: SignupRequest) => postJson<User>('/auth/signup', payload),
   login: (phoneNumber: string) => postJson<User>('/auth/login', { phoneNumber }),
 
-  // F0: N33 이후 소셜 로그인 자리 — 아직 구현 안 함
-  // 예상 계약 (F15에서 실제 구현):
-  //
-  // socialLogin: (provider: 'kakao' | 'google' | 'apple', accessToken: string) =>
-  //   postJson<User & { isNewUser: boolean }>('/auth/social', {
-  //     provider,
-  //     accessToken,
-  //   }),
-  //
-  // socialLinkPhone: (phoneNumber: string, birthDate?: string) =>
-  //   authPostJson<User>('/auth/social/link-phone', {
-  //     phoneNumber,
-  //     birthDate,
-  //   }),
+  socialLogin: (provider: SocialProvider, accessToken: string) =>
+    postJson<SocialLoginResponse>('/auth/social', { provider, accessToken }),
+  socialLinkPhone: (phoneNumber: string, birthDate?: string) =>
+    authPostJson<User>('/auth/social/link-phone', { phoneNumber, birthDate }),
 
   // ──────────────── 동의 & 알림 설정 ────────────────
 
