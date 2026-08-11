@@ -10,14 +10,15 @@ import { OtpProvider } from './otp-provider.interface';
  *
  * MO 방식이지만 개발 환경에서는 실제 문자 수신이 없으므로
  * verifySent는 항상 true를 반환한다 — 코드 일치(해시 비교)만으로 검증 통과.
- * 운영(NODE_ENV=production)에서는 OctomoOtpProvider로 교체해야 한다.
+ * OCTOMO_API_KEY가 설정되면 otp.module이 OctomoOtpProvider로 교체한다.
  */
 @Injectable()
 export class MockOtpProvider implements OtpProvider {
   private readonly logger = new Logger(MockOtpProvider.name);
   readonly name = 'mock';
   // 개발 환경에서 표시용 — 실제 문자 발송은 없으므로 사용되지 않는다.
-  readonly recipientNumber = '0000';
+  // OCTOMO 대표번호와 동일하게 유지해 운영/개발 화면 안내가 일관되게 보인다.
+  readonly recipientNumber = '1666-3538';
 
   // 개발용 고정 OTP를 허용할 테스트 전화번호 목록 (쉼표 구분).
   // 환경변수 OTP_ALLOWLIST_PHONES로 주입. 비워두면 모두 무작위 코드.
