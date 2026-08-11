@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
@@ -12,7 +12,6 @@ import { useUserLocation } from '../../src/hooks/useUserLocation';
 import { getSession } from '../../src/lib/session';
 import { colors, radius, shadow, spacing, typography } from '../../src/theme';
 import type { Recommendation, SkinScoreSnapshot, WeatherSnapshot } from '../../src/types';
-import type { RecommendationsFastResponse, Job } from '../../src/types';
 
 export default function HomeDashboard() {
   const { coords, loading: locationLoading } = useUserLocation();
@@ -23,6 +22,8 @@ export default function HomeDashboard() {
   const [skinScore, setSkinScore] = useState<SkinScoreSnapshot | null>(null);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loadingRecommendations, setLoadingRecommendations] = useState(true);
+  const [recommendationsRefreshing, setRecommendationsRefreshing] = useState(false);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // null = 아직 못 불러옴, false = 불러옴 (로딩 중), true = 불러옴 (기존)
   const [hasCaptured, setHasCaptured] = useState<boolean | null>(null);
   const [skinScoreUnavailable, setSkinScoreUnavailable] = useState(false);
@@ -30,9 +31,17 @@ export default function HomeDashboard() {
 
   useEffect(() => {
     getSession().then((user) => setUserName(user?.name ?? null));
+    return () => {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+    };
   }, []);
 
   const load = useCallback(async () => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+    setRecommendationsRefreshing(false);
     setWeatherLoading(true);
     setLoadingRecommendations(true);
     setSkinScoreUnavailable(false);
@@ -65,27 +74,33 @@ export default function HomeDashboard() {
     ]);
 
     // F1: fast-path 응답 처리
-    // source: CACHED/FALLBACK → 즉시 표시
-    // source: LIVE + jobId → 폴링 시작, stale/정신 중 표시
-    let bGrade = bGradeResponse?.recommendations ?? null;
+    // source: CACHED/FALLBACK → 실제품을 즉시 표시하고 jobId가 있으면 LIVE 결과로 교체한다.
+    // source: LIVE → 이미 최신 결과이므로 polling하지 않는다.
+    const bGrade = bGradeResponse?.recommendations ?? null;
     if (aGrade === null && bGrade === null) {
       setRecommendations(null);
     } else {
       setRecommendations([...(aGrade ?? []), ...(bGrade ?? [])]);
     }
 
-    // F1: LIVE 폴링 (기다리지 않고 백그라운드에서)
-    if (bGradeResponse?.source === 'LIVE' && bGradeResponse?.jobId) {
-      const pollInterval = setInterval(async () => {
+    if (bGradeResponse?.source !== 'LIVE' && bGradeResponse?.jobId) {
+      setRecommendationsRefreshing(true);
+      let attempts = 0;
+      pollTimerRef.current = setInterval(async () => {
+        attempts += 1;
         const job = await api.pollJob<Recommendation[]>(bGradeResponse.jobId);
         if (job?.status === 'COMPLETED' && job.result) {
-          clearInterval(pollInterval);
+          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+          setRecommendationsRefreshing(false);
           setRecommendations([...(aGrade ?? []), ...job.result]);
-        } else if (job?.status === 'FAILED') {
-          clearInterval(pollInterval);
-          // 실패: 기존 FALLBACK 유지
+        } else if (job?.status === 'FAILED' || attempts >= 20) {
+          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+          setRecommendationsRefreshing(false);
+          // 실패/timeout: 현재 CACHED/FALLBACK 결과를 유지한다.
         }
-      }, 1000); // 1초마다 폴링
+      }, 1000);
     }
 
     setLoadingRecommendations(false);
@@ -149,6 +164,7 @@ export default function HomeDashboard() {
 
             <View>
               <Text style={styles.sectionTitle}>오늘 의 추천</Text>
+              {recommendationsRefreshing && <Text style={styles.refreshingLabel}>최신 추천으로 갱신 중…</Text>}
               {loadingRecommendations ? (
                 <View style={styles.recommendationLoading}>
                   <ActivityIndicator color={colors.sage} />
@@ -225,6 +241,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xl,
   },
   recommendationLoadingText: { ...typography.bodySm, color: colors.textSecondary },
+  refreshingLabel: { ...typography.caption, color: colors.sageDark, marginBottom: spacing.sm },
   recommendationList: { gap: spacing.sm },
   fab: {
     position: 'absolute',
