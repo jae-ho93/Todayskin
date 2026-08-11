@@ -10,8 +10,8 @@ import { OctomoOtpProvider } from './providers/octomo-otp.provider';
  * OTP 모듈 (MO — Mobile Originated).
  *
  * provider 선택:
- * - production: OctomoOtpProvider (OCTOMO MO 인증 — 문자 수신 여부 검증)
- * - 그외(dev/test): MockOtpProvider (allowlisted 고정 OTP)
+ * - OCTOMO_API_KEY 설정 시: OctomoOtpProvider (OCTOMO MO 인증 — 문자 수신 여부 검증)
+ * - 그외(키 미설정): MockOtpProvider (allowlisted 고정 OTP)
  *
  * OTP policy: 개발은 allowlisted test phone / mock OTP,
  * 운영은 실제 OTP + 시도/만료/재전송 제한.
@@ -25,8 +25,8 @@ import { OctomoOtpProvider } from './providers/octomo-otp.provider';
       provide: OTP_PROVIDER,
       inject: [ConfigService],
       useFactory: (config: ConfigService): OtpProvider => {
-        const isProd = config.get<string>('NODE_ENV') === 'production';
-        return isProd ? new OctomoOtpProvider(config) : new MockOtpProvider();
+        const apiKey = config.get<string>('OCTOMO_API_KEY');
+        return apiKey ? new OctomoOtpProvider(config) : new MockOtpProvider();
       },
     },
   ],

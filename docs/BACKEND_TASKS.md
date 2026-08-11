@@ -616,16 +616,17 @@ Refresh Token
 - [x] health ready 의존성 `sms` → `octomo` / provider 단위 테스트 교체 / OTP·auth e2e 유지 확인
 - [x] 프론트: OTP 화면 "코드 입력" → "수신 번호로 코드 발송 안내" 전환 (`docs/FRONTEND_TASKS.md` F17, PR #94 완료)
 
-### BE-2026-08-12. OTP 개발 모드 정리 — OCTOMO 연동/목업 표시 (신규)
+### BE-2026-08-12. OTP 개발 모드 정리 — OCTOMO 연동/목업 표시 — 완료 (2026-08-12)
 
 > 2026-08-12 로컬 점검: `.env`에 `OCTOMO_API_KEY`가 없어 개발 환경이 `MockOtpProvider`로 동작하고,
 > mock의 `recipientNumber = '0000'`(자리표시자)가 프론트 코드 카드에 그대로 노출돼
 > "0000으로 인증코드를 보내라"는 깨진 화면이 보임. (프론트 F17은 정상 구현)
 
-- [ ] `MockOtpProvider.recipientNumber`를 `'0000'` → `'1666-3538'`로 변경 (개발 화면 정상화)
-- [ ] provider 선택을 `NODE_ENV === 'production'` 기준 → **`OCTOMO_API_KEY` 유무 기준**으로 변경
+- [x] `MockOtpProvider.recipientNumber`를 `'0000'` → `'1666-3538'`로 변경 (개발 화면 정상화)
+- [x] provider 선택을 `NODE_ENV === 'production'` 기준 → **`OCTOMO_API_KEY` 유무 기준**으로 변경
       (`otp.module.ts` useFactory) — 로컬에서도 키만 넣으면 실제 OCTOMO 검증 테스트 가능
 - [ ] 운영 필수: OCTOMO 가입(무료) → `OCTOMO_API_KEY`·`OCTOMO_RECIPIENT_NUMBER` 등록
+      (외부 회원가입 절차 — 배포 시(N16) 처리)
 
 완료 기준: 개발 모드에서도 화면에 1666-3538이 표시되고, 키가 있으면 로컬에서 실제 MO 검증이 동작.
 
