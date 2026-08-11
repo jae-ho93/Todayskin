@@ -8,8 +8,7 @@ Todayskin 문서 허브. 코드 옆에 두지 않고 **역할별로 여기(`docs
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 백엔드 아키텍처 원칙 (NestJS ↔ FastAPI) |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | AWS ECS 실배포 · CI/CD · 롤백 |
 | [BACKEND_TASKS.md](BACKEND_TASKS.md) | 백엔드 Task 이력 · 남은 N16 |
-| [FRONTEND_TASKS.md](FRONTEND_TASKS.md) | 프론트 Task 보드 (현재 웨이브) |
-| [FE_HANDOFF.md](FE_HANDOFF.md) | FE 에이전트 복붙 실행 지시 |
+| [FRONTEND_TASKS.md](FRONTEND_TASKS.md) | 프론트 Task 보드 · 작업 절차·계약 통합 관리 |
 
 ## 저장소 루트 (GitHub 관례)
 

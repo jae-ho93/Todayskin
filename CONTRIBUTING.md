@@ -15,6 +15,18 @@ git switch -c <task-branch>
 브랜치: `feature/` · `fix/` · `refactor/` · `test/` · `chore/` · `docs/`  
 커밋: Conventional Commits. `git add .` 대신 관련 경로만 stage.
 
+### AI 에이전트 규칙 (2026-08-12)
+
+AI 코딩 보조로 작업할 때도 아래를 **반드시** 지킨다.
+
+- **모든 브랜치 규칙은 AI 에이전트에도 동일하게 적용**된다 — `main` 직접 작업 금지,
+  작업 하나당 새 브랜치, merge 후 브랜치 삭제 금지.
+- **각 작업마다 브랜치를 만들고**, 작업이 끝나면 **커밋 → 푸시 → 머지** 순서로 진행한다.
+- **CI 기준**: 배포 관련 CI(Deploy ECS 등)는 실패해도 진행할 수 있다.
+  단 **백엔드 빌드/테스트와 프론트엔드 빌드(타입체크)는 반드시 성공**해야 머지한다.
+- **머지 후에는 반드시 로컬 `main`을 동기화** (`git pull --ff-only origin main`)한 뒤
+  다음 작업으로 넘어간다.
+
 ## PR · 리뷰
 
 본문: 변경/이유, 테스트, API·DB·env 변경, 남은 일, 위험 포인트.  
@@ -35,6 +47,6 @@ N16·총리팩·결제·BE 계약 변경은 기본 규칙.
 
 ## 지금 할 일
 
-- **FE:** [docs/FRONTEND_TASKS.md](docs/FRONTEND_TASKS.md) · [docs/FE_HANDOFF.md](docs/FE_HANDOFF.md)
+- **FE:** [docs/FRONTEND_TASKS.md](docs/FRONTEND_TASKS.md) (작업 절차·계약 통합 관리)
 - **BE:** freeze. 이력·N16 → [docs/BACKEND_TASKS.md](docs/BACKEND_TASKS.md)
 - 셋업: [docs/SETUP.md](docs/SETUP.md) · 원칙: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)

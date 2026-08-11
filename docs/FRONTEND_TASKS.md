@@ -1,7 +1,7 @@
 # Todayskin Frontend Tasks
 
 Expo SDK 54 기준. 백엔드 규칙은 `docs/BACKEND_TASKS.md`, 협업은 `CONTRIBUTING.md` 참고.
-복붙 실행 지시서는 `docs/FE_HANDOFF.md`.
+작업 절차·계약은 이 문서와 `docs/BACKEND_TASKS.md`에 통합 관리한다.
 
 ## 운영 (이 웨이브)
 
@@ -764,3 +764,40 @@ F0 → F1 → F2 → F3 → F6 → F4 → F16 → F8 → F10 → F15 → F13 →
 
 - [x] `app/onboarding/login.tsx` — ScrollView + flex-start
 - [x] `app/onboarding/signup.tsx` — ScrollView + flex-start (phone/profile 두 단계)
+
+## 프론트 범위 완료 기록 (백엔드 보드에서 이동, 2026-08-12)
+
+> 백엔드 문서(`docs/BACKEND_TASKS.md`)에 남아 있던 프론트 범위 완료 기록을 이곳으로 옮겼다.
+
+### N15. 캘린더 히스토리 프론트 연결 (프론트 범위 — 완료)
+
+브랜치: `feature/calendar-history-client`
+
+- [x] 프론트 API client에 `history/:date`, `score-series` 추가
+- [x] 날씨·진단·추천·image·landmarks 응답 타입 동기화
+- [x] History 화면의 기존 목록/로컬 시계열을 N8 계약으로 migration
+- [x] 저장 미동의와 presigned URL 만료 상태 처리
+- [x] 로딩·빈 날짜·부분 데이터·재인증 UI 검증
+
+완료 기준: 사용자가 날짜를 선택하면 N8 통합 히스토리를 실제 앱에서 조회하고 동의 상태에 맞는 이미지·landmarks를 확인할 수 있다.
+
+### N18. 앱 세션 토큰 수명 관리 (프론트 범위 — 완료)
+
+브랜치: `feature/app-session-refresh`
+
+- [x] 프론트에 refresh token 회전 연동 (현재 `saveSession`은 accessToken만 저장, refresh 미사용)
+- [x] 401 응답 시 재로그인 유도 흐름 (현재는 "불러올 수 없어요"만 노출되고 로그인 화면으로 복귀하지 않음)
+- [x] access token(15m) 만료 후에도 앱이 조용히 갱신되거나 명확한 재인증 UX 제공
+
+완료 기준: 세션이 15분 이상 지속돼도 인증 API가 끊기지 않고, 토큰 무효 시 사용자가 로그인 화면으로 안내된다.
+
+### N19. 설정 화면 기능 연동 (프론트 범위 — 완료)
+
+브랜치: `feature/settings-integration`
+
+- [x] 알림 스위치를 `NotificationPreference` API에 연동 (현재 로컬 state만 변경, 서버 미저장)
+- [x] "안면 이미지 처리방침 확인" / "데이터 처리 동의 철회" 행에 consent 조회·철회 API 연결
+- [x] 탈퇴(withdraw) UI — 백엔드 `POST /auth/withdraw`(N6)는 구현돼 있으나 앱 진입점 없음
+- [ ] 구독(프리미엄) 화면 — 현재 정적 표시만, 결제·권한 로직 없음 (범위 별도 결정 — 미완료). **가짜 가격 카드는 F16에서 삭제.** 이후 FE 미완료 작업은 이 문서에서 관리.
+
+완료 기준: 설정 화면의 모든 항목이 실제 API와 동기화되고 동의 철회·탈퇴가 사용자 흐름으로 동작한다.
