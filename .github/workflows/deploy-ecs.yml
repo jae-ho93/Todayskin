@@ -156,11 +156,15 @@ jobs:
           fi
           SUBNET_JSON=$(printf '%s' "${ECS_SUBNETS}" | jq -R 'split(",")')
           SG_JSON=$(printf '%s' "${ECS_SECURITY_GROUPS}" | jq -R 'split(",")')
+          # 2026-08-12 네트워킹 확정: backend는 public subnet + NAT 미사용(IGW 경유) →
+          # 태스크에 퍼블릭 IP를 할당해야 ECR pull/아웃바운드가 된다.
+          # (NAT gateway 사용 시 DISABLED로 되돌리면 됨 — GitHub Variable ECS_ASSIGN_PUBLIC_IP로 오버라이드 가능)
+          ASSIGN_PUBLIC_IP="${ECS_ASSIGN_PUBLIC_IP:-ENABLED}"
           TASK_ARN=$(aws ecs run-task \
             --cluster "${ECS_CLUSTER}" \
             --launch-type FARGATE \
             --task-definition "${ECS_MIGRATE_TASK_FAMILY}" \
-            --network-configuration "awsvpcConfiguration={subnets=${SUBNET_JSON},securityGroups=${SG_JSON},assignPublicIp=DISABLED}" \
+            --network-configuration "awsvpcConfiguration={subnets=${SUBNET_JSON},securityGroups=${SG_JSON},assignPublicIp=${ASSIGN_PUBLIC_IP}}" \
             --query 'tasks[0].taskArn' \
             --output text)
           echo "Migrate task: ${TASK_ARN}"

@@ -34,6 +34,12 @@ function kstDateStrings(count: number): string[] {
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
+// '2026-08-01' → '8월 1일' — 날짜 표기 단위를 캘린더·추이에서 일관되게 맞춘다.
+function formatDateKo(iso: string): string {
+  const [, month, day] = iso.split('-').map(Number);
+  return `${month}월 ${day}일`;
+}
+
 function monthBounds(month: string): { from: string; to: string } {
   const [year, value] = month.split('-').map(Number);
   const last = new Date(year, value, 0).getDate();
@@ -164,7 +170,7 @@ export default function HistoryScreen() {
             <Polyline points={trend.points} fill="none" stroke={colors.sage} strokeWidth={2.5} />
           </Svg>
           <Text style={styles.trendRange}>
-            {trend.from} ~ {trend.to}
+            {formatDateKo(trend.from)} ~ {formatDateKo(trend.to)}
           </Text>
         </Card>
       )}
@@ -173,7 +179,7 @@ export default function HistoryScreen() {
       <Card style={styles.calendarCard}>
         <View style={styles.calendarHeader}>
           <Pressable onPress={() => moveMonth(-1)} hitSlop={10}><Ionicons name="chevron-back" size={20} color={colors.textSecondary} /></Pressable>
-          <Text style={styles.calendarTitle}>{currentMonth.replace('-', '년 ')}월</Text>
+          <Text style={styles.calendarTitle}>{currentMonth.slice(0, 4)}년 {Number(currentMonth.slice(5, 7))}월</Text>
           <Pressable onPress={() => moveMonth(1)} hitSlop={10}><Ionicons name="chevron-forward" size={20} color={colors.textSecondary} /></Pressable>
         </View>
         <View style={styles.weekRow}>{WEEKDAYS.map((day) => <Text key={day} style={styles.weekday}>{day}</Text>)}</View>
