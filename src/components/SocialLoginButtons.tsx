@@ -117,7 +117,7 @@ export function SocialLoginButtons({ busyProvider, onToken, onError }: Props) {
   const disabled = busyProvider !== null;
   return (
     <View style={styles.container}>
-      <View style={styles.divider}><View style={styles.line} /><Text style={styles.or}>또는</Text><View style={styles.line} /></View>
+      <View style={styles.divider}><View style={styles.line} /><Text style={styles.or}>소셜 계정으로 계속</Text><View style={styles.line} /></View>
       <SocialButton label="카카오로 계속하기" background="#FEE500" color="#191919" icon="chatbubble" loading={busyProvider === 'kakao'} disabled={disabled} onPress={() => kakaoClientId ? promptKakao() : showNotConfigured('카카오')} />
       <SocialButton label="Google로 계속하기" background={colors.surface} color={colors.textPrimary} icon="logo-google" loading={busyProvider === 'google'} disabled={disabled} onPress={() => (googleIosClientId || googleAndroidClientId || googleWebClientId) ? promptGoogle() : showNotConfigured('Google')} />
       <SocialButton label="Apple로 계속하기" background="#000000" color="#FFFFFF" icon="logo-apple" loading={busyProvider === 'apple'} disabled={disabled} onPress={handleApple} />
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   container: { gap: spacing.sm },
   divider: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginVertical: spacing.xs },
   line: { flex: 1, height: 1, backgroundColor: colors.border },
-  or: { ...typography.bodySm, color: colors.textTertiary },
+  or: { ...typography.caption, color: colors.textTertiary },
   button: { minHeight: 52, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg },
   outlined: { borderWidth: 1, borderColor: colors.border },
   buttonText: { ...typography.subtitle, fontWeight: '700' },
