@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
@@ -16,10 +16,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../../src/api/client';
+import { SocialLoginButtons } from '../../src/components/SocialLoginButtons';
 import { clearPendingConsents, getPendingConsents } from '../../src/lib/pendingConsents';
 import { saveSession } from '../../src/lib/session';
 import { colors, radius, spacing, typography } from '../../src/theme';
-import type { Gender } from '../../src/types';
+import type { Gender, SocialProvider } from '../../src/types';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -78,6 +79,7 @@ export default function SignupScreen() {
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [birthDateDigits, setBirthDateDigits] = useState('');
   const [gender, setGender] = useState<Gender | null>(null); // 선택 입력이라 폼 유효성엔 영향 없음
+  const [busyProvider, setBusyProvider] = useState<SocialProvider | null>(null);
   const [focusedField, setFocusedField] = useState<Field | null>('name');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -197,6 +199,20 @@ export default function SignupScreen() {
       setSubmitting(false);
     }
   };
+
+  const handleSocialToken = useCallback(async (provider: SocialProvider, token: string) => {
+    setBusyProvider(provider);
+    setError(null);
+    try {
+      const user = await api.socialLogin(provider, token);
+      await saveSession(user);
+      router.replace(user.isNewUser ? '/onboarding/consent?social=1' : '/(tabs)');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '소셜 가입에 실패했습니다. 다시 시도해주세요.');
+    } finally {
+      setBusyProvider(null);
+    }
+  }, []);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -374,6 +390,7 @@ export default function SignupScreen() {
           <Pressable onPress={() => router.replace('/onboarding/login')} hitSlop={8}>
             <Text style={styles.loginLink}>이미 계정이 있으신가요? 로그인</Text>
           </Pressable>
+          <SocialLoginButtons busyProvider={busyProvider} onToken={handleSocialToken} onError={setError} />
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

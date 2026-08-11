@@ -1,11 +1,12 @@
 import { router } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -13,8 +14,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../../src/api/client';
+import { SocialLoginButtons } from '../../src/components/SocialLoginButtons';
 import { saveSession } from '../../src/lib/session';
 import { colors, radius, spacing, typography } from '../../src/theme';
+import type { SocialProvider } from '../../src/types';
 
 function formatPhoneDisplay(digits: string): string {
   if (digits.length <= 3) return digits;
@@ -35,6 +38,7 @@ export default function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
   const [sendingOtp, setSendingOtp] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [busyProvider, setBusyProvider] = useState<SocialProvider | null>(null);
 
   const otpInputRef = useRef<TextInput>(null);
   const isPhoneValid = isValidPhoneDigits(phoneDigits);
@@ -82,12 +86,31 @@ export default function LoginScreen() {
     }
   };
 
+  const handleSocialToken = useCallback(async (provider: SocialProvider, token: string) => {
+    setBusyProvider(provider);
+    setError(null);
+    try {
+      const user = await api.socialLogin(provider, token);
+      await saveSession(user);
+      router.replace(user.isNewUser ? '/onboarding/consent?social=1' : '/(tabs)');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '소셜 로그인에 실패했습니다. 다시 시도해주세요.');
+    } finally {
+      setBusyProvider(null);
+    }
+  }, []);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
         style={styles.keyboardAvoiding}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
         <View style={styles.body}>
           <View>
             <Text style={styles.headline}>로그인</Text>
@@ -175,7 +198,9 @@ export default function LoginScreen() {
           <Pressable onPress={() => router.replace('/onboarding/signup')} hitSlop={8}>
             <Text style={styles.signupLink}>아직 계정이 없으신가요? 회원가입</Text>
           </Pressable>
+          <SocialLoginButtons busyProvider={busyProvider} onToken={handleSocialToken} onError={setError} />
         </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -184,7 +209,8 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.xl },
   keyboardAvoiding: { flex: 1 },
-  body: { flex: 1, gap: spacing.xxl, justifyContent: 'center' },
+  scrollContent: { flexGrow: 1, justifyContent: 'center', gap: spacing.xxl, paddingVertical: spacing.xl },
+  body: { gap: spacing.xxl },
   headline: { ...typography.displayLg, color: colors.textPrimary },
   subtitle: { ...typography.body, color: colors.textSecondary, marginTop: spacing.sm },
   field: { gap: spacing.sm },
@@ -203,7 +229,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.sage,
   },
   error: { ...typography.bodySm, color: colors.coralDark },
-  footer: { gap: spacing.lg, paddingBottom: spacing.xl },
+  footer: { gap: spacing.lg },
   cta: {
     backgroundColor: colors.sage,
     borderRadius: radius.md,
