@@ -1,9 +1,10 @@
 import { router } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -34,19 +35,15 @@ export default function LoginScreen() {
   const [phoneDigits, setPhoneDigits] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState('');
-  const [focused, setFocused] = useState<'phone' | 'otp' | null>(null);
+  const [recipientNumber, setRecipientNumber] = useState('');
+  const [focused, setFocused] = useState<'phone' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sendingOtp, setSendingOtp] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [busyProvider, setBusyProvider] = useState<SocialProvider | null>(null);
 
-  const otpInputRef = useRef<TextInput>(null);
   const isPhoneValid = isValidPhoneDigits(phoneDigits);
   const isOtpValid = otpCode.length === 6;
-
-  useEffect(() => {
-    if (otpSent) otpInputRef.current?.focus();
-  }, [otpSent]);
 
   // 번호를 다시 바꾸면 이전 인증은 무효 — 새 번호로 다시 인증번호를 받아야 한다
   const handlePhoneChange = (v: string) => {
@@ -61,12 +58,22 @@ export default function LoginScreen() {
     setSendingOtp(true);
     setError(null);
     try {
-      await api.sendOtp(phoneDigits, 'login');
+      const response = await api.sendOtp(phoneDigits, 'login');
+      setOtpCode(response.code);
+      setRecipientNumber(response.recipientNumber);
       setOtpSent(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : '인증번호 발송에 실패했습니다.');
     } finally {
       setSendingOtp(false);
+    }
+  };
+
+  const openSms = async () => {
+    try {
+      await Linking.openURL(`sms:${recipientNumber}?body=${encodeURIComponent(`인증코드 ${otpCode}`)}`);
+    } catch {
+      setError('문자 앱을 열 수 없어요. 아래 번호로 인증코드를 직접 보내주세요.');
     }
   };
 
@@ -145,7 +152,7 @@ export default function LoginScreen() {
                   <ActivityIndicator size="small" color={colors.sageDark} />
                 ) : (
                   <Text style={[styles.nextButtonText, !isPhoneValid && styles.nextButtonTextDisabled]}>
-                    인증번호 받기
+                    문자 인증 시작하기
                   </Text>
                 )}
               </Pressable>
@@ -154,23 +161,11 @@ export default function LoginScreen() {
 
           {otpSent && (
             <View style={styles.field}>
-              <Text style={styles.label}>인증번호</Text>
-              <TextInput
-                ref={otpInputRef}
-                style={[styles.input, focused === 'otp' && styles.inputFocused]}
-                placeholder="6자리 숫자"
-                placeholderTextColor={colors.gray300}
-                keyboardType="number-pad"
-                value={otpCode}
-                onChangeText={(v) => setOtpCode(v.replace(/[^0-9]/g, '').slice(0, 6))}
-                onFocus={() => setFocused('otp')}
-                onBlur={() => setFocused(null)}
-                maxLength={6}
-                returnKeyType="done"
-                onSubmitEditing={() => Keyboard.dismiss()}
-              />
+              <Text style={styles.label}>아래 번호로 인증코드를 보내주세요</Text>
+              <View style={styles.codeCard}><Text style={styles.recipient}>{recipientNumber}</Text><Text style={styles.code}>인증코드 {otpCode}</Text></View>
+              <Pressable onPress={openSms} style={styles.smsButton}><Text style={styles.smsButtonText}>문자 앱 열기</Text></Pressable>
               <Pressable onPress={handleSendOtp} disabled={sendingOtp} hitSlop={8} style={styles.nextButton}>
-                <Text style={styles.nextButtonText}>인증번호 다시 받기</Text>
+                <Text style={styles.nextButtonText}>새 코드 받기</Text>
               </Pressable>
             </View>
           )}
@@ -191,7 +186,7 @@ export default function LoginScreen() {
             {submitting ? (
               <ActivityIndicator color={colors.textInverse} />
             ) : (
-              <Text style={styles.ctaText}>로그인</Text>
+              <Text style={styles.ctaText}>{otpSent ? '문자를 보냈어요' : '로그인'}</Text>
             )}
           </Pressable>
 
@@ -250,5 +245,10 @@ const styles = StyleSheet.create({
   nextButton: { alignSelf: 'flex-end', paddingVertical: spacing.sm },
   nextButtonText: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },
   nextButtonTextDisabled: { color: colors.gray300 },
+  codeCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, alignItems: 'center', gap: spacing.xs },
+  recipient: { ...typography.body, color: colors.textSecondary },
+  code: { ...typography.headline, color: colors.textPrimary },
+  smsButton: { borderWidth: 1, borderColor: colors.sage, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center' },
+  smsButtonText: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },
   terms: { ...typography.caption, color: colors.textTertiary, textAlign: 'center' },
 });

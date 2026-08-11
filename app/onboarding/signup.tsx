@@ -5,6 +5,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   LayoutAnimation,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -66,7 +67,7 @@ function toIsoDate(digits: string): string {
   return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
 }
 
-type Field = 'name' | 'phone' | 'otp' | 'birthDate';
+type Field = 'name' | 'phone' | 'birthDate';
 
 export default function SignupScreen() {
   const [step, setStep] = useState(0); // 0: 이름만, 1: +전화번호(+OTP), 2: +생년월일
@@ -74,6 +75,7 @@ export default function SignupScreen() {
   const [phoneDigits, setPhoneDigits] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState('');
+  const [recipientNumber, setRecipientNumber] = useState('');
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [sendingOtp, setSendingOtp] = useState(false);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
@@ -85,7 +87,6 @@ export default function SignupScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   const phoneInputRef = useRef<TextInput>(null);
-  const otpInputRef = useRef<TextInput>(null);
   const birthDateInputRef = useRef<TextInput>(null);
 
   const trimmedName = name.trim();
@@ -111,10 +112,6 @@ export default function SignupScreen() {
     if (step === 1) phoneInputRef.current?.focus();
     if (step === 2) birthDateInputRef.current?.focus();
   }, [step]);
-
-  useEffect(() => {
-    if (otpSent) otpInputRef.current?.focus();
-  }, [otpSent]);
 
   // 각 필드는 타이핑 도중 자동으로 넘어가지 않고, 키보드의 "다음" 버튼(리턴키)을 눌러야만 다음 칸이 나타난다
   const handleNameSubmit = () => {
@@ -142,12 +139,22 @@ export default function SignupScreen() {
     setSendingOtp(true);
     setError(null);
     try {
-      await api.sendOtp(phoneDigits, 'signup');
+      const response = await api.sendOtp(phoneDigits, 'signup');
+      setOtpCode(response.code);
+      setRecipientNumber(response.recipientNumber);
       setOtpSent(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : '인증번호 발송에 실패했습니다.');
     } finally {
       setSendingOtp(false);
+    }
+  };
+
+  const openSms = async () => {
+    try {
+      await Linking.openURL(`sms:${recipientNumber}?body=${encodeURIComponent(`인증코드 ${otpCode}`)}`);
+    } catch {
+      setError('문자 앱을 열 수 없어요. 아래 번호로 인증코드를 직접 보내주세요.');
     }
   };
 
@@ -277,7 +284,7 @@ export default function SignupScreen() {
                     <ActivityIndicator size="small" color={colors.sageDark} />
                   ) : (
                     <Text style={[styles.nextButtonText, !isPhoneValid && styles.nextButtonTextDisabled]}>
-                      인증번호 받기
+                      문자 인증 시작하기
                     </Text>
                   )}
                 </Pressable>
@@ -287,22 +294,12 @@ export default function SignupScreen() {
 
           {otpSent && !phoneVerified && (
             <View style={styles.field}>
-              <Text style={styles.label}>인증번호</Text>
-              <TextInput
-                ref={otpInputRef}
-                style={[styles.input, focusedField === 'otp' && styles.inputFocused]}
-                placeholder="6자리 숫자"
-                placeholderTextColor={colors.gray300}
-                keyboardType="number-pad"
-                value={otpCode}
-                onChangeText={(v) => setOtpCode(v.replace(/[^0-9]/g, '').slice(0, 6))}
-                onFocus={() => setFocusedField('otp')}
-                onBlur={() => setFocusedField(null)}
-                maxLength={6}
-              />
+              <Text style={styles.label}>아래 번호로 인증코드를 보내주세요</Text>
+              <View style={styles.codeCard}><Text style={styles.recipient}>{recipientNumber}</Text><Text style={styles.code}>인증코드 {otpCode}</Text></View>
+              <Pressable onPress={openSms} style={styles.smsButton}><Text style={styles.smsButtonText}>문자 앱 열기</Text></Pressable>
               <View style={styles.otpActionRow}>
                 <Pressable onPress={handleSendOtp} disabled={sendingOtp} hitSlop={8}>
-                  <Text style={styles.nextButtonText}>다시 받기</Text>
+                  <Text style={styles.nextButtonText}>새 코드 받기</Text>
                 </Pressable>
                 <Pressable
                   onPress={handleVerifyOtp}
@@ -314,7 +311,7 @@ export default function SignupScreen() {
                     <ActivityIndicator size="small" color={colors.sageDark} />
                   ) : (
                     <Text style={[styles.nextButtonText, !isOtpValid && styles.nextButtonTextDisabled]}>
-                      확인
+                      문자를 보냈어요
                     </Text>
                   )}
                 </Pressable>
@@ -438,6 +435,11 @@ const styles = StyleSheet.create({
   otpActionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   nextButtonText: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },
   nextButtonTextDisabled: { color: colors.gray300 },
+  codeCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, alignItems: 'center', gap: spacing.xs },
+  recipient: { ...typography.body, color: colors.textSecondary },
+  code: { ...typography.headline, color: colors.textPrimary },
+  smsButton: { borderWidth: 1, borderColor: colors.sage, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center' },
+  smsButtonText: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },
   error: { ...typography.bodySm, color: colors.coralDark },
   footer: { gap: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.md },
   cta: {

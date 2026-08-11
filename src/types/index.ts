@@ -93,6 +93,12 @@ export type Gender = 'male' | 'female';
 
 export type OtpPurpose = 'signup' | 'login' | 'social_link'; // F0: social_link 추가 (N33)
 
+export interface OtpSendResponse {
+  code: string;
+  recipientNumber: string;
+  message: string;
+}
+
 export interface SignupRequest {
   phoneNumber: string;
   name: string;
