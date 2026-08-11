@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { EvidenceBadge } from '../../src/components/EvidenceBadge';
@@ -57,6 +57,18 @@ export default function RecommendationDetailScreen() {
 
   const relatedProducts = products.filter((p) => recommendation.relatedProductIds.includes(p.id));
 
+  const openPurchaseUrl = async (product: Product) => {
+    if (!product.purchaseUrl) {
+      Alert.alert('구매 링크 준비 중', '이 제품의 구매 페이지는 아직 연결되지 않았어요.');
+      return;
+    }
+    try {
+      await Linking.openURL(product.purchaseUrl);
+    } catch {
+      Alert.alert('페이지를 열 수 없어요', '구매 링크를 다시 확인해주세요.');
+    }
+  };
+
   return (
     <ScreenContainer>
       <Pressable onPress={() => router.back()} hitSlop={12} style={styles.closeButton}>
@@ -100,7 +112,8 @@ export default function RecommendationDetailScreen() {
             <Text style={styles.sectionTitle}>관련 제품</Text>
             <View style={styles.productList}>
               {relatedProducts.map((p) => (
-                <Card key={p.id} style={styles.productCard}>
+                <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`${p.name} 구매 페이지 열기`} onPress={() => openPurchaseUrl(p)} style={({ pressed }) => pressed && styles.productPressed}>
+                <Card style={styles.productCard}>
                   <View style={styles.productThumb}>
                     <Ionicons name="flask-outline" size={22} color={colors.gray400} />
                   </View>
@@ -110,12 +123,14 @@ export default function RecommendationDetailScreen() {
                   </View>
                   <EvidenceBadge grade={p.matchedGrade} />
                 </Card>
+                </Pressable>
               ))}
             </View>
           </>
         ) : relatedProducts.length === 1 ? (
           <>
             <Text style={styles.sectionTitle}>관련 제품</Text>
+            <Pressable accessibilityRole="link" accessibilityLabel={`${relatedProducts[0].name} 구매 페이지 열기`} onPress={() => openPurchaseUrl(relatedProducts[0])} style={({ pressed }) => pressed && styles.productPressed}>
             <Card style={styles.productCard}>
               <View style={styles.productThumb}>
                 <Ionicons name="flask-outline" size={22} color={colors.gray400} />
@@ -126,6 +141,7 @@ export default function RecommendationDetailScreen() {
               </View>
               <EvidenceBadge grade={relatedProducts[0].matchedGrade} />
             </Card>
+            </Pressable>
           </>
         ) : null}
       </View>
@@ -162,6 +178,7 @@ const styles = StyleSheet.create({
   sectionTitle: { ...typography.headline, color: colors.textPrimary, marginBottom: spacing.sm },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   productList: { gap: spacing.sm },
+  productPressed: { opacity: 0.72 },
   productCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   productThumb: {
     width: 44,
