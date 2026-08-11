@@ -8,6 +8,7 @@ import {
   Linking,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -139,8 +140,14 @@ export default function LoginScreen() {
         style={styles.keyboardAvoiding}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* 스크롤 없는 한 화면 — 헤드라인/입력칸/CTA+소셜이 세로 공간을 나눠 갖는다 */}
-        <View style={styles.body}>
+        {/* F62: ScrollView — 키보드가 열려도 전체가 밀리지 않고 포커스된 필드만 유지한다 */}
+        <ScrollView
+          style={styles.keyboardAvoiding}
+          contentContainerStyle={styles.body}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+        >
           <View>
             <Text style={styles.headline}>로그인</Text>
             <Text style={styles.subtitle}>휴대폰 인증 또는 소셜 계정으로 안전하게 로그인하세요</Text>
@@ -232,7 +239,7 @@ export default function LoginScreen() {
               에 동의한 것으로 간주됩니다.
             </Text>
           </View>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -241,9 +248,10 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.xl },
   keyboardAvoiding: { flex: 1 },
-  body: { flex: 1, paddingVertical: spacing.xl },
-  // F58: 필드 그룹을 화면 중간으로 (F54의 상단 고정을 완화), CTA·소셜은 middle 안에서 필드 흐름에 붙는다
-  middle: { flex: 1, justifyContent: 'center', gap: spacing.xl },
+  // F62: ScrollView contentContainer — flexGrow로 하단(약관)은 자연스럽게 내려간다
+  body: { flexGrow: 1, paddingVertical: spacing.xl },
+  // F62: 중앙 압축/겹침 제거 — 필드는 상단 1/3 근처(flex-start + 여백), 키보드는 ScrollView가 처리
+  middle: { flex: 1, justifyContent: 'flex-start', marginTop: spacing.xxl, gap: spacing.xl },
   headline: { ...typography.displayLg, color: colors.textPrimary },
   subtitle: { ...typography.body, color: colors.textSecondary, marginTop: spacing.sm },
   field: { gap: spacing.sm },

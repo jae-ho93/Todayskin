@@ -8,6 +8,7 @@ import {
   Linking,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -230,7 +231,13 @@ export default function SignupScreen() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
       >
         {phase === 'phone' ? (
-          <View style={styles.body}>
+          <ScrollView
+            style={styles.keyboardAvoiding}
+            contentContainerStyle={styles.body}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            showsVerticalScrollIndicator={false}
+          >
             <View>
               <Text style={styles.headline}>회원가입</Text>
               <Text style={styles.subtitle}>휴대폰 인증으로 가입하거나 소셜 계정으로 바로 시작하세요</Text>
@@ -323,9 +330,15 @@ export default function SignupScreen() {
                 에 동의한 것으로 간주됩니다.
               </Text>
             </View>
-          </View>
+          </ScrollView>
         ) : (
-          <View style={styles.body}>
+          <ScrollView
+            style={styles.keyboardAvoiding}
+            contentContainerStyle={styles.body}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            showsVerticalScrollIndicator={false}
+          >
             <View>
               <Pressable onPress={() => setPhase('phone')} hitSlop={8} style={styles.backLink}>
                 <Text style={styles.backLinkText}>← 이전</Text>
@@ -427,7 +440,7 @@ export default function SignupScreen() {
                 에 동의한 것으로 간주됩니다.
               </Text>
             </View>
-          </View>
+          </ScrollView>
         )}
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -437,8 +450,10 @@ export default function SignupScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.xl },
   keyboardAvoiding: { flex: 1 },
-  body: { flex: 1, paddingVertical: spacing.xl },
-  middle: { flex: 1, justifyContent: 'center', gap: spacing.xl },
+  // F62: ScrollView contentContainer — flexGrow로 하단(약관)은 자연스럽게 내려간다
+  body: { flexGrow: 1, paddingVertical: spacing.xl },
+  // F62: 중앙 압축/겹침 제거 — 필드는 상단 1/3 근처(flex-start + 여백)
+  middle: { flex: 1, justifyContent: 'flex-start', marginTop: spacing.xxl, gap: spacing.xl },
   headline: { ...typography.displayLg, color: colors.textPrimary },
   subtitle: { ...typography.body, color: colors.textSecondary, marginTop: spacing.sm },
   backLink: { marginBottom: spacing.sm },
