@@ -744,3 +744,19 @@ F0 → F1 → F2 → F3 → F6 → F4 → F16 → F8 → F10 → F15 → F13 →
 > ② 탈퇴 카드는 맨 마지막 유지 (파괴적 액션 최하단)
 
 - [x] `app/(tabs)/settings.tsx` — 동의 관리 섹션 하단 이동
+
+### F62. 로그인/회원가입 키보드 대응 — 포커스 필드 유지 + 글자겹침 해소 (신규, 2026-08-12)
+
+> **실기기 증상**: ① 휴대폰 번호 입력을 누르면 **소셜까지 위로 밀려 올라옴**
+> ② 로그인창에서 **글자겹침** 발생. 원인: F58의 `middle: justifyContent: 'center'` +
+> KeyboardAvoidingView 패딩이 합쳐져 키보드가 열리면 중앙 블록이 **압축·오버플로**.
+> **수정 방향 (토스/당근 패턴 — “입력하면 그 필드에 포커스가 맞춰진다”)**:
+> ① `KeyboardAvoidingView` 안을 **ScrollView**(`keyboardShouldPersistTaps="handled"`,
+>    `keyboardDismissMode="on-drag"`)로 교체 — 키보드가 열리면 전체가 밀리지 않고
+>    **포커스된 필드만 화면에 유지** (ScrollView가 자동으로 입력창 위로 스크롤)
+> ② `middle: justifyContent 'center' → 'flex-start'` + 상단 여백 — 중앙 압축/겹침 제거,
+>    필드는 화면 상단 1/3 근처
+> ③ login/signup(두 단계) 동일 적용
+
+- [ ] `app/onboarding/login.tsx` — ScrollView + flex-start
+- [ ] `app/onboarding/signup.tsx` — ScrollView + flex-start (phone/profile 두 단계)
