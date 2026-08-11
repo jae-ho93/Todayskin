@@ -1,6 +1,7 @@
 import { Logger, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AdminModule } from '../admin/admin.module';
+import { DevStorageController } from './dev-storage.controller';
 import { ImageStorageService } from './image-storage.service';
 import { ImageReconciliationScheduler } from './image-reconciliation.scheduler';
 import { IMAGE_OBJECT_STORE } from './providers/image-object-store.interface';
@@ -16,6 +17,7 @@ import { S3ImageObjectStore } from './providers/s3-image-object-store';
  */
 @Module({
   imports: [AdminModule],
+  controllers: [DevStorageController],
   providers: [
     {
       provide: IMAGE_OBJECT_STORE,
@@ -40,7 +42,12 @@ import { S3ImageObjectStore } from './providers/s3-image-object-store';
         }
 
         logger.warn('S3_BUCKET 미설정 — MemoryImageObjectStore 사용 (개발/테스트)');
-        return new MemoryImageObjectStore('todayskin-local');
+        const port = config.get<number>('PORT', 3000);
+        // 개발 서빙 엔드포인트(dev-storage)의 origin. 실기기에서는 127.0.0.1이 기기 자신을
+        // 가리키므로 .env의 DEV_STORAGE_BASE_URL(예: http://192.168.x.x:3000)로 맞춘다.
+        const devBaseUrl =
+          config.get<string>('DEV_STORAGE_BASE_URL') ?? `http://127.0.0.1:${port}`;
+        return new MemoryImageObjectStore('todayskin-local', devBaseUrl);
       },
     },
     ImageStorageService,
