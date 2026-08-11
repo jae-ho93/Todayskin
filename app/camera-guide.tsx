@@ -2,12 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../src/api/client';
 import { useUserLocation } from '../src/hooks/useUserLocation';
 import { colors, radius, shadow, spacing, typography } from '../src/theme';
+import type { ConsentPurposeInfo } from '../src/types';
 
 const GUIDE_TEXT = '정면을 맞춰주세요';
 
@@ -26,6 +27,83 @@ export default function CameraGuideScreen() {
   const [wentOutside, setWentOutside] = useState<boolean | null>(null);
   const cameraRef = useRef<CameraView>(null);
   const { coords } = useUserLocation();
+
+  // ── 필수 동의 확인 (F27) — 마운트 시점 + 진입 시점 양쪽에서 확인한다 ──
+  const [consentCheck, setConsentCheck] = useState<'loading' | 'ok' | 'needed'>('loading');
+  const [consentRegistry, setConsentRegistry] = useState<ConsentPurposeInfo[] | null>(null);
+  const [consentModalVisible, setConsentModalVisible] = useState(false);
+  const [consentPendingAction, setConsentPendingAction] = useState<'capture' | 'library' | null>(null);
+  const [storageAgreed, setStorageAgreed] = useState(false);
+  const [consentSubmitting, setConsentSubmitting] = useState(false);
+
+  /** 필수 동의가 모두 체결됐는지 확인. true면 진행 가능. */
+  const checkConsents = useCallback(async (): Promise<boolean> => {
+    try {
+      const [registry, myConsents] = await Promise.all([
+        api.getConsentRegistry(),
+        api.getMyConsents(),
+      ]);
+      setConsentRegistry(registry);
+      const agreed = new Set(
+        (myConsents ?? []).filter((c) => c.agreed).map((c) => c.purpose),
+      );
+      const missing = (registry ?? []).some((r) => r.required && !agreed.has(r.purpose));
+      setConsentCheck(missing ? 'needed' : 'ok');
+      return !missing;
+    } catch {
+      // 확인 실패 시에는 진행을 막지 않는다 (실제 촬영 API에서 다시 검증됨).
+      setConsentCheck('ok');
+      return true;
+    }
+  }, []);
+
+  useEffect(() => {
+    void checkConsents();
+  }, [checkConsents]);
+
+  const runAction = (action: 'capture' | 'library') => {
+    if (action === 'capture') {
+      setPhase('capture');
+    } else {
+      void handlePickFromLibrary();
+    }
+  };
+
+  const requireConsentThen = async (action: 'capture' | 'library') => {
+    let ok = consentCheck === 'ok';
+    if (consentCheck === 'loading') ok = await checkConsents();
+    if (!ok) {
+      setStorageAgreed(false);
+      setConsentPendingAction(action);
+      setConsentModalVisible(true);
+      return;
+    }
+    runAction(action);
+  };
+
+  const handleConsentContinue = async () => {
+    if (!consentRegistry) return;
+    setConsentSubmitting(true);
+    try {
+      // 필수 항목은 항상 true, 선택 항목(이미지 저장)은 토글 값.
+      await Promise.all(
+        consentRegistry.map((item) =>
+          api.upsertConsent(item.purpose, item.required ? true : storageAgreed),
+        ),
+      );
+      setConsentCheck('ok');
+      setConsentModalVisible(false);
+      if (consentPendingAction) {
+        const action = consentPendingAction;
+        setConsentPendingAction(null);
+        runAction(action);
+      }
+    } catch {
+      Alert.alert('동의 저장 실패', '동의를 저장하지 못했어요. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setConsentSubmitting(false);
+    }
+  };
 
   const submitPhoto = async (uri: string) => {
     const originPhase = phase;
@@ -70,6 +148,7 @@ export default function CameraGuideScreen() {
 
   if (phase === 'intro') {
     return (
+      <>
       <SafeAreaView style={styles.introSafeArea}>
         <Pressable onPress={() => router.back()} hitSlop={12} style={styles.introCloseButton}>
           <Ionicons name="close" size={22} color={colors.textPrimary} />
@@ -81,7 +160,7 @@ export default function CameraGuideScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.introIllustration}>
-            <Ionicons name="person-outline" size={72} color={colors.sageDark} />
+            <Ionicons name="person-outline" size={48} color={colors.sageDark} />
           </View>
 
           <Text style={styles.introTitle}>촬영 전에{'\n'}이렇게 준비해주세요</Text>
@@ -133,37 +212,17 @@ export default function CameraGuideScreen() {
 
         {error && <Text style={styles.introErrorText}>{error}</Text>}
 
-        {/* 카메라 권한 섹션 */}
-        <View style={styles.permissionSection}>
-          <Text style={styles.permissionSectionTitle}>📷 카메라 권한</Text>
-          <Text style={styles.permissionSectionBody}>
-            피부 분석을 위해 카메라 접근이 필요합니다.
-          </Text>
-
-          {permission?.granted ? (
-            <View style={styles.permissionGranted}>
-              <Text style={styles.permissionGrantedText}>✓ 권한 허용됨</Text>
-            </View>
-          ) : (
-            <Pressable
-              style={styles.permissionRetryButton}
-              onPress={requestPermission}
-            >
-              <Text style={styles.permissionRetryText}>다시 시도</Text>
-            </Pressable>
-          )}
-        </View>
-
+        {/* F27: 카메라 권한은 촬영 화면에서 요청 — 여기엔 동의 게이트만 둔다. */}
         <Pressable
-          style={[styles.introCta, (wentOutside === null || !permission?.granted) && styles.introCtaDisabled]}
-          onPress={() => setPhase('capture')}
-          disabled={wentOutside === null || !permission?.granted}
+          style={[styles.introCta, wentOutside === null && styles.introCtaDisabled]}
+          onPress={() => requireConsentThen('capture')}
+          disabled={wentOutside === null}
         >
           <Text style={styles.introCtaText}>촬영 시작하기</Text>
         </Pressable>
         <Pressable
           style={[styles.introSecondaryCta, wentOutside === null && styles.introSecondaryCtaDisabled]}
-          onPress={handlePickFromLibrary}
+          onPress={() => requireConsentThen('library')}
           disabled={wentOutside === null}
         >
           <Ionicons name="images-outline" size={18} color={wentOutside === null ? colors.gray300 : colors.sageDark} />
@@ -177,7 +236,67 @@ export default function CameraGuideScreen() {
           </Text>
         </Pressable>
       </SafeAreaView>
-    );
+
+      {/* 촬영 전 필수 동의 팝업 (F27) — 미동의 항목이 있으면 촬영 진입 전에 표시 */}
+      <Modal
+        visible={consentModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!consentSubmitting) setConsentModalVisible(false);
+        }}
+      >
+        <View style={styles.consentOverlay}>
+          <View style={styles.consentCard}>
+            <Text style={styles.consentTitle}>촬영 전 동의가 필요해요</Text>
+            <Text style={styles.consentBody}>
+              피부 진단에는 아래 동의가 필요해요. 미동의 시 촬영할 수 없어요.
+            </Text>
+            {consentRegistry?.map((item) => {
+              const required = item.required;
+              const checked = required || storageAgreed;
+              return (
+                <Pressable
+                  key={item.purpose}
+                  disabled={required || consentSubmitting}
+                  onPress={() => setStorageAgreed((v) => !v)}
+                  style={styles.consentItem}
+                >
+                  <View style={[styles.consentCheckbox, checked && styles.consentCheckboxChecked]}>
+                    {checked && <Ionicons name="checkmark" size={14} color={colors.textInverse} />}
+                  </View>
+                  <View style={styles.consentItemTextWrap}>
+                    <Text style={styles.consentItemTitle}>
+                      ({required ? '필수' : '선택'}) {item.title}
+                    </Text>
+                    <Text style={styles.consentItemDesc}>{item.description}</Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+            <Pressable
+              disabled={consentSubmitting}
+              onPress={handleConsentContinue}
+              style={[styles.consentCta, consentSubmitting && styles.consentCtaDisabled]}
+            >
+              {consentSubmitting ? (
+                <ActivityIndicator color={colors.textInverse} />
+              ) : (
+                <Text style={styles.consentCtaText}>동의하고 계속하기</Text>
+              )}
+            </Pressable>
+            <Pressable
+              disabled={consentSubmitting}
+              onPress={() => setConsentModalVisible(false)}
+              style={styles.consentLater}
+            >
+              <Text style={styles.consentLaterText}>나중에</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
   }
 
   if (phase === 'analyzing') {
@@ -252,11 +371,11 @@ const styles = StyleSheet.create({
   // 촬영 전 안내 화면
   introSafeArea: { flex: 1, backgroundColor: colors.background, padding: spacing.xl },
   introCloseButton: { alignSelf: 'flex-end' },
-  introBody: { flexGrow: 1, justifyContent: 'center', gap: spacing.xl, paddingVertical: spacing.lg },
+  introBody: { flexGrow: 1, justifyContent: 'center', gap: spacing.lg, paddingVertical: spacing.sm },
   introIllustration: {
     alignSelf: 'center',
-    width: 140,
-    height: 140,
+    width: 96,
+    height: 96,
     borderRadius: radius.xl,
     backgroundColor: colors.sageLight,
     alignItems: 'center',
@@ -267,19 +386,19 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     textAlign: 'center',
   },
-  tipList: { gap: spacing.md },
+  tipList: { gap: spacing.sm },
   tipRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    padding: spacing.lg,
+    padding: spacing.sm,
     ...shadow.card,
   },
   tipIconWrap: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     borderRadius: radius.full,
     backgroundColor: colors.sageLight,
     alignItems: 'center',
@@ -289,8 +408,8 @@ const styles = StyleSheet.create({
   outsideQuestion: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    padding: spacing.lg,
-    gap: spacing.sm,
+    padding: spacing.md,
+    gap: spacing.xs,
     ...shadow.card,
   },
   outsideQuestionLabel: { ...typography.subtitle, color: colors.textPrimary },
@@ -348,6 +467,57 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   permissionButtonText: { ...typography.subtitle, color: colors.textInverse },
+
+  // 촬영 전 필수 동의 팝업 (F27)
+  consentOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+  consentCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: colors.background,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    gap: spacing.md,
+  },
+  consentTitle: { ...typography.headline, color: colors.textPrimary, textAlign: 'center' },
+  consentBody: { ...typography.bodySm, color: colors.textSecondary, textAlign: 'center' },
+  consentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
+  consentCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: colors.gray300,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  consentCheckboxChecked: { backgroundColor: colors.sage, borderColor: colors.sage },
+  consentItemTextWrap: { flex: 1, gap: 2 },
+  consentItemTitle: { ...typography.bodySm, color: colors.textPrimary, fontWeight: '600' },
+  consentItemDesc: { ...typography.caption, color: colors.textTertiary },
+  consentCta: {
+    backgroundColor: colors.sage,
+    borderRadius: radius.md,
+    paddingVertical: spacing.lg,
+    alignItems: 'center',
+    marginTop: spacing.xs,
+  },
+  consentCtaDisabled: { opacity: 0.6 },
+  consentCtaText: { ...typography.headline, color: colors.textInverse },
+  consentLater: { alignItems: 'center', paddingVertical: spacing.sm },
+  consentLaterText: { ...typography.bodySm, color: colors.textSecondary },
 
   // 카메라 촬영 화면
   overlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
@@ -442,30 +612,4 @@ const styles = StyleSheet.create({
   },
   analyzingTitle: { ...typography.displaySm, color: colors.textPrimary },
   analyzingBody: { ...typography.body, color: colors.textSecondary, textAlign: 'center' },
-
-  // 카메라 권한 섹션
-  permissionSection: {
-    backgroundColor: colors.sage,
-    borderRadius: radius.md,
-    paddingVertical: spacing.lg,
-    alignItems: "center",
-  },
-  permissionSectionTitle: { ...typography.headline, color: colors.textPrimary },
-  permissionSectionBody: { ...typography.body, color: colors.textSecondary, textAlign: "center" },
-  permissionGranted: {
-    marginTop: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: "rgba(0, 180, 100, 0.1)",
-  },
-  permissionGrantedText: { ...typography.subtitle, color: colors.sage, textAlign: "center" },
-  permissionRetryButton: {
-    marginTop: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.sage,
-  },
-  permissionRetryText: { ...typography.subtitle, color: colors.textInverse },
 });

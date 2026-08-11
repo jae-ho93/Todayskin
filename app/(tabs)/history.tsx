@@ -342,52 +342,55 @@ function MediaBlock({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
 
   return (
     <View style={styles.mediaBlock}>
-     {landmarks ? (
-  <View style={styles.mediaBlock}>
-    <Svg
-      style={StyleSheet.absoluteFill}
-      width="100%"
-      height="100%"
-      viewBox="0 0 1 1"
-      preserveAspectRatio="none"
-    >
-      {landmarks.points.map(([x, y], i) => (
-        <Circle key={i} cx={x} cy={y} r={0.01} fill="rgba(107,181,164,0.9)" />
-      ))}
-    </Svg>
-  </View>
-) : img ? (
-  <View style={styles.mediaBlock}>
-    <View
-      style={styles.imageBox}
-      onLayout={(e) => setBoxWidth(e.nativeEvent.layout.width)}
-    >
-      {displaySize ? (
-        <View style={{ width: displaySize.width, height: displaySize.height }}>
-          <Image
-            source={{ uri: img.url }}
-            style={StyleSheet.absoluteFill}
-            resizeMode="contain"
-            onLoad={(e) => {
-              const { width, height } = e.nativeEvent.source;
-              if (width > 0 && height > 0) setImageRatio(height / width);
-            }}
-          />
-        </View>
-      ) : (
-        <ActivityIndicator color={colors.sage} />
-      )}
-    </View>
-  </View>
-) : (
-  <Text style={styles.noRec}>0| 진단에는 추천이 없어요</Text>
-)}
+      {img ? (
+        expired ? (
+          <View style={styles.imageBox}>
+            <Ionicons name="time-outline" size={22} color={colors.textTertiary} />
+            <Text style={styles.imageExpiredText}>
+              이미지 링크가 만료됐어요 — 새로고침으로 다시 받아주세요
+            </Text>
+          </View>
+        ) : (
+          <View
+            style={styles.imageBox}
+            onLayout={(e) => setBoxWidth(e.nativeEvent.layout.width)}
+          >
+            {displaySize ? (
+              <View style={{ width: displaySize.width, height: displaySize.height }}>
+                <Image
+                  source={{ uri: img.url }}
+                  style={StyleSheet.absoluteFill}
+                  resizeMode="contain"
+                  onLoad={(e) => {
+                    const { width, height } = e.nativeEvent.source;
+                    if (width > 0 && height > 0) setImageRatio(height / width);
+                  }}
+                />
+                {landmarks && (
+                  <Svg
+                    style={StyleSheet.absoluteFill}
+                    width="100%"
+                    height="100%"
+                    viewBox="0 0 1 1"
+                    preserveAspectRatio="none"
+                  >
+                    {landmarks.points.map(([x, y], i) => (
+                      <Circle key={i} cx={x} cy={y} r={0.01} fill="rgba(107,181,164,0.9)" />
+                    ))}
+                  </Svg>
+                )}
+              </View>
+            ) : (
+              <ActivityIndicator color={colors.sage} />
+            )}
+          </View>
+        )
       ) : (
         <View style={styles.mediaNotice}>
           <Ionicons name="image-outline" size={14} color={colors.textTertiary} />
           <Text style={styles.mediaNoticeText}>보관 이미지가 없어요</Text>
         </View>
-      )
+      )}
       {landmarks && (
         <Text style={styles.landmarkCaption}>
           얼굴 랜드마크 {landmarks.points.length}점 · {landmarks.version}
@@ -409,11 +412,11 @@ const styles = StyleSheet.create({
   weekRow: { flexDirection: 'row' },
   weekday: { ...typography.caption, color: colors.textTertiary, textAlign: 'center', width: '14.2857%' },
   calendarGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  calendarDay: { width: '14.2857%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, gap: 3 },
+  calendarDay: { width: '14.2857%', height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, gap: 2 },
   dateChipActive: { backgroundColor: colors.sage, borderColor: colors.sage },
   dateNum: { ...typography.subtitle, color: colors.textPrimary },
   dateTextActive: { color: colors.textInverse },
-  recordDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.sageDark },
+  recordDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.sageDark },
   recordDotActive: { backgroundColor: colors.textInverse },
   loadingRow: { alignItems: 'center', paddingVertical: spacing.xl },
   emptyCard: { gap: spacing.xs, alignItems: 'center', paddingVertical: spacing.xl },
