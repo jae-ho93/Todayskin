@@ -14,6 +14,7 @@ import {
 import Svg, { Circle, Polyline } from 'react-native-svg';
 import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
+import { EvidenceBadge } from '../../src/components/EvidenceBadge';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type {
@@ -44,16 +45,6 @@ function monthBounds(month: string): { from: string; to: string } {
   const [year, value] = month.split('-').map(Number);
   const last = new Date(year, value, 0).getDate();
   return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, '0')}` };
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  PENDING: '분석 중',
-  COMPLETED: '완료',
-  FAILED: '실패',
-};
-
-function statusLabel(s?: string | null): string {
-  return s ? STATUS_LABEL[s] ?? s : '';
 }
 
 // 화면 8: 마이 히스토리 — N8 날짜별 통합 히스토리(날씨·분석·추천·이미지·랜드마크) + score-series 추이
@@ -273,6 +264,9 @@ export default function HistoryScreen() {
 // F39: 진단 카드 = 랜드마크 썸네일(좌) + 시각·점수·상태(우) 가로 카드.
 // 전체 카드 탭 또는 “상세기록 보기” → app/diagnosis/[id] 상세 화면 이동.
 // 부위 분석·날씨·추천·제품은 상세 화면에서 정돈된 레이아웃으로 표시한다.
+// F39(재확정): 카드 = 랜드마크 이미지(좌, 크게) + 추천 요약(우).
+// “몇 시 촬영·점수” 텍스트는 제거 — 상세 화면에서 확인한다.
+// 하루에 보통 1건이므로 한 진단이 화면에 잘 들어오는 크기로.
 function DiagnosisCard({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
   // capturedAt은 UTC ISO — Asia/Seoul(UTC+9) 기준 날짜로 변환해야 서버 집계(history/:date)와 일치한다.
   const capturedDate = new Date(new Date(d.capturedAt).getTime() + 9 * 3600 * 1000)
@@ -280,6 +274,7 @@ function DiagnosisCard({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
     .slice(0, 10);
   const openDetail = () =>
     router.push({ pathname: `/diagnosis/${d.id}`, params: { date: capturedDate } });
+  const recs = d.recommendations;
 
   return (
     <Pressable onPress={openDetail} style={({ pressed }) => [pressed && styles.diagCardPressed]}>
@@ -287,12 +282,20 @@ function DiagnosisCard({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
         <View style={styles.diagRow}>
           <MediaThumb diagnosis={d} />
           <View style={styles.diagInfo}>
-            <Text style={styles.diagTime}>{formatTimeKo(d.capturedAt)} 촬영</Text>
-            {statusLabel(d.status) && <Text style={styles.diagMeta}>{statusLabel(d.status)}</Text>}
-            <View style={styles.scoreBadge}>
-              <Text style={styles.scoreBadgeValue}>{d.overallScore}</Text>
-              <Text style={styles.scoreBadgeLabel}>점</Text>
-            </View>
+            {recs.length > 0 ? (
+              <>
+                {recs.slice(0, 2).map((r, index) => (
+                  <View key={r.id} style={styles.recSummaryRow}>
+                    <EvidenceBadge grade={r.grade} />
+                    <Text style={styles.recSummaryTitle} numberOfLines={2}>
+                      {r.title}
+                    </Text>
+                  </View>
+                ))}
+              </>
+            ) : (
+              <Text style={styles.noRec}>이 진단에는 추천이 없어요</Text>
+            )}
             <View style={styles.detailButton}>
               <Text style={styles.detailButtonText}>상세기록 보기</Text>
               <Ionicons name="chevron-forward" size={14} color={colors.sageDark} />
@@ -303,17 +306,6 @@ function DiagnosisCard({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
     </Pressable>
   );
 }
-
-// 촬영 시각 “오후 3:40” 형식 (F39)
-function formatTimeKo(iso: string): string {
-  const kst = new Date(new Date(iso).getTime() + 9 * 3600 * 1000);
-  const hour = kst.getUTCHours();
-  const minute = String(kst.getUTCMinutes()).padStart(2, '0');
-  const period = hour < 12 ? '오전' : '오후';
-  const h12 = hour % 12 === 0 ? 12 : hour % 12;
-  return `${period} ${h12}:${minute}`;
-}
-
 // 썸네일 — 이미지(가능 시) + 랜드마크 오버레이. 랜드마크만 있으면 점만 표시.
 function MediaThumb({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
   const img = d.image;
@@ -395,35 +387,23 @@ const styles = StyleSheet.create({
   date: { ...typography.body, color: colors.textPrimary },
   score: { ...typography.headline, color: colors.sageDark },
 
-  // 진단 카드 (F39 — 랜드마크 썸네일 + 요약 가로 카드)
+  // 진단 카드 (F39 재확정 — 랜드마크 크게 + 추천 요약)
   diagCard: { gap: spacing.md },
   diagCardPressed: { opacity: 0.85 },
   diagRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'stretch' },
   thumbBox: {
-    width: 96,
-    minHeight: 120,
+    width: 140,
+    minHeight: 160,
     borderRadius: radius.md,
     overflow: 'hidden',
     backgroundColor: colors.gray100,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  diagInfo: { flex: 1, gap: spacing.xs, alignItems: 'flex-start' },
-  diagTime: { ...typography.body, color: colors.textPrimary, fontWeight: '600' },
-  diagMeta: { ...typography.caption, color: colors.textTertiary },
-  scoreBadge: {
-    minWidth: 52,
-    alignItems: 'center',
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radius.md,
-    backgroundColor: colors.sageLight,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 2,
-  },
-  scoreBadgeValue: { ...typography.headline, color: colors.sageDark },
-  scoreBadgeLabel: { ...typography.caption, color: colors.sageDark },
+  diagInfo: { flex: 1, gap: spacing.sm, alignItems: 'flex-start' },
+  recSummaryRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  recSummaryTitle: { ...typography.bodySm, color: colors.textPrimary, fontWeight: '600', flex: 1 },
+  noRec: { ...typography.caption, color: colors.textTertiary },
   detailButton: {
     marginTop: 'auto',
     flexDirection: 'row',

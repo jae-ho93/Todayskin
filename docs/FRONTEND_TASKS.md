@@ -478,7 +478,7 @@ F0 → F1 → F2 → F3 → F6 → F4 → F16 → F8 → F10 → F15 → F13 →
 - [x] `app/(tabs)/index.tsx` — `...job.result` → 래핑 객체 언랩 후 병합
 - [x] `app/(tabs)/products.tsx` — `setWeatherProducts(job.result)` → `{ products }` 언랩
 
-### F39. 기록 진단 카드 재디자인 — 랜드마크 중심 + 추천 요약, 하루치만 (신규, 2026-08-12, 방향 재확정 — 재오픈)
+### F39. 기록 진단 카드 재디자인 — 랜드마크 중심 + 추천 요약, 하루치만 (신규, 2026-08-12, 방향 재확정) — 완료 (2026-08-12)
 
 > **방향(2026-08-12 재확정)**: 1차 구현(#105) 후 실기기 확인 — “오전 2:56 촬영 / 완료 / 92점”
 > 텍스트 위주 카드가 아마추어스럽고, 여러 카드가 세로로 쌓여 화면이 빔.
@@ -492,7 +492,7 @@ F0 → F1 → F2 → F3 → F6 → F4 → F16 → F8 → F10 → F15 → F13 →
 > ⑤ 데이터: `getHistoryByDate(date)` 재조회 후 id 매칭 (BE 변경 불필요)
 
 - [x] 신규 상세 화면 (`app/diagnosis/[id].tsx`) — 부위·날씨·추천·제품 전체 표시 + 라우팅 (#105)
-- [ ] `app/(tabs)/history.tsx` — 진단 카드 우측을 “추천 요약”으로 교체 (시각/점수 텍스트 제거), 하루치 레이아웃
+- [x] `app/(tabs)/history.tsx` — 진단 카드 우측을 “추천 요약”으로 교체 (시각/점수 텍스트 제거), 하루치 레이아웃
 
 ### F40. 캘린더 스와이프 오작동 — 왼쪽 안 됨, 오른쪽 2개월 점프 (신규, 2026-08-12 실기기) — 완료 (2026-08-12)
 
@@ -553,18 +553,6 @@ F0 → F1 → F2 → F3 → F6 → F4 → F16 → F8 → F10 → F15 → F13 →
 - [x] 토스트 컴포넌트 + 주요 피드백 교체
 
 ### F44. 설정 버전 표기 동기화 + 접근성 기본 (신규, 2026-08-12) — 완료 (2026-08-12)
-
-### F45. 추천 상세 hooks 순서 에러 — useToast가 early return 뒤에 호출됨 (신규, 2026-08-12 실기기)
-
-> **증상**: 실기기에서 추천 상세 진입 시
-> `React has detected a change in the order of Hooks called by RecommendationDetailScreen`
-> (LogBox). 원인: F43 토스트 도입 시 `const { showToast } = useToast()`를
-> `if (loading) return` / `if (!recommendation) return` **뒤**에 넣음 — Rules of Hooks 위반.
-> 로딩/에러 렌더에서는 hook이 없었다가 성공 렌더에서 나타나 순서 불일치.
-> **수정 방향**: `useToast()`를 컴포넌트 최상단(다른 hooks와 함께)으로 이동.
-> 다른 파일(my-info·settings·products·camera-guide)은 early return이 없어 영향 없음 확인.
-
-- [ ] `app/recommendation/[id].tsx` — useToast 호출을 컴포넌트 상단으로 이동
 
 > **문제**: 설정의 “버전 1.0.0”이 하드코딩 — app.json 버전과 어긋날 수 있음.
 > 접근성 라벨도 일부 화면에만 있음.

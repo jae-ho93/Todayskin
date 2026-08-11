@@ -76,7 +76,12 @@ export default function LoginScreen() {
   const openSms = async () => {
     try {
       smsOpenedRef.current = true;
-      await Linking.openURL(`sms:${recipientNumber}?body=${encodeURIComponent(`인증코드 ${otpCode}`)}`);
+      // iOS는 `?body=` 대신 `&body=`를 요구한다 — 플랫폼별로 구분해서 문자 시트가
+      // 본문까지 채워진 채 열리게 한다 (보내고 돌아오면 AppState로 자동 검증).
+      const sep = Platform.OS === 'ios' ? '&' : '?';
+      await Linking.openURL(
+        `sms:${recipientNumber}${sep}body=${encodeURIComponent(`인증코드 ${otpCode}`)}`,
+      );
     } catch {
       setError('문자 앱을 열 수 없어요. 다시 시도해주세요.');
     }
