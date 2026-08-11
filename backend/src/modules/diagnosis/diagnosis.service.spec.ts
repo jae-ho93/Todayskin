@@ -564,8 +564,9 @@ describe('DiagnosisService', () => {
 
     it('저장 동의 시 image·landmarks를 노출', async () => {
       consentService.hasActive.mockResolvedValue(true);
+      // BE-2026-08-12: memory 스토어는 dev-storage http URL을 발급한다
       imageStorage.getPresignedUrlForDiagnosis.mockResolvedValue({
-        url: 'memory://bucket/key?expires=1',
+        url: 'http://127.0.0.1:3000/dev-storage/todayskin-local/diagnoses/1/front.jpg',
         contentType: 'image/jpeg',
         expiresAt: '2026-08-06T12:15:00.000Z',
       });
@@ -611,7 +612,7 @@ describe('DiagnosisService', () => {
       ]);
 
       const result = await service.getHistoryByDate(1, '2026-08-06');
-      expect(result.diagnoses[0].image?.url).toContain('memory://');
+      expect(result.diagnoses[0].image?.url).toContain('/dev-storage/');
       expect(result.diagnoses[0].landmarks?.points).toEqual([[0.4, 0.3]]);
       expect(result.diagnoses[0].recommendations[0].products[0].name).toBe('크림');
     });

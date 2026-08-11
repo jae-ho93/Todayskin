@@ -220,7 +220,8 @@ describe('Calendar History (e2e)', () => {
     const entry = history.body.diagnoses.find(
       (d: { id: string }) => d.id === diagnosisId,
     );
-    expect(entry.image?.url).toContain('memory://');
+    // BE-2026-08-12: memory 스토어는 RN Image 로드 가능한 dev-storage http URL을 발급한다
+    expect(entry.image?.url).toMatch(/^http:\/\/127\.0\.0\.1:3000\/dev-storage\//);
     expect(entry.image?.contentType).toBe('image/jpeg');
     expect(entry.landmarks?.version).toBe('mediapipe-face-landmarker-v1');
     expect(Array.isArray(entry.landmarks?.points)).toBe(true);

@@ -187,7 +187,9 @@ function WeatherCard({ weather: w, capturedAt }: { weather: CalendarWeather; cap
   return (
     <Card style={styles.weatherCard}>
       <View style={styles.weatherHeader}>
-        <Text style={styles.weatherRegion}>{w.regionName}</Text>
+        <Text style={styles.weatherRegion}>
+          {[w.regionName, w.districtName].filter(Boolean).join(' ')}
+        </Text>
         <View style={[styles.sourceBadge, w.source === 'LIVE' ? styles.sourceLive : styles.sourceCached]}>
           <Text style={styles.sourceText}>{source}</Text>
         </View>

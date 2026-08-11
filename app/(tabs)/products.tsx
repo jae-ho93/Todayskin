@@ -132,13 +132,16 @@ export default function ProductsScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>날씨 기반 추천</Text>
-        {weatherProductsRefreshing && (
-          <View style={styles.refreshingRow}>
-            <ActivityIndicator size="small" color={colors.sage} />
-            <Text style={styles.refreshingLabel}>최신 제품으로 갱신 중…</Text>
-          </View>
-        )}
+        {/* F51: 갱신 표시는 제목 옆 인라인 스피너 + “갱신 중”만 */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>날씨 기반 추천</Text>
+          {weatherProductsRefreshing && (
+            <View style={styles.refreshingRow}>
+              <ActivityIndicator size="small" color={colors.sage} />
+              <Text style={styles.refreshingLabel}>갱신 중</Text>
+            </View>
+          )}
+        </View>
         {weatherProductsLoading ? (
           <View style={styles.loadingRow}>
             <ActivityIndicator color={colors.sage} />
@@ -214,9 +217,10 @@ const styles = StyleSheet.create({
   filterText: { ...typography.bodySm, color: colors.textSecondary },
   filterTextActive: { color: colors.textInverse, fontWeight: '600' },
   section: { gap: spacing.sm },
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   sectionTitle: { ...typography.headline, color: colors.textPrimary },
   emptyText: { ...typography.bodySm, color: colors.textTertiary },
-  refreshingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  refreshingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   refreshingLabel: { ...typography.caption, color: colors.sageDark },
   loadingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   list: { gap: spacing.md },

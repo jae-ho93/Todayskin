@@ -5,7 +5,9 @@ export type AirStatus = 'good' | 'moderate' | 'bad';
 
 export interface WeatherSnapshot {
   observedAt: string; // ISO timestamp
-  regionName: string; // 예: "서울 종로구"
+  regionName: string; // 시/도 (예: "서울특별시")
+  /** F56: 시/군/구 (예: "해운대구"). 없으면 null/undefined. */
+  districtName?: string | null;
   // F41: 데이터 출처 — LIVE(실시간 조회) | CACHED(Redis 캐시) | UNAVAILABLE(측정 불가)
   source?: 'LIVE' | 'CACHED' | 'UNAVAILABLE' | null;
   // 각 지표는 실제 정부 API(기상청/에어코리아) 호출이 실패하면 null이다 — 목업으로 채우지 않고
@@ -175,6 +177,8 @@ export interface NotificationPreferences {
 export interface CalendarWeather {
   observedAt: string;
   regionName: string;
+  /** F56: 시/군/구 (예: "해운대구"). 없으면 null/undefined. */
+  districtName?: string | null;
   source: string; // LIVE | CACHED | UNAVAILABLE
   uvIndex?: number | null;
   uvStatus?: AirStatus | null;

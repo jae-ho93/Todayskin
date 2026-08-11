@@ -18,8 +18,10 @@ import { EvidenceBadge } from '../../src/components/EvidenceBadge';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type {
+  AirStatus,
   CalendarDayHistory,
   CalendarDiagnosis,
+  CalendarWeather,
   ScoreSeries,
 } from '../../src/types';
 
@@ -282,9 +284,20 @@ function DiagnosisCard({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
         <View style={styles.diagRow}>
           <MediaThumb diagnosis={d} />
           <View style={styles.diagInfo}>
-            {recs.length > 0 ? (
+            {/* F57: 촬영 당시 날씨 — 피부에 영향 큰 지표 4개 (추천은 상세 화면) */}
+            {d.weather ? (
               <>
-                {recs.slice(0, 3).map((r, index) => (
+                <View style={styles.weatherHeader}>
+                  <Ionicons name="partly-sunny-outline" size={14} color={colors.sageDark} />
+                  <Text style={styles.weatherHeaderText} numberOfLines={1}>
+                    {[d.weather.regionName, d.weather.districtName].filter(Boolean).join(' ')}
+                  </Text>
+                </View>
+                <WeatherSummaryGrid weather={d.weather} />
+              </>
+            ) : recs.length > 0 ? (
+              <>
+                {recs.slice(0, 3).map((r) => (
                   <View key={r.id} style={styles.recSummaryRow}>
                     <EvidenceBadge grade={r.grade} />
                     <Text style={styles.recSummaryTitle} numberOfLines={1}>
@@ -306,6 +319,75 @@ function DiagnosisCard({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
     </Pressable>
   );
 }
+// F57: 촬영 당시 날씨 요약 — 자외선·미세먼지·초미세먼지·오존 (2×2 그리드, 상태색)
+const WEATHER_STATUS_COLOR = {
+  good: colors.statusGood,
+  moderate: colors.statusModerate,
+  bad: colors.statusBad,
+};
+
+function WeatherSummaryGrid({ weather }: { weather: CalendarWeather }) {
+  const items: {
+    icon: keyof typeof Ionicons.glyphMap;
+    label: string;
+    value: string | null;
+    status: AirStatus | null;
+  }[] = [
+    {
+      icon: 'sunny-outline',
+      label: '자외선',
+      value:
+        weather.uvIndexPeak != null
+          ? String(weather.uvIndexPeak)
+          : weather.uvIndex != null
+            ? String(weather.uvIndex)
+            : null,
+      status: weather.uvStatusPeak ?? weather.uvStatus ?? null,
+    },
+    {
+      icon: 'ellipse-outline',
+      label: '미세먼지',
+      value: weather.pm10 != null ? String(Math.round(weather.pm10)) : null,
+      status: weather.pm10Status ?? null,
+    },
+    {
+      icon: 'layers-outline',
+      label: '초미세먼지',
+      value: weather.pm25 != null ? String(Math.round(weather.pm25)) : null,
+      status: weather.pm25Status ?? null,
+    },
+    {
+      icon: 'cloud-outline',
+      label: '오존',
+      value: weather.ozonePpm != null ? String(weather.ozonePpm) : null,
+      status: weather.ozoneStatus ?? null,
+    },
+  ];
+
+  return (
+    <View style={styles.weatherGrid}>
+      {items.map((it) => {
+        const color = it.status ? WEATHER_STATUS_COLOR[it.status] : colors.textTertiary;
+        return (
+          <View key={it.label} style={styles.weatherCell}>
+            <View style={[styles.weatherIconWrap, { backgroundColor: color + '22' }]}>
+              <Ionicons name={it.icon} size={14} color={color} />
+            </View>
+            <View style={styles.weatherCellText}>
+              <Text style={styles.weatherValue} numberOfLines={1}>
+                {it.value ?? '—'}
+              </Text>
+              <Text style={styles.weatherLabel} numberOfLines={1}>
+                {it.label}
+              </Text>
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 // 썸네일 — 이미지(가능 시) + 랜드마크 오버레이. 랜드마크만 있으면 점만 표시.
 function MediaThumb({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
   const img = d.image;
@@ -401,6 +483,34 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   diagInfo: { flex: 1, gap: spacing.sm, alignItems: 'flex-start' },
+  weatherHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  weatherHeaderText: { ...typography.caption, color: colors.textSecondary, fontWeight: '600', flexShrink: 1 },
+  weatherGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    width: '100%',
+  },
+  weatherCell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    width: '47%',
+    backgroundColor: colors.gray50 ?? colors.gray100,
+    borderRadius: radius.md,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  weatherIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  weatherCellText: { flex: 1, gap: 0 },
+  weatherValue: { ...typography.bodySm, color: colors.textPrimary, fontWeight: '700' },
+  weatherLabel: { ...typography.caption, color: colors.textTertiary },
   recSummaryRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   recSummaryTitle: { ...typography.bodySm, color: colors.textPrimary, fontWeight: '600', flex: 1 },
   noRec: { ...typography.caption, color: colors.textTertiary },

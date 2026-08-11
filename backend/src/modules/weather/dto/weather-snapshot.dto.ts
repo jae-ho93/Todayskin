@@ -26,9 +26,14 @@ export class WeatherSnapshotDto {
   @IsISO8601()
   observedAt!: string;
 
-  @ApiProperty({ example: '서울특별시', description: '표시용 지역명' })
+  @ApiProperty({ example: '서울특별시', description: '표시용 지역명(시/도)' })
   @IsString()
   regionName!: string;
+
+  @ApiPropertyOptional({ example: '해운대구', description: '시/군/구 표시명 (없으면 null)' })
+  @IsOptional()
+  @IsString()
+  districtName?: string | null;
 
   @ApiProperty({ enum: WeatherSource, example: WeatherSource.LIVE, description: '데이터 출처' })
   @IsEnum(WeatherSource)
