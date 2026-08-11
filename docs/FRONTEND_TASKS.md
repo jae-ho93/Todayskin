@@ -582,7 +582,7 @@ F0 → F1 → F2 → F3 → F6 → F4 → F16 → F8 → F10 → F15 → F13 →
 - [x] `app/onboarding/login.tsx` — body/middle 레이아웃 (CTA를 필드 아래로)
 - [x] `app/onboarding/signup.tsx` — 로그인 링크를 CTA 아래로 이동 + 동일 레이아웃
 
-### F48. 로그인/회원가입 키패드 닫기 불가 (신규, 2026-08-12 실기기)
+### F48. 로그인/회원가입 키패드 닫기 불가 (신규, 2026-08-12 실기기) — 완료 (2026-08-12)
 
 > **증상**: 로그인·회원가입 화면에서 키패드(number-pad)를 열고 닫을 수 없음.
 > iOS number-pad에는 리턴/완료 키가 없어서 `returnKeyType="done"` + `onSubmitEditing`으로도
@@ -592,9 +592,11 @@ F0 → F1 → F2 → F3 → F6 → F4 → F16 → F8 → F10 → F15 → F13 →
 > ② 키패드 **위 “완료” 바**(iOS input accessory / 안드로이드 keyboard type) 또는
 >    필드 옆 인라인 **“완료” 버튼** — number-pad에 항상 노출
 > ③ 전화번호 유효 시 자동 진행(F10)과 충돌하지 않게 탭 위치 조정
+> **구현**: `login.tsx`·`signup.tsx` — iOS 전용 `InputAccessoryView` 완료 바
+> (number-pad에 항상 노출, `Keyboard.dismiss()`) + 드래그 닫기(F62) 유지.
 
-- [ ] `app/onboarding/login.tsx` — 배경 탭 닫기 + 완료 바/버튼
-- [ ] `app/onboarding/signup.tsx` — 동일 적용
+- [x] `app/onboarding/login.tsx` — 배경 탭 닫기 + 완료 바/버튼
+- [x] `app/onboarding/signup.tsx` — 동일 적용
 
 ### F49. 진단 상세 촬영 시각을 연/월/일/시간으로 표기 (신규, 2026-08-12) — 완료 (2026-08-12)
 
@@ -618,8 +620,10 @@ F0 → F1 → F2 → F3 → F6 → F4 → F16 → F8 → F10 → F15 → F13 →
 > ② 겹침 방지: 월 변경 애니메이션 중 추가 제스처 무시(single-fire 유지) + 짧은 락
 > ③ Reanimated(layout transition)로 전환 시 그리드 페이드/슬라이드 검토 — 필요 시만
 > ④ 실기기 회귀: 좌/우 각 1개월 + 세로 스크롤 무충돌 유지 확인
+> **구현**: `slideInMonth(offset)` — 새 달을 `translateX = offset×width`에서 시작해
+> `Animated.spring(toValue: 0, overshootClamping)`로 슬라이드-인. chevron 버튼도 동일.
 
-- [ ] `app/(tabs)/history.tsx` — 월 전환 슬라이드-인 애니메이션 (스프링 스냅)
+- [x] `app/(tabs)/history.tsx` — 월 전환 슬라이드-인 애니메이션 (스프링 스냅)
 
 ### F51. 추천 제품 탭 “갱신 중” 텍스트 → 로딩 스피너 (신규, 2026-08-12) — 완료 (2026-08-12)
 

@@ -62,6 +62,8 @@
 ## 5. 운영/보안 공통 요소
 
 - Swagger 기반 API 문서화.
+- SSE(`GET /jobs/:id/events`, NestJS `@Sse`) — BullMQ job 상태를 실시간 전달.
+  프론트는 SSE 우선 소비, 실패 시 `GET /jobs/:id` 폴링으로 폴백한다 (2026-08-12).
 - Jest Unit/E2E 테스트 (backend/test/*.e2e-spec.ts).
 - Pino Logger.
 - Sentry.

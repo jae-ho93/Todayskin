@@ -3,6 +3,10 @@
 아래 구분선 안 블록을 Cursor 에이전트에 **그대로** 붙여넣는다.
 사람은 복붙만 한다. git·PR·머지는 에이전트가 한다.
 
+> **상태 (2026-08-12)**: F0~F17 웨이브를 포함해 **F0~F62까지 전부 완료**.
+> 이 문서는 그 웨이브 당시 실행 지시(히스토리·계약 기준)로 유지한다.
+> **현재 작업 보드는 `docs/FRONTEND_TASKS.md`** — 새 task는 거기서 관리한다.
+
 BE가 `rec-fast-path`·관련 API를 `main`에 올린 뒤, API freeze 상태에서 실행한다.
 (**현재 freeze 완료** — `docs/BACKEND_TASKS.md` Next 참고.)
 
