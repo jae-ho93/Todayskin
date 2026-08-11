@@ -614,7 +614,20 @@ Refresh Token
 - [x] `/otp/send` 응답 변경: `{ code, recipientNumber, message }` — MO는 코드를 화면에 표시해야 하므로 **프론트 계약 변경**
 - [x] env: `SMS_*` 제거 → `OCTOMO_API_KEY`(production required)·`OCTOMO_ENDPOINT`·`OCTOMO_RECIPIENT_NUMBER`(기본 1666-3538)·`OCTOMO_TIMEOUT_MS`·`OCTOMO_MAX_RETRIES`
 - [x] health ready 의존성 `sms` → `octomo` / provider 단위 테스트 교체 / OTP·auth e2e 유지 확인
-- [ ] 프론트: OTP 화면 "코드 입력" → "수신 번호로 코드 발송 안내" 전환 (`docs/FRONTEND_TASKS.md` F17)
+- [x] 프론트: OTP 화면 "코드 입력" → "수신 번호로 코드 발송 안내" 전환 (`docs/FRONTEND_TASKS.md` F17, PR #94 완료)
+
+### BE-2026-08-12. OTP 개발 모드 정리 — OCTOMO 연동/목업 표시 (신규)
+
+> 2026-08-12 로컬 점검: `.env`에 `OCTOMO_API_KEY`가 없어 개발 환경이 `MockOtpProvider`로 동작하고,
+> mock의 `recipientNumber = '0000'`(자리표시자)가 프론트 코드 카드에 그대로 노출돼
+> "0000으로 인증코드를 보내라"는 깨진 화면이 보임. (프론트 F17은 정상 구현)
+
+- [ ] `MockOtpProvider.recipientNumber`를 `'0000'` → `'1666-3538'`로 변경 (개발 화면 정상화)
+- [ ] provider 선택을 `NODE_ENV === 'production'` 기준 → **`OCTOMO_API_KEY` 유무 기준**으로 변경
+      (`otp.module.ts` useFactory) — 로컬에서도 키만 넣으면 실제 OCTOMO 검증 테스트 가능
+- [ ] 운영 필수: OCTOMO 가입(무료) → `OCTOMO_API_KEY`·`OCTOMO_RECIPIENT_NUMBER` 등록
+
+완료 기준: 개발 모드에서도 화면에 1666-3538이 표시되고, 키가 있으면 로컬에서 실제 MO 검증이 동작.
 
 ### N0. 운영 보안·HTTP 보호
 
@@ -873,6 +886,11 @@ Jest coverageThreshold를 반영했다.
 ### N16. AWS 운영 리소스 프로비저닝·첫 배포
 
 브랜치: `chore/aws-production-bootstrap`
+
+> 네트워킹 확정(2026-08-12): **backend는 public subnet + ALB 유지 + NAT 미사용**
+> (아웃바운드는 IGW 경유). **`assignPublicIp=ENABLED`**로 ECS 프로비저닝 + migrate task 실행
+> (`deploy-ecs.yml`, `ECS_ASSIGN_PUBLIC_IP` 변수). inference는 내부망 전용(N13).
+> 상세는 `docs/DEPLOYMENT.md` 네트워크 구성.
 
 - [ ] ECR, ECS cluster/service, RDS, Redis, S3, CloudWatch 생성
 - [ ] GitHub OIDC role과 최소 권한 task/execution role 구성

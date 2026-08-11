@@ -133,6 +133,19 @@ IAM:
 - **inference task role**: 최소 권한 (로그 외 외부 리소스 불필요)
 - **migrate task role**: RDS 네트워크 접근 + `DATABASE_URL` secret read
 
+### 네트워크 구성 (2026-08-12 확정)
+
+- **backend (ECS Fargate)**: **public subnet** 배치 · **NAT gateway 미사용** · **ALB 유지**.
+  - 인그레스는 ALB(`:3000` → `/health` 등)가 담당.
+  - 아웃바운드(정부 API · Gemini · Redis 등)는 퍼블릭 IP + 인터넷 게이트웨이(IGW) 경유 — NAT 불필요.
+  - **ECS 프로비저닝 시** 서비스를 public subnet에 만들고 **`assignPublicIp=ENABLED`** 로 설정
+    (NAT가 없으므로 태스크에 퍼블릭 IP가 있어야 ECR pull·아웃바운드가 동작).
+  - migrate task는 워크플로가 `assignPublicIp=ENABLED`로 실행 (GitHub Variable `ECS_ASSIGN_PUBLIC_IP`로 오버라이드 가능).
+- **inference (ECS Fargate)**: 기존 N13 정책 유지 — **내부망 전용** (SG reference rule로 backend만 접근,
+  퍼블릭 IP · ALB/NLB 없음). backend와 같은 VPC 안에서만 호출. (inference도 public subnet에 두되
+  퍼블릭 IP 미할당·인그레스 차단, 또는 VPC endpoint 구성은 인프라 생성 시 결정)
+- **RDS**: 퍼블릭 접근 비활성화 유지 (DB는 애플리케이션에서만 접근).
+
 ### 네트워크 보안 (N13)
 
 inference-service는 **내부망 전용** 서비스다. 무제한 이미지 처리 endpoint로
