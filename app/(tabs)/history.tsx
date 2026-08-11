@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   Image,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -33,13 +32,12 @@ function kstDateStrings(count: number): string[] {
   return days;
 }
 
-function formatShortDate(date: string): string {
-  const [, m, d] = date.split('-');
-  return `${Number(m)}.${Number(d)}`;
-}
+const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
-function weekday(date: string): string {
-  return ['일', '월', '화', '수', '목', '금', '토'][new Date(`${date}T12:00:00+09:00`).getDay()];
+function monthBounds(month: string): { from: string; to: string } {
+  const [year, value] = month.split('-').map(Number);
+  const last = new Date(year, value, 0).getDate();
+  return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, '0')}` };
 }
 
 function formatTime(iso: string): string {
@@ -65,7 +63,8 @@ function statusLabel(s?: string | null): string {
 
 // 화면 8: 마이 히스토리 — N8 날짜별 통합 히스토리(날씨·분석·추천·이미지·랜드마크) + score-series 추이
 export default function HistoryScreen() {
-  const dates = useMemo(() => kstDateStrings(14), []);
+  const today = useMemo(() => kstDateStrings(1)[0], []);
+  const [currentMonth, setCurrentMonth] = useState(today.slice(0, 7));
 
   // 서버 집계 시계열 (N8)
   const [scoreSeries, setScoreSeries] = useState<ScoreSeries | null>(null);
@@ -82,8 +81,8 @@ export default function HistoryScreen() {
   const dayRequestSeq = useRef(0);
 
   const load = useCallback(async () => {
-    setScoreSeries(await api.getScoreSeries());
-  }, []);
+    setScoreSeries(await api.getScoreSeries(monthBounds(currentMonth)));
+  }, [currentMonth]);
 
   const loadDay = useCallback(async (date: string) => {
     const seq = ++dayRequestSeq.current;
@@ -102,17 +101,29 @@ export default function HistoryScreen() {
     [loadDay],
   );
 
+  useEffect(() => { void load(); }, [load]);
+
   useEffect(() => {
-    let cancelled = false;
-    void load();
     // 기본으로 오늘 날짜를 선택해 바로 내용이 보이게 한다.
-    selectDay(dates[0]);
+    selectDay(today);
     return () => {
-      cancelled = true;
       dayRequestSeq.current += 1; // 언마운트 후 도착하는 응답도 폐기
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const calendarDays = useMemo(() => {
+    const { to } = monthBounds(currentMonth);
+    const count = Number(to.slice(-2));
+    const firstWeekday = new Date(`${currentMonth}-01T12:00:00+09:00`).getDay();
+    return [...Array.from({ length: firstWeekday }, () => null), ...Array.from({ length: count }, (_, index) => `${currentMonth}-${String(index + 1).padStart(2, '0')}`)];
+  }, [currentMonth]);
+  const recordedDates = useMemo(() => new Set(scoreSeries?.points.map((point) => point.date) ?? []), [scoreSeries]);
+  const moveMonth = (offset: number) => {
+    const [year, month] = currentMonth.split('-').map(Number);
+    const next = new Date(year, month - 1 + offset, 1);
+    setCurrentMonth(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
+  };
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -159,29 +170,32 @@ export default function HistoryScreen() {
       )}
 
       <Text style={styles.sectionTitle}>날짜별 기록</Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.dateStrip}
-      >
-        {dates.map((date) => {
+      <Card style={styles.calendarCard}>
+        <View style={styles.calendarHeader}>
+          <Pressable onPress={() => moveMonth(-1)} hitSlop={10}><Ionicons name="chevron-back" size={20} color={colors.textSecondary} /></Pressable>
+          <Text style={styles.calendarTitle}>{currentMonth.replace('-', '년 ')}월</Text>
+          <Pressable onPress={() => moveMonth(1)} hitSlop={10}><Ionicons name="chevron-forward" size={20} color={colors.textSecondary} /></Pressable>
+        </View>
+        <View style={styles.weekRow}>{WEEKDAYS.map((day) => <Text key={day} style={styles.weekday}>{day}</Text>)}</View>
+        <View style={styles.calendarGrid}>
+        {calendarDays.map((date, index) => {
+          if (!date) return <View key={`empty-${index}`} style={styles.calendarDay} />;
           const active = date === selectedDate;
           return (
             <Pressable
               key={date}
               onPress={() => selectDay(date)}
-              style={[styles.dateChip, active && styles.dateChipActive]}
+              style={[styles.calendarDay, active && styles.dateChipActive]}
             >
-              <Text style={[styles.dateWeekday, active && styles.dateTextActive]}>
-                {weekday(date)}
-              </Text>
               <Text style={[styles.dateNum, active && styles.dateTextActive]}>
-                {formatShortDate(date)}
+                {Number(date.slice(-2))}
               </Text>
+              {recordedDates.has(date) && <View style={[styles.recordDot, active && styles.recordDotActive]} />}
             </Pressable>
           );
         })}
-      </ScrollView>
+        </View>
+      </Card>
 
       {dayLoading ? (
         <View style={styles.loadingRow}>
@@ -383,22 +397,18 @@ const styles = StyleSheet.create({
   trendCard: { gap: spacing.sm },
   trendLabel: { ...typography.subtitle, color: colors.textPrimary },
   trendRange: { ...typography.caption, color: colors.textTertiary },
-  dateStrip: { gap: spacing.sm, paddingRight: spacing.lg },
-  dateChip: {
-    minWidth: 52,
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 2,
-  },
+  calendarCard: { gap: spacing.sm },
+  calendarHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  calendarTitle: { ...typography.subtitle, color: colors.textPrimary },
+  weekRow: { flexDirection: 'row' },
+  weekday: { ...typography.caption, color: colors.textTertiary, textAlign: 'center', width: '14.2857%' },
+  calendarGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  calendarDay: { width: '14.2857%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, gap: 3 },
   dateChipActive: { backgroundColor: colors.sage, borderColor: colors.sage },
-  dateWeekday: { ...typography.caption, color: colors.textTertiary },
   dateNum: { ...typography.subtitle, color: colors.textPrimary },
   dateTextActive: { color: colors.textInverse },
+  recordDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.sageDark },
+  recordDotActive: { backgroundColor: colors.textInverse },
   loadingRow: { alignItems: 'center', paddingVertical: spacing.xl },
   emptyCard: { gap: spacing.xs, alignItems: 'center', paddingVertical: spacing.xl },
   emptyText: { ...typography.bodySm, color: colors.textTertiary, textAlign: 'center' },
