@@ -234,8 +234,8 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.xl },
   keyboardAvoiding: { flex: 1 },
-  body: { flex: 1, justifyContent: 'space-between', paddingVertical: spacing.xl },
-  middle: { gap: spacing.xl },
+  body: { flex: 1, paddingVertical: spacing.xl },
+  middle: { flex: 1, justifyContent: 'center', gap: spacing.xl },
   headline: { ...typography.displayLg, color: colors.textPrimary },
   subtitle: { ...typography.body, color: colors.textSecondary, marginTop: spacing.sm },
   field: { gap: spacing.sm },
