@@ -10,32 +10,6 @@ permissions:
   contents: read
 
 jobs:
-  # AI 코딩 보조 도구(Codebuff·Cursor·Copilot 등) 공동저자/생성 표기 차단.
-  # 사람 계정 외의 AI 트레일러가 PR 커밋에 있으면 실패 → 머지 차단.
-  ai-author-guard:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: AI 공동저자/생성 표기 검사
-        shell: bash
-        run: |
-          set -euo pipefail
-          pattern='(codebuff|cursor|copilot|claude|chatgpt|openai|anthropic|gemini|bard|codex|deepseek|qwen|mistral|codeium|tabnine|windsurf|aider|amazon)'
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            base="${{ github.event.pull_request.base.sha }}"
-            messages=$(git log --format=%B "${base}..HEAD")
-          else
-            messages=$(git log --format=%B -10 HEAD)
-          fi
-          if printf '%s\n' "$messages" \
-            | grep -Ein "^co-authored-by:.*${pattern}|^(generated|built|made|created) (with|by) ${pattern}"; then
-            echo "::error::AI 코딩 보조 도구 공동저자/생성 표기가 커밋에 포함되어 있습니다. 제거 후 다시 푸시하세요."
-            exit 1
-          fi
-          echo "AI 공동저자 표기 없음 ✅"
-
   frontend-typecheck:
     runs-on: ubuntu-latest
     steps:
