@@ -140,7 +140,7 @@ export default function CameraGuideScreen() {
             피부 분석을 위해 카메라 접근이 필요합니다.
           </Text>
 
-          {permission.granted ? (
+          {permission?.granted ? (
             <View style={styles.permissionGranted}>
               <Text style={styles.permissionGrantedText}>✓ 권한 허용됨</Text>
             </View>
@@ -155,9 +155,9 @@ export default function CameraGuideScreen() {
         </View>
 
         <Pressable
-          style={[styles.introCta, (wentOutside === null || !permission.granted) && styles.introCtaDisabled]}
+          style={[styles.introCta, (wentOutside === null || !permission?.granted) && styles.introCtaDisabled]}
           onPress={() => setPhase('capture')}
-          disabled={wentOutside === null || !permission.granted}
+          disabled={wentOutside === null || !permission?.granted}
         >
           <Text style={styles.introCtaText}>촬영 시작하기</Text>
         </Pressable>
@@ -196,7 +196,7 @@ export default function CameraGuideScreen() {
     return <View style={styles.flex} />;
   }
 
-  if (!permission.granted) {
+  if (!permission?.granted) {
     return (
       <SafeAreaView style={[styles.flex, styles.permissionWrap]}>
         <Ionicons name="camera-outline" size={40} color={colors.textSecondary} />

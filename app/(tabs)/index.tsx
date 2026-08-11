@@ -106,6 +106,14 @@ export default function HomeDashboard() {
     setLoadingRecommendations(false);
   }, [coords]);
 
+  // F24 복원: 첫 진입 시 데이터 로드 — 위치 권한 응답(허용/거부)이 결정될 때까지 기다렸다가
+  // 조회한다. 거부돼도 coords만 없을 뿐 getWeather가 서버 기본 지역(서울)으로 폴백하므로
+  // 화면은 그대로 진행된다. (9e0608a에서 삭제된 로직을 aa46e59 기준으로 복원)
+  useEffect(() => {
+    if (locationLoading) return;
+    load();
+  }, [locationLoading, load]);
+
   const handleRefresh = async () => {
     setRefreshing(true);
     await load();
@@ -115,14 +123,14 @@ export default function HomeDashboard() {
   return (
     <View style={styles.flex}>
       <ScreenContainer style={styles.content} refreshing={refreshing} onRefresh={handleRefresh}>
-        <Text style={styles.greeting}>안녕하세요 , {userName ?? '희 원'}님</Text>
+        <Text style={styles.greeting}>안녕하세요, {userName ?? '회원'}님</Text>
 
         {weather ? (
           <WeatherCard weather={weather} />
         ) : weatherLoading ? (
           <Card style={styles.weatherLoading}>
             <ActivityIndicator color={colors.sage} />
-            <Text style={styles.weatherLoadingText}>위치 파악 중 ...</Text>
+            <Text style={styles.weatherLoadingText}>위치 파악 중...</Text>
           </Card>
         ) : (
           <Card style={styles.weatherLoading}>
@@ -134,8 +142,8 @@ export default function HomeDashboard() {
         {hasCaptured === false && (
           <View style={styles.emptyState}>
             <Ionicons name="moon-outline" size={28} color={colors.sageDark} />
-            <Text style={styles.emptyStateText}>아침 자기 전 \n'카메라'페부 상태를 찍어보세요</Text>
-            <Text style={styles.emptyStateSubtext}>찰영을 시작하면 오늘 날씨에 맞는 피부 스코어와 추천을 보여드려요</Text>
+            <Text style={styles.emptyStateText}>매일 자기 전{'\n'}피부 상태를 찍어보세요!</Text>
+            <Text style={styles.emptyStateSubtext}>촬영을 시작하면 오늘 날씨에 맞는 피부 스코어와 추천을 보여드려요</Text>
           </View>
         )}
 
@@ -150,30 +158,30 @@ export default function HomeDashboard() {
         {hasCaptured && skinScore && (
           <>
             <View style={styles.scoreCard}>
-  <CircularGauge value={skinScore.overallScore} label="종 합 점 수" />
+  <CircularGauge value={skinScore.overallScore} label="종합 점수" />
   <View style={styles.scoreMeta}>
-    <Text style={styles.scoreMetaTitle}>오늘 의 피부 스코어</Text>
+    <Text style={styles.scoreMetaTitle}>오늘의 피부 스코어</Text>
     <Text style={styles.scoreMetaBody}>
-      진 날 밤 새 언 후 촬영 기준으로 측정된 값이에요.('\n')진단 마다 값이 다르고 추천 정보입니다 .
+      전날 밤 세안 후 촬영 기준으로 측정된 값이에요.{'\n'}진단이 아닌 추정값입니다.
     </Text>
     <Pressable onPress={() => router.push('/trend')} hitSlop={4}>
-      <Text style={styles.patternLink}>오늘 패턴 분석 보기</Text>
+      <Text style={styles.patternLink}>개인 패턴 분석 보기 →</Text>
     </Pressable>
   </View>
 </View>
 
             <View>
-              <Text style={styles.sectionTitle}>오늘 의 추천</Text>
+              <Text style={styles.sectionTitle}>오늘의 추천</Text>
               {recommendationsRefreshing && <Text style={styles.refreshingLabel}>최신 추천으로 갱신 중…</Text>}
               {loadingRecommendations ? (
                 <View style={styles.recommendationLoading}>
                   <ActivityIndicator color={colors.sage} />
                   <Text style={styles.recommendationLoadingText}>
-                    어제밤 피부 상태와 오늘 날씨를 분석하고 있어요 ...
+                    어젯밤 피부 상태와 오늘 날씨를 분석하고 있어요…
                   </Text>
                 </View>
               ) : recommendations === null ? (
-                <Text style={styles.recommendationLoadingText}>추천 를 불러올 수 없어요</Text>
+                <Text style={styles.recommendationLoadingText}>추천을 불러올 수 없어요</Text>
               ) : (
                 <View style={styles.recommendationList}>
                   {recommendations.slice(0, 4).map((rec) => (
@@ -191,7 +199,7 @@ export default function HomeDashboard() {
         onPress={() => router.push('/camera-guide')}
       >
         <Ionicons name="camera-outline" size={20} color={colors.textInverse} />
-        <Text style={styles.fabText}>자기 전 새 현 하기</Text>
+        <Text style={styles.fabText}>자기 전 세안 후 촬영하기</Text>
       </Pressable>
     </View>
   );
