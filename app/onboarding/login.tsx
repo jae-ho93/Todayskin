@@ -7,7 +7,6 @@ import {
   Linking,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -113,90 +112,87 @@ export default function LoginScreen() {
         style={styles.keyboardAvoiding}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+        {/* 스크롤 없는 한 화면 — 헤드라인/입력칸/CTA+소셜이 세로 공간을 나눠 갖는다 */}
         <View style={styles.body}>
           <View>
             <Text style={styles.headline}>로그인</Text>
             <Text style={styles.subtitle}>휴대폰 인증 또는 소셜 계정으로 안전하게 로그인하세요</Text>
           </View>
 
-          <View style={styles.field}>
-            <Text style={styles.label}>휴대폰 번호로 로그인</Text>
-            <TextInput
-              style={[styles.input, focused === 'phone' && styles.inputFocused]}
-              placeholder="010-1234-5678"
-              placeholderTextColor={colors.gray300}
-              keyboardType="number-pad"
-              value={formatPhoneDisplay(phoneDigits)}
-              onChangeText={handlePhoneChange}
-              onFocus={() => setFocused('phone')}
-              onBlur={() => setFocused(null)}
-              maxLength={13}
-              editable={!otpSent}
-              returnKeyType="done"
-              onSubmitEditing={() => Keyboard.dismiss()}
-              autoFocus
-            />
-            {!otpSent && (
-              <Pressable
-                onPress={handleSendOtp}
-                disabled={!isPhoneValid || sendingOtp}
-                hitSlop={8}
-                style={styles.nextButton}
-              >
-                {sendingOtp ? (
-                  <ActivityIndicator size="small" color={colors.sageDark} />
-                ) : (
-                  <Text style={[styles.nextButtonText, !isPhoneValid && styles.nextButtonTextDisabled]}>
-                    문자 인증 시작하기
-                  </Text>
-                )}
-              </Pressable>
+          <View style={styles.middle}>
+            <View style={styles.field}>
+              <Text style={styles.label}>휴대폰 번호로 로그인</Text>
+              <TextInput
+                style={[styles.input, focused === 'phone' && styles.inputFocused]}
+                placeholder="010-1234-5678"
+                placeholderTextColor={colors.gray300}
+                keyboardType="number-pad"
+                value={formatPhoneDisplay(phoneDigits)}
+                onChangeText={handlePhoneChange}
+                onFocus={() => setFocused('phone')}
+                onBlur={() => setFocused(null)}
+                maxLength={13}
+                editable={!otpSent}
+                returnKeyType="done"
+                onSubmitEditing={() => Keyboard.dismiss()}
+                autoFocus
+              />
+              {!otpSent && (
+                <Pressable
+                  onPress={handleSendOtp}
+                  disabled={!isPhoneValid || sendingOtp}
+                  hitSlop={8}
+                  style={styles.nextButton}
+                >
+                  {sendingOtp ? (
+                    <ActivityIndicator size="small" color={colors.sageDark} />
+                  ) : (
+                    <Text style={[styles.nextButtonText, !isPhoneValid && styles.nextButtonTextDisabled]}>
+                      문자 인증 시작하기
+                    </Text>
+                  )}
+                </Pressable>
+              )}
+            </View>
+
+            {otpSent && (
+              <View style={styles.field}>
+                <Text style={styles.label}>아래 번호로 인증코드를 보내주세요</Text>
+                <View style={styles.codeCard}><Text style={styles.recipient}>{recipientNumber}</Text><Text style={styles.code}>인증코드 {otpCode}</Text></View>
+                <Pressable onPress={openSms} style={styles.smsButton}><Text style={styles.smsButtonText}>문자 앱 열기</Text></Pressable>
+                <Pressable onPress={handleSendOtp} disabled={sendingOtp} hitSlop={8} style={styles.nextButton}>
+                  <Text style={styles.nextButtonText}>새 코드 받기</Text>
+                </Pressable>
+              </View>
             )}
+
+            {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
           </View>
 
-          {otpSent && (
-            <View style={styles.field}>
-              <Text style={styles.label}>아래 번호로 인증코드를 보내주세요</Text>
-              <View style={styles.codeCard}><Text style={styles.recipient}>{recipientNumber}</Text><Text style={styles.code}>인증코드 {otpCode}</Text></View>
-              <Pressable onPress={openSms} style={styles.smsButton}><Text style={styles.smsButtonText}>문자 앱 열기</Text></Pressable>
-              <Pressable onPress={handleSendOtp} disabled={sendingOtp} hitSlop={8} style={styles.nextButton}>
-                <Text style={styles.nextButtonText}>새 코드 받기</Text>
-              </Pressable>
-            </View>
-          )}
+          <View style={styles.footer}>
+            <Pressable
+              onPress={handleSubmit}
+              disabled={!isOtpValid || submitting}
+              style={({ pressed }) => [
+                styles.cta,
+                (!isOtpValid || submitting) && styles.ctaDisabled,
+                pressed && isOtpValid && !submitting && styles.ctaPressed,
+              ]}
+            >
+              {submitting ? (
+                <ActivityIndicator color={colors.textInverse} />
+              ) : (
+                <Text style={styles.ctaText}>{otpSent ? '문자를 보냈어요' : '로그인'}</Text>
+              )}
+            </Pressable>
 
-          {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+            <Pressable onPress={() => router.replace('/onboarding/signup')} hitSlop={8}>
+              <Text style={styles.signupLink}>아직 계정이 없으신가요? 회원가입</Text>
+            </Pressable>
+            <SocialLoginButtons compact busyProvider={busyProvider} onToken={handleSocialToken} onError={setError} />
+            <Text style={styles.terms}>계속하면 서비스 이용약관과 개인정보 처리방침에 동의한 것으로 간주됩니다.</Text>
+          </View>
         </View>
-
-        <View style={styles.footer}>
-          <Pressable
-            onPress={handleSubmit}
-            disabled={!isOtpValid || submitting}
-            style={({ pressed }) => [
-              styles.cta,
-              (!isOtpValid || submitting) && styles.ctaDisabled,
-              pressed && isOtpValid && !submitting && styles.ctaPressed,
-            ]}
-          >
-            {submitting ? (
-              <ActivityIndicator color={colors.textInverse} />
-            ) : (
-              <Text style={styles.ctaText}>{otpSent ? '문자를 보냈어요' : '로그인'}</Text>
-            )}
-          </Pressable>
-
-          <Pressable onPress={() => router.replace('/onboarding/signup')} hitSlop={8}>
-            <Text style={styles.signupLink}>아직 계정이 없으신가요? 회원가입</Text>
-          </Pressable>
-          <SocialLoginButtons busyProvider={busyProvider} onToken={handleSocialToken} onError={setError} />
-          <Text style={styles.terms}>계속하면 서비스 이용약관과 개인정보 처리방침에 동의한 것으로 간주됩니다.</Text>
-        </View>
-        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -205,8 +201,8 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.xl },
   keyboardAvoiding: { flex: 1 },
-  scrollContent: { flexGrow: 1, justifyContent: 'center', gap: spacing.xxl, paddingVertical: spacing.xl },
-  body: { gap: spacing.xxl },
+  body: { flex: 1, justifyContent: 'space-between', paddingVertical: spacing.xl },
+  middle: { gap: spacing.xl },
   headline: { ...typography.displayLg, color: colors.textPrimary },
   subtitle: { ...typography.body, color: colors.textSecondary, marginTop: spacing.sm },
   field: { gap: spacing.sm },

@@ -27,6 +27,7 @@ export default function RootLayout() {
           <Stack.Screen name="onboarding" />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="camera-guide" options={{ presentation: 'fullScreenModal' }} />
+          <Stack.Screen name="my-info" />
           <Stack.Screen name="diagnosis-result" />
           <Stack.Screen name="recommendation/[id]" options={{ presentation: 'modal' }} />
           <Stack.Screen name="trend" />
