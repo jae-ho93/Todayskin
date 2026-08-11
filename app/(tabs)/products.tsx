@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { EvidenceBadge } from '../../src/components/EvidenceBadge';
@@ -78,6 +78,18 @@ if (weatherResponse?.source === 'LIVE' && weatherResponse?.jobId) {
     return category === 'all' ? weatherProducts : weatherProducts.filter((p) => p.category === category);
   }, [weatherProducts, category]);
 
+  const openPurchaseUrl = useCallback(async (product: Product) => {
+    if (!product.purchaseUrl) {
+      Alert.alert('구매 링크 준비 중', '이 제품의 구매 페이지는 아직 연결되지 않았어요.');
+      return;
+    }
+    try {
+      await Linking.openURL(product.purchaseUrl);
+    } catch {
+      Alert.alert('페이지를 열 수 없어요', '구매 링크를 다시 확인해주세요.');
+    }
+  }, []);
+
   return (
     <ScreenContainer refreshing={refreshing} onRefresh={handleRefresh}>
       <Text style={styles.title}>추천 제품/성분</Text>
@@ -114,6 +126,12 @@ if (weatherResponse?.source === 'LIVE' && weatherResponse?.jobId) {
               return (
                 <View key={timing} style={styles.timingGroup}>
                   <Text style={styles.timingLabel}>{timing}</Text>
+                  <Pressable
+                    accessibilityRole="link"
+                    accessibilityLabel={`${p.name} 구매 페이지 열기`}
+                    onPress={() => openPurchaseUrl(p)}
+                    style={({ pressed }) => pressed && styles.cardPressed}
+                  >
                   <Card style={styles.card}>
                     <View style={styles.cardHeader}>
                       <View style={styles.thumb} />
@@ -130,6 +148,7 @@ if (weatherResponse?.source === 'LIVE' && weatherResponse?.jobId) {
                     </View>
                     {p.reason && <Text style={styles.reason}>{p.reason}</Text>}
                   </Card>
+                  </Pressable>
                 </View>
               );
             })}
@@ -174,6 +193,7 @@ const styles = StyleSheet.create({
   timingGroup: { gap: spacing.xs },
   timingLabel: { ...typography.caption, color: colors.sageDark, fontWeight: '700' },
   card: { gap: spacing.sm },
+  cardPressed: { opacity: 0.72 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   thumb: { width: 48, height: 48, borderRadius: radius.md, backgroundColor: colors.gray100 },
   brand: { ...typography.caption, color: colors.textTertiary },
