@@ -13,6 +13,8 @@ export const envValidationSchema = Joi.object({
     .default('development'),
 
   PORT: Joi.number().port().default(3000),
+  // 개발용(Memory 스토어) 이미지 서빙 origin — 실기기에서 Mac LAN IP로 설정. 없으면 127.0.0.1:PORT.
+  DEV_STORAGE_BASE_URL: Joi.string().uri({ scheme: ['http', 'https'] }).optional(),
 
   // CORS 허용 목록 — 쉼표로 구분 (예: http://localhost:8081,https://app.todayskin.kr)
   ALLOWED_ORIGINS: Joi.string().allow('').default(''),

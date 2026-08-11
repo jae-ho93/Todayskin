@@ -20,15 +20,29 @@ describe('MemoryImageObjectStore', () => {
     expect(store.has('diagnoses/1/front.jpg')).toBe(false);
   });
 
-  it('getPresignedUrl은 만료 시각이 포함된 memory URL을 반환한다', async () => {
-    const store = new MemoryImageObjectStore('test-bucket');
+  it('getPresignedUrl은 RN Image가 로드할 수 있는 dev-storage http URL을 반환한다', async () => {
+    const store = new MemoryImageObjectStore('test-bucket', 'http://127.0.0.1:3000');
     const url = await store.getPresignedUrl({
       bucket: 'test-bucket',
       key: 'diagnoses/1/front.jpg',
       expiresInSeconds: 900,
     });
-    expect(url.startsWith('memory://test-bucket/diagnoses/1/front.jpg?expires=')).toBe(
-      true,
-    );
+    expect(url).toBe('http://127.0.0.1:3000/dev-storage/test-bucket/diagnoses/1/front.jpg');
+  });
+
+  it('getObject는 저장된 바이트와 contentType을 반환하고, 없으면 null', async () => {
+    const store = new MemoryImageObjectStore('test-bucket');
+    await store.putObject({
+      key: 'diagnoses/1/front.jpg',
+      body: Buffer.from('jpeg-data'),
+      contentType: 'image/jpeg',
+    });
+
+    const obj = await store.getObject({ bucket: 'test-bucket', key: 'diagnoses/1/front.jpg' });
+    expect(obj?.body.toString()).toBe('jpeg-data');
+    expect(obj?.contentType).toBe('image/jpeg');
+
+    const missing = await store.getObject({ bucket: 'test-bucket', key: 'nope.jpg' });
+    expect(missing).toBeNull();
   });
 });
