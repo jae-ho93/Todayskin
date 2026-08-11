@@ -118,6 +118,13 @@ export default function SignupScreen() {
   const handleNameSubmit = () => {
     if (!isNameValid) return;
     revealStep(1);
+
+  // 이름이 유효해지면 자동으로 전화번호 필드로 포커스 이동
+  useEffect(() => {
+    if (isNameValid && step === 0) {
+      revealStep(1);
+    }
+  }, [isNameValid, step]);
   };
 
   // 번호를 다시 바꾸면 이전 인증은 무효 — 새 번호로 다시 인증번호를 받아야 한다
