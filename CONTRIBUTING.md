@@ -27,6 +27,19 @@ git switch -c <task-branch>
 BE는 **API freeze**. FE만 리뷰어 대기 없이 `gh pr merge --squash`(`--delete-branch` 금지) 후 `main` pull → **새 브랜치**.  
 N16·총리팩·결제·BE 계약 변경은 기본 규칙.
 
+## AI 코딩 보조 도구 공동저자 금지
+
+모든 커밋은 **사람 계정(author/committer)으로만** 작성한다. 커밋 메시지에 AI 코딩
+보조 도구(Codebuff·Cursor·Copilot·Claude·ChatGPT·Gemini 등)의 `Co-Authored-By:`
+트레일러나 `Generated with/by` 표기를 붙이지 않는다. CI(`ai-author-guard`)가
+PR 커밋을 검사해 위반 시 실패시킨다.
+
+로컬에서도 같은 규칙을 강제하려면 (클론당 1회):
+
+```bash
+git config core.hooksPath .githooks
+```
+
 ## DB · 보안
 
 - 커밋: `schema.prisma`, `prisma/migrations/`. 공유 migration 수정·삭제 금지.

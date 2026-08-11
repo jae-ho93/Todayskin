@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# commit-msg 훅 — AI 코딩 보조 도구 공동저자/생성 표기 차단
+#
+# 모든 커밋은 사람 계정(author/committer)으로만 작성해야 한다.
+# AI 코딩 보조 도구(Codebuff·Cursor·Copilot·Claude·ChatGPT·Gemini 등)의
+# Co-Authored-By 트레일러나 "Generated with/by" 표기가 들어오면 커밋을 거부한다.
+#
+# 활성화: git config core.hooksPath .githooks
+
+set -u
+msg_file="${1:-}"
+
+if [ -z "$msg_file" ] || [ ! -f "$msg_file" ]; then
+  exit 0
+fi
+
+# AI 코딩 보조 도구 식별자 (소문자 매칭)
+pattern='(codebuff|cursor|copilot|claude|chatgpt|openai|anthropic|gemini|bard|codex|deepseek|qwen|mistral|codeium|tabnine|windsurf|aider|amazon)'
+
+if grep -Ein "^co-authored-by:.*${pattern}" "$msg_file" \
+  || grep -Ein "^(generated|built|made|created) (with|by) ${pattern}" "$msg_file"; then
+  echo "ERROR: AI 코딩 보조 도구 공동저자/생성 표기가 커밋 메시지에 포함되어 있습니다." >&2
+  echo "커밋은 사람 계정으로만 작성하고 AI 트레일러(Co-Authored-By 등)를 붙이지 마세요." >&2
+  echo "해당 줄을 제거한 뒤 다시 커밋하세요." >&2
+  exit 1
+fi
+
+exit 0
