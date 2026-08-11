@@ -13,7 +13,7 @@ import type { Product, Recommendation } from '../../src/types';
 // 화면 5: 추천 상세 (근거등급 A/B/C 표시 핵심 화면)
 export default function RecommendationDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [showExplanation, setShowExplanation] = useState(false);
+  const [showExplanation, setShowExplanation] = useState(true);
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
   const [loading, setLoading] = useState(true);
   // 관련 제품은 부가 정보라 불러오기 실패해도 조용히 빈 목록으로 둔다(별도 실패 UI 없음)

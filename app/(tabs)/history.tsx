@@ -20,7 +20,6 @@ import type {
   CalendarDayHistory,
   CalendarDiagnosis,
   CalendarWeather,
-  HistoryEntry,
   ScoreSeries,
 } from '../../src/types';
 
@@ -68,10 +67,8 @@ function statusLabel(s?: string | null): string {
 export default function HistoryScreen() {
   const dates = useMemo(() => kstDateStrings(14), []);
 
-  // 전체 기록 목록 + 서버 집계 시계열 (N8)
-  const [history, setHistory] = useState<HistoryEntry[] | null>(null);
+  // 서버 집계 시계열 (N8)
   const [scoreSeries, setScoreSeries] = useState<ScoreSeries | null>(null);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   // 선택 날짜의 통합 히스토리 (N8)
@@ -85,9 +82,7 @@ export default function HistoryScreen() {
   const dayRequestSeq = useRef(0);
 
   const load = useCallback(async () => {
-    const [h, s] = await Promise.all([api.getHistory(), api.getScoreSeries()]);
-    setHistory(h);
-    setScoreSeries(s);
+    setScoreSeries(await api.getScoreSeries());
   }, []);
 
   const loadDay = useCallback(async (date: string) => {
@@ -109,14 +104,7 @@ export default function HistoryScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    load()
-      .then(() => {
-        if (!cancelled) setLoading(false);
-      })
-      .catch(() => {
-        if (!cancelled) setLoading(false);
-      });
+    void load();
     // 기본으로 오늘 날짜를 선택해 바로 내용이 보이게 한다.
     selectDay(dates[0]);
     return () => {
@@ -216,30 +204,6 @@ export default function HistoryScreen() {
         </View>
       )}
 
-      <Text style={styles.sectionTitle}>전체 기록</Text>
-      {loading ? (
-        <View style={styles.loadingRow}>
-          <ActivityIndicator color={colors.sage} />
-        </View>
-      ) : history === null ? (
-        <Text style={styles.emptyText}>기록을 불러올 수 없어요</Text>
-      ) : history.length > 0 ? (
-        <View style={styles.list}>
-          {history.map((h) => (
-            <Card key={h.id} style={styles.row}>
-              <View style={styles.thumb}>
-                <Ionicons name="person-outline" size={20} color={colors.gray300} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.date}>{formatShortDate(h.capturedAt.slice(0, 10))}</Text>
-              </View>
-              <Text style={styles.score}>{h.overallScore}</Text>
-            </Card>
-          ))}
-        </View>
-      ) : (
-        <Text style={styles.emptyText}>아직 기록이 없어요</Text>
-      )}
     </ScreenContainer>
   );
 }
@@ -252,10 +216,7 @@ function DiagnosisCard({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
       <View style={styles.diagHeader}>
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={styles.diagTime}>{formatTime(d.capturedAt)} 촬영</Text>
-          <Text style={styles.diagMeta}>
-            {d.modelVersion ? `모델 ${d.modelVersion}` : ''}
-            {statusLabel(d.status) ? ` · ${statusLabel(d.status)}` : ''}
-          </Text>
+          {statusLabel(d.status) && <Text style={styles.diagMeta}>{statusLabel(d.status)}</Text>}
         </View>
         <View style={styles.scoreBadge}>
           <Text style={styles.scoreBadgeValue}>{d.overallScore}</Text>
@@ -269,9 +230,9 @@ function DiagnosisCard({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
         <View style={styles.partsBlock}>
           {d.parts.map((p) => (
             <View key={p.part} style={styles.partRow}>
-              <Text style={styles.partLabel}>{p.label}</Text>
-              <Text style={styles.partGrade}>{p.grade}</Text>
-              <Text style={styles.partValue}>
+              <Text style={styles.partLabel} numberOfLines={1}>{p.label}</Text>
+              <Text style={styles.partGrade} numberOfLines={1}>{p.grade}</Text>
+              <Text style={styles.partValue} numberOfLines={1} ellipsizeMode="tail">
                 {p.moisture != null ? `수분 ${p.moisture}` : ''}
                 {p.moisture != null && p.elasticity != null ? ' · ' : ''}
                 {p.elasticity != null ? `탄력 ${p.elasticity}` : ''}
@@ -484,8 +445,8 @@ const styles = StyleSheet.create({
   weatherMetric: { ...typography.caption, color: colors.textSecondary },
   partsBlock: { gap: spacing.xs },
   partRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  partLabel: { ...typography.bodySm, color: colors.textPrimary, width: 44 },
-  partGrade: { ...typography.bodySm, color: colors.sageDark, fontWeight: '600', width: 40 },
+  partLabel: { ...typography.bodySm, color: colors.textPrimary, flexShrink: 1 },
+  partGrade: { ...typography.bodySm, color: colors.sageDark, fontWeight: '600', flexShrink: 0 },
   partValue: { ...typography.caption, color: colors.textTertiary, flex: 1 },
   recsBlock: { gap: spacing.sm },
   recBlock: {
