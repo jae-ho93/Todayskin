@@ -593,7 +593,7 @@ Refresh Token
 ## 다음 과정 (Next)
 
 > **BE 버그픽스/제품 웨이브(N24~N34) 완료 · API freeze** (main `42897d5` / PR #59~#66).
-> 다음 구현은 **FE** (`docs/FRONTEND_TASKS.md` + `docs/FE_HANDOFF.md`).
+> 다음 구현은 **FE** (`docs/FRONTEND_TASKS.md`).
 > N16(AWS 첫 배포)는 계정·시크릿·승인자가 준비된 뒤 **별도**. EAS·구독 결제는 보류.
 >
 > **FE 웨이브 운영** (BE는 freeze — 계약 변경 시 Task/Swagger 먼저)
@@ -1087,47 +1087,12 @@ Jest coverageThreshold를 반영했다.
 
 - [x] 푸시 미구현 구간을 FE가 거짓 토글로 오해하지 않도록 플래그/문서 (`pushDeliveryAvailable` 등)
 - [x] `morningReminder` 등 미사용 필드 정리 또는 명시적 unsupported
-- [x] F16 설정 전면 재구성과 맞춤 — FE 핸드오프에 계약 명시
+- [x] F16 설정 전면 재구성과 맞춤 — FE 계약에 명시
 
 완료 기준: 설정 UI가 “되는 것처럼 보이는” 토글을 서버 계약으로 막을 수 있다.
 
-## 프론트 범위 완료 기록 (참고용)
-
-> 아래는 프론트엔드 범위에서 완료되어 `main`에 병합된 작업이다. 백엔드 태스크는 아니지만
-> 작업 기록 보존을 위해 여기에 남겨둔다. 상세는 해당 PR과 프론트 코드에서 확인한다.
-
-### N15. 캘린더 히스토리 프론트 연결 (프론트 범위 — 완료)
-
-브랜치: `feature/calendar-history-client`
-
-- [x] 프론트 API client에 `history/:date`, `score-series` 추가
-- [x] 날씨·진단·추천·image·landmarks 응답 타입 동기화
-- [x] History 화면의 기존 목록/로컬 시계열을 N8 계약으로 migration
-- [x] 저장 미동의와 presigned URL 만료 상태 처리
-- [x] 로딩·빈 날짜·부분 데이터·재인증 UI 검증
-
-완료 기준: 사용자가 날짜를 선택하면 N8 통합 히스토리를 실제 앱에서 조회하고 동의 상태에 맞는 이미지·landmarks를 확인할 수 있다.
-
-### N18. 앱 세션 토큰 수명 관리 (프론트 범위 — 완료)
-
-브랜치: `feature/app-session-refresh`
-
-- [x] 프론트에 refresh token 회전 연동 (현재 `saveSession`은 accessToken만 저장, refresh 미사용)
-- [x] 401 응답 시 재로그인 유도 흐름 (현재는 "불러올 수 없어요"만 노출되고 로그인 화면으로 복귀하지 않음)
-- [x] access token(15m) 만료 후에도 앱이 조용히 갱신되거나 명확한 재인증 UX 제공
-
-완료 기준: 세션이 15분 이상 지속돼도 인증 API가 끊기지 않고, 토큰 무효 시 사용자가 로그인 화면으로 안내된다.
-
-### N19. 설정 화면 기능 연동 (프론트 범위 — 완료)
-
-브랜치: `feature/settings-integration`
-
-- [x] 알림 스위치를 `NotificationPreference` API에 연동 (현재 로컬 state만 변경, 서버 미저장)
-- [x] "안면 이미지 처리방침 확인" / "데이터 처리 동의 철회" 행에 consent 조회·철회 API 연결
-- [x] 탈퇴(withdraw) UI — 백엔드 `POST /auth/withdraw`(N6)는 구현돼 있으나 앱 진입점 없음
-- [ ] 구독(프리미엄) 화면 — 현재 정적 표시만, 결제·권한 로직 없음 (범위 별도 결정 — 미완료). **가짜 가격 카드는 F16에서 삭제.** 이후 FE 미완료 작업은 `docs/FRONTEND_TASKS.md`.
-
-완료 기준: 설정 화면의 모든 항목이 실제 API와 동기화되고 동의 철회·탈퇴가 사용자 흐름으로 동작한다.
+> **참고**: 프론트 범위 완료 기록(N15/N18/N19)은 `docs/FRONTEND_TASKS.md`
+> "프론트 범위 완료 기록"으로 이동했다 (2026-08-12).
 
 ## 완료 정의
 
