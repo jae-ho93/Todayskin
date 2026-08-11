@@ -339,6 +339,71 @@ export const api = {
     return result.status === 'ok' ? result.data : null;
   },
 
+  // job 완료 대기 — SSE(`GET /jobs/:id/events`) 우선, 실패/불가 시 폴링 폴백.
+  // 반환: COMPLETED(결과 포함)/FAILED job, 또는 완전 실패 시 null.
+  // options.signal로 호출부가 취소(언마운트/재호출)할 수 있고, 취소 시 null을 반환한다.
+  waitForJob: async <T = unknown>(
+    jobId: string,
+    options?: { timeoutMs?: number; signal?: AbortSignal },
+  ): Promise<Job<T> | null> => {
+    const timeoutMs = options?.timeoutMs ?? 25_000;
+    const external = options?.signal;
+    const trySse = async (): Promise<Job<T> | null> => {
+      if (external?.aborted) return null;
+      const controller = new AbortController();
+      const onAbort = () => controller.abort();
+      external?.addEventListener('abort', onAbort);
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const headers = await authHeaders();
+        const res = await fetch(`${API_BASE_URL}/jobs/${jobId}/events`, {
+          headers: { ...headers, Accept: 'text/event-stream' },
+          signal: controller.signal,
+        });
+        // RN fetch 스트리밍(body.getReader)을 지원하지 않으면 즉시 폴백한다.
+        if (!res.ok || typeof res.body?.getReader !== 'function') return null;
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const blocks = buffer.split('\n\n');
+          buffer = blocks.pop() ?? '';
+          for (const block of blocks) {
+            const dataLine = block.split('\n').find((line) => line.startsWith('data:'));
+            if (!dataLine) continue;
+            try {
+              const job = JSON.parse(dataLine.slice(5).trim()) as Job<T>;
+              if (job.status === 'COMPLETED' || job.status === 'FAILED') return job;
+            } catch {
+              // 개별 이벤트 파싱 실패는 무시하고 다음 이벤트를 기다린다.
+            }
+          }
+        }
+        return null; // 스트림이 완료 이벤트 없이 종료됨 → 폴백
+      } catch {
+        return null; // 네트워크/타임아웃/취소 → 폴백
+      } finally {
+        clearTimeout(timer);
+        external?.removeEventListener('abort', onAbort);
+      }
+    };
+    const sseJob = await trySse();
+    if (sseJob) return sseJob;
+    if (external?.aborted) return null;
+    // 폴링 폴백 — 1초 간격, 최대 20회(약 20초) 후 포기.
+    for (let attempts = 0; attempts < 20; attempts += 1) {
+      if (external?.aborted) return null;
+      const job = await api.pollJob<T>(jobId);
+      if (job?.status === 'COMPLETED' && job.result) return job;
+      if (job?.status === 'FAILED') return job;
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    return null;
+  },
+
   // ──────────────── F0 추가: 사용자 프로필 ────────────────
 
   // F0: 현재 로그인 유저 조회 (N28 설정 프로필 표시)

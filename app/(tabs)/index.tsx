@@ -24,7 +24,8 @@ export default function HomeDashboard() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loadingRecommendations, setLoadingRecommendations] = useState(true);
   const [recommendationsRefreshing, setRecommendationsRefreshing] = useState(false);
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // SSE/polling job 대기 취소용 — 재호출·언마운트 시 이전 대기를 중단한다.
+  const jobAbortRef = useRef<AbortController | null>(null);
   // null = 아직 못 불러옴, false = 불러옴 (로딩 중), true = 불러옴 (기존)
   const [hasCaptured, setHasCaptured] = useState<boolean | null>(null);
   const [skinScoreUnavailable, setSkinScoreUnavailable] = useState(false);
@@ -39,7 +40,7 @@ export default function HomeDashboard() {
   useEffect(() => {
     getSession().then((user) => setUserName(user?.name ?? null));
     return () => {
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+      jobAbortRef.current?.abort();
     };
   }, []);
 
@@ -48,10 +49,8 @@ export default function HomeDashboard() {
     if (loadInFlightRef.current) return;
     loadInFlightRef.current = true;
     try {
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current);
-        pollTimerRef.current = null;
-      }
+      jobAbortRef.current?.abort();
+      jobAbortRef.current = null;
       setRecommendationsRefreshing(false);
       setWeatherLoading(true);
       setLoadingRecommendations(true);
@@ -96,26 +95,21 @@ export default function HomeDashboard() {
     }
 
     if (bGradeResponse?.source !== 'LIVE' && bGradeResponse?.jobId) {
+      // SSE 우선, 실패 시 폴링 폴백 — waitForJob 내부에서 처리 (F0)
       setRecommendationsRefreshing(true);
-      let attempts = 0;
-      pollTimerRef.current = setInterval(async () => {
-        attempts += 1;
-        const job = await api.pollJob<Recommendation[]>(bGradeResponse.jobId);
+      const controller = new AbortController();
+      jobAbortRef.current = controller;
+      void api.waitForJob<Recommendation>(bGradeResponse.jobId, { signal: controller.signal }).then((job) => {
+        if (jobAbortRef.current === controller) jobAbortRef.current = null;
         if (job?.status === 'COMPLETED' && job.result) {
-          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-          pollTimerRef.current = null;
-          setRecommendationsRefreshing(false);
           // F38: job.result는 { recommendations: [...] } 래핑 객체 — 배열로 언랩
           const live = (job.result as { recommendations?: Recommendation[] } | null)
             ?.recommendations ?? [];
           setRecommendations([...(aGrade ?? []), ...live]);
-        } else if (job?.status === 'FAILED' || attempts >= 20) {
-          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-          pollTimerRef.current = null;
-          setRecommendationsRefreshing(false);
-          // 실패/timeout: 현재 CACHED/FALLBACK 결과를 유지한다.
         }
-      }, 1000);
+        // 실패/timeout/취소: 현재 CACHED/FALLBACK 결과를 유지한다.
+        setRecommendationsRefreshing(false);
+      });
     }
 
       setLoadingRecommendations(false);

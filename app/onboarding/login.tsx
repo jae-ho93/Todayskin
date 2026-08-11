@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
+  InputAccessoryView,
   Keyboard,
   KeyboardAvoidingView,
   Linking,
@@ -169,6 +170,8 @@ export default function LoginScreen() {
                 editable={!otpSent}
                 returnKeyType="done"
                 onSubmitEditing={() => Keyboard.dismiss()}
+                // F48: iOS number-pad는 완료 키가 없어 키보드 위에 완료 바를 띄운다
+                inputAccessoryViewID={Platform.OS === 'ios' ? 'done-bar' : undefined}
               />
               {!otpSent && (
                 <Pressable
@@ -241,6 +244,22 @@ export default function LoginScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      {/* F48: number-pad 완료 바 (iOS 전용) — 토스/카카오 패턴 */}
+      {Platform.OS === 'ios' && (
+        <InputAccessoryView nativeID="done-bar">
+          <View style={styles.doneBar}>
+            <Pressable
+              onPress={() => Keyboard.dismiss()}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="키패드 닫기"
+              style={styles.doneBarButton}
+            >
+              <Text style={styles.doneBarText}>완료</Text>
+            </Pressable>
+          </View>
+        </InputAccessoryView>
+      )}
     </SafeAreaView>
   );
 }
@@ -287,6 +306,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
+  // F48: 키보드 위 완료 바
+  doneBar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    backgroundColor: colors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  doneBarButton: { paddingHorizontal: spacing.md, paddingVertical: 2 },
+  doneBarText: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },
   nextButton: { alignSelf: 'flex-end', paddingVertical: spacing.sm },
   nextButtonText: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },
   nextButtonTextDisabled: { color: colors.gray300 },
