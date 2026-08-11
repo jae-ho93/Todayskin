@@ -570,7 +570,8 @@ export class DiagnosisService {
     dto.id = diagnosis.id;
     dto.capturedAt = diagnosis.capturedAt.toISOString();
     dto.overallScore = diagnosis.overallScore;
-    dto.thumbnailUri = diagnosis.thumbnailUri;
+    // BE-2026-08-12: 저장된 논리 URI(memory://)는 RN Image가 로드 가능한 http로 정규화
+    dto.thumbnailUri = this.toPublicThumbnailUri(diagnosis.thumbnailUri);
     dto.parts = parts.map((p) => this.partToDto(p));
     return dto;
   }
@@ -580,9 +581,14 @@ export class DiagnosisService {
     dto.id = diagnosis.id;
     dto.capturedAt = diagnosis.capturedAt.toISOString();
     dto.overallScore = diagnosis.overallScore;
-    dto.thumbnailUri = diagnosis.thumbnailUri;
+    dto.thumbnailUri = this.toPublicThumbnailUri(diagnosis.thumbnailUri);
     dto.parts = metrics.map((m) => this.metricToDto(m));
     return dto;
+  }
+
+  /** BE-2026-08-12: 레거시 DB의 memory:// 논리 URI까지 http로 정규화해 내보낸다. */
+  private toPublicThumbnailUri(uri: string | null): string | null {
+    return uri ? this.imageStorage.toPublicUrl(uri) : null;
   }
 
   private partToDto(p: InferredPartMetric): SkinPartMetricDto {

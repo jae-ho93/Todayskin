@@ -284,10 +284,10 @@ function DiagnosisCard({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
           <View style={styles.diagInfo}>
             {recs.length > 0 ? (
               <>
-                {recs.slice(0, 2).map((r, index) => (
+                {recs.slice(0, 3).map((r, index) => (
                   <View key={r.id} style={styles.recSummaryRow}>
                     <EvidenceBadge grade={r.grade} />
-                    <Text style={styles.recSummaryTitle} numberOfLines={2}>
+                    <Text style={styles.recSummaryTitle} numberOfLines={1}>
                       {r.title}
                     </Text>
                   </View>

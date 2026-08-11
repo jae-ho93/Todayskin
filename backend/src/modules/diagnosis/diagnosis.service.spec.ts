@@ -34,6 +34,7 @@ describe('DiagnosisService', () => {
     storeDiagnosisImage: jest.Mock;
     deleteAllForUser: jest.Mock;
     getPresignedUrlForDiagnosis: jest.Mock;
+    toPublicUrl: jest.Mock;
   };
   let idempotency: {
     acquire: jest.Mock;
@@ -72,6 +73,12 @@ describe('DiagnosisService', () => {
       storeDiagnosisImage: jest.fn(),
       deleteAllForUser: jest.fn(),
       getPresignedUrlForDiagnosis: jest.fn(),
+      // BE-2026-08-12: 스냅샷 thumbnailUri 정규화 — memory:// → http 변환을 흉내낸다
+      toPublicUrl: jest.fn((uri: string) =>
+        uri.startsWith('memory://')
+          ? `http://127.0.0.1:3000/dev-storage/${uri.slice('memory://'.length)}`
+          : uri,
+      ),
     };
     idempotency = {
       acquire: jest.fn().mockResolvedValue({ outcome: 'acquired' }),

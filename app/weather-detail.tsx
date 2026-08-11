@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../src/api/client';
 import { Card } from '../src/components/Card';
 import { ScreenContainer } from '../src/components/ScreenContainer';
+import { useToast } from '../src/components/Toast';
 import { useUserLocation } from '../src/hooks/useUserLocation';
 import { colors, radius, spacing, typography } from '../src/theme';
 import type { AirStatus, WeatherSnapshot } from '../src/types';
@@ -227,20 +228,62 @@ export default function WeatherDetailScreen() {
   const { coords, loading: locationLoading } = useUserLocation();
   const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  // F52: in-flight 가드·로드 완료·마운트 유지 — 중복 갱신 방지 + 오류 시 화면 유지
+  const loadInFlightRef = useRef(false);
+  const hasLoadedRef = useRef(false);
+  const mountedRef = useRef(true);
+  const { showToast } = useToast();
+
+  const loadWeather = useCallback(
+    async (mode: 'initial' | 'refresh') => {
+      // F52: 이미 갱신 중이면 중복 호출을 차단한다.
+      if (locationLoading || loadInFlightRef.current) return;
+      loadInFlightRef.current = true;
+      if (mode === 'initial') setLoading(true);
+      else setRefreshing(true);
+      try {
+        const w = await api.getWeather(coords ?? undefined);
+        if (!mountedRef.current) return;
+        hasLoadedRef.current = true;
+        setWeather(w);
+      } catch {
+        if (!mountedRef.current) return;
+        // F52: 오류 시 기존 정보 유지 — 화면 블랭크 방지
+        if (hasLoadedRef.current) {
+          showToast('날씨를 새로고침하지 못했어요 — 기존 정보를 유지합니다', {
+            type: 'error',
+          });
+        } else {
+          setWeather(null); // 기존 에러 화면으로
+        }
+      } finally {
+        if (mountedRef.current) {
+          loadInFlightRef.current = false;
+          setLoading(false);
+          setRefreshing(false);
+        }
+      }
+    },
+    [locationLoading, coords, showToast],
+  );
 
   useEffect(() => {
+    mountedRef.current = true;
     if (locationLoading) return;
-    let cancelled = false;
-    setLoading(true);
-    api.getWeather(coords ?? undefined).then((w) => {
-      if (cancelled) return;
-      setWeather(w);
-      setLoading(false);
-    });
+    loadWeather('initial');
     return () => {
-      cancelled = true;
+      mountedRef.current = false;
     };
-  }, [locationLoading, coords]);
+  }, [locationLoading, loadWeather]);
+
+  // F52: 포커스 복귀 시 1회 자동 갱신 (첫 진입은 위 effect가 처리).
+  useFocusEffect(
+    useCallback(() => {
+      if (!hasLoadedRef.current) return;
+      loadWeather('refresh');
+    }, [loadWeather]),
+  );
 
   if (loading) {
     return (
@@ -280,7 +323,18 @@ export default function WeatherDetailScreen() {
           <Ionicons name="chevron-back" size={22} color={colors.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>날씨 상세</Text>
-        <View style={{ width: 22 }} />
+        {refreshing ? (
+          <ActivityIndicator size="small" color={colors.sage} />
+        ) : (
+          <Pressable
+            onPress={() => loadWeather('refresh')}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="새로고침"
+          >
+            <Ionicons name="refresh" size={22} color={colors.sageDark} />
+          </Pressable>
+        )}
       </View>
 
       <View style={styles.regionRow}>

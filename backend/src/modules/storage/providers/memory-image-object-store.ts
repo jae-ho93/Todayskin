@@ -45,7 +45,8 @@ export class MemoryImageObjectStore implements ImageObjectStore {
       sizeBytes: params.body.length,
       checksumSha256,
       encryption: 'AES256',
-      uri: `memory://${this.bucket}/${params.key}`,
+      // BE-2026-08-12: DB thumbnailUri에 memory://가 저장되지 않도록 http URL로 발급.
+      uri: `${this.baseUrl}/dev-storage/${this.bucket}/${params.key}`,
     };
   }
 
@@ -81,6 +82,18 @@ export class MemoryImageObjectStore implements ImageObjectStore {
       .filter((full) => full.startsWith(prefixFull))
       .map((full) => full.slice(prefixFull.length))
       .filter((key) => !params.prefix || key.startsWith(params.prefix));
+  }
+
+  /**
+   * BE-2026-08-12: `memory://bucket/key` 논리 URI → dev-storage http URL.
+   * 레거시 DB 저장분(과거 memory:// thumbnailUri)도 여기서 정규화된다.
+   * memory://가 아닌 URI(예: http, s3://)는 그대로 반환한다.
+   */
+  toPublicUrl(uri: string): string {
+    if (!uri.startsWith('memory://')) {
+      return uri;
+    }
+    return `${this.baseUrl}/dev-storage/${uri.slice('memory://'.length)}`;
   }
 
   /** 테스트용 */
