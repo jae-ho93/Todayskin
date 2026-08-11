@@ -6,6 +6,8 @@ export type AirStatus = 'good' | 'moderate' | 'bad';
 export interface WeatherSnapshot {
   observedAt: string; // ISO timestamp
   regionName: string; // 예: "서울 종로구"
+  // F41: 데이터 출처 — LIVE(실시간 조회) | CACHED(Redis 캐시) | UNAVAILABLE(측정 불가)
+  source?: 'LIVE' | 'CACHED' | 'UNAVAILABLE' | null;
   // 각 지표는 실제 정부 API(기상청/에어코리아) 호출이 실패하면 null이다 — 목업으로 채우지 않고
   // 화면에서 "측정 불가"로 명시적으로 보여준다. 오래된 응답/캐시와의 호환을 위해 undefined도 허용한다.
   uvIndex?: number | null; // 자외선지수
