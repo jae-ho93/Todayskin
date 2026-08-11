@@ -228,7 +228,7 @@ export default function SignupScreen() {
         >
           <View>
             <Text style={styles.headline}>회원가입</Text>
-            <Text style={styles.subtitle}>이름, 휴대폰 번호, 생년월일만 입력하면 시작할 수 있어요</Text>
+            <Text style={styles.subtitle}>휴대폰 인증으로 가입하거나 소셜 계정으로 바로 시작하세요</Text>
           </View>
 
           <View style={styles.field}>
@@ -367,7 +367,7 @@ export default function SignupScreen() {
             </View>
           )}
 
-          {error && <Text style={styles.error}>{error}</Text>}
+          {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
         </ScrollView>
 
         <View style={styles.footer}>
@@ -391,6 +391,7 @@ export default function SignupScreen() {
             <Text style={styles.loginLink}>이미 계정이 있으신가요? 로그인</Text>
           </Pressable>
           <SocialLoginButtons busyProvider={busyProvider} onToken={handleSocialToken} onError={setError} />
+          <Text style={styles.terms}>가입하면 서비스 이용약관과 개인정보 처리방침에 동의한 것으로 간주됩니다.</Text>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -455,4 +456,5 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
+  terms: { ...typography.caption, color: colors.textTertiary, textAlign: 'center' },
 });

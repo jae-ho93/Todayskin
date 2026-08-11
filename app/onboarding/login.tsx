@@ -114,11 +114,11 @@ export default function LoginScreen() {
         <View style={styles.body}>
           <View>
             <Text style={styles.headline}>로그인</Text>
-            <Text style={styles.subtitle}>가입할 때 입력한 휴대폰 번호로 로그인하세요</Text>
+            <Text style={styles.subtitle}>휴대폰 인증 또는 소셜 계정으로 안전하게 로그인하세요</Text>
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>휴대폰 번호</Text>
+            <Text style={styles.label}>휴대폰 번호로 로그인</Text>
             <TextInput
               style={[styles.input, focused === 'phone' && styles.inputFocused]}
               placeholder="010-1234-5678"
@@ -175,7 +175,7 @@ export default function LoginScreen() {
             </View>
           )}
 
-          {error && <Text style={styles.error}>{error}</Text>}
+          {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
         </View>
 
         <View style={styles.footer}>
@@ -199,6 +199,7 @@ export default function LoginScreen() {
             <Text style={styles.signupLink}>아직 계정이 없으신가요? 회원가입</Text>
           </Pressable>
           <SocialLoginButtons busyProvider={busyProvider} onToken={handleSocialToken} onError={setError} />
+          <Text style={styles.terms}>계속하면 서비스 이용약관과 개인정보 처리방침에 동의한 것으로 간주됩니다.</Text>
         </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -249,4 +250,5 @@ const styles = StyleSheet.create({
   nextButton: { alignSelf: 'flex-end', paddingVertical: spacing.sm },
   nextButtonText: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },
   nextButtonTextDisabled: { color: colors.gray300 },
+  terms: { ...typography.caption, color: colors.textTertiary, textAlign: 'center' },
 });
