@@ -62,7 +62,8 @@
 | 서버 | **NestJS 11** Modular Monolith |
 | 데이터 | **PostgreSQL** · **Prisma 7** |
 | 캐시 · 큐 | **Redis** · **BullMQ** (없으면 Inline fallback) |
-| 인증 | JWT access/refresh · OTP(SMS) · 소셜 토큰 검증 |
+| 인증 | JWT access/refresh · OTP(SMS/MO) · 소셜 토큰 검증 |
+| 전송 | REST · **SSE** (job 상태 실시간 — `GET /jobs/:id/events`) |
 | 저장소 | **S3** (동의 이미지) · 감사·동의 게이트 |
 | 관측 | Pino · Sentry · Helmet · Throttler |
 
@@ -130,7 +131,7 @@ flowchart TB
 |---|---|
 | 백엔드 MVP · 운영 기반 (T0~T14, N0~N22) | 완료 |
 | 실제품 · 추천 빠른 경로 · 소셜 · 설정 계약 (N24~N34) | 완료 · **API freeze** |
-| 프론트 제품 웨이브 (F0~F16) | **진행 예정 / 진행 중** — Task 보드 기준 |
+| 프론트 제품 웨이브 (F0~F62) | **완료** (OTP MO, 키패드, 캘린더, SSE 등 — Task 보드 기준) |
 | AWS 첫 배포 (N16) | 계정·시크릿 준비 후 별도 |
 | EAS 스토어 · 구독 결제 | 보류 |
 

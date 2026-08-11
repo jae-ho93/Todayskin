@@ -586,7 +586,7 @@ Refresh Token
 
 - [x] Python inference-service 연동
 - [x] Redis BullMQ 작업 큐
-- [ ] WebSocket/SSE (현재 polling)
+- [x] WebSocket/SSE — 백엔드 `GET /jobs/:id/events`(NestJS `@Sse`), 프론트 `waitForJob`이 SSE 우선 소비 + 폴링 폴백 (PR #123, 2026-08-12)
 - [x] Docker 배포 환경
 - [x] GitHub Actions 배포 자동화
 
