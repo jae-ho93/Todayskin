@@ -16,7 +16,9 @@ export function WeatherCard({ weather }: { weather: WeatherSnapshot }) {
     <Pressable onPress={() => router.push('/weather-detail')}>
       <Card>
         <View style={styles.headerRow}>
-          <Text style={styles.regionName}>{weather.regionName}</Text>
+          <Text style={styles.regionName}>
+            {[weather.regionName, weather.districtName].filter(Boolean).join(' ')}
+          </Text>
           <Text style={styles.moreLink}>자세히 보기 →</Text>
         </View>
         {weather.caiStatus && (

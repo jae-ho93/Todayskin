@@ -664,6 +664,7 @@ export class DiagnosisService {
     const dto = new CalendarWeatherDto();
     dto.observedAt = w.observedAt.toISOString();
     dto.regionName = w.regionName;
+    dto.districtName = w.districtName ?? null;
     dto.source = w.source;
     dto.uvIndex = w.uvIndex;
     dto.uvStatus = w.uvStatus;

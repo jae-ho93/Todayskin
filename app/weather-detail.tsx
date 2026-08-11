@@ -338,7 +338,9 @@ export default function WeatherDetailScreen() {
       </View>
 
       <View style={styles.regionRow}>
-        <Text style={styles.regionName}>{weather.regionName}</Text>
+        <Text style={styles.regionName}>
+          {[weather.regionName, weather.districtName].filter(Boolean).join(' ')}
+        </Text>
         <View
           style={[
             styles.sourceBadge,

@@ -121,6 +121,7 @@ describe('WeatherService', () => {
     stationClient.fetchNearestStation.mockResolvedValue({
       stationName: '중구',
       cityName: '서울',
+      districtName: '중구',
     });
     kmaClient.fetchUvIndex.mockResolvedValue(
       uv({ current: 7, peak: 8, peakHour: 13, observedAt: new Date('2026-08-04T06:00:00Z') }),
@@ -143,7 +144,9 @@ describe('WeatherService', () => {
     expect(stationClient.fetchNearestStation).toHaveBeenCalledWith(37.5665, 126.978);
     expect(kmaClient.fetchUvIndex).toHaveBeenCalled();
     expect(airKoreaClient.fetchAirQuality).toHaveBeenCalledWith('중구');
-    expect(result.regionName).toBe('서울');
+    // F56: 시/도는 근사표 정식 명칭, 구/군은 측정소 주소 토큰에서
+    expect(result.regionName).toBe('서울특별시');
+    expect(result.districtName).toBe('중구');
     expect(result.source).toBe(WeatherSource.LIVE);
     // LIVE snapshot은 저장된다
     expect(prisma.weatherSnapshot.create).toHaveBeenCalledTimes(1);

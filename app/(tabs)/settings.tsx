@@ -44,7 +44,8 @@ function SettingsRow({
         <Ionicons name={icon} size={20} color={destructive ? colors.coralDark : colors.textSecondary} />
         <Text style={[styles.rowLabel, destructive && styles.rowLabelDestructive]}>{label}</Text>
       </View>
-      {right}
+      {/* F60: Switch 등 right 요소의 세로 정렬 보정 — 위쪽 쏠림 방지 */}
+      <View style={styles.rowRight}>{right}</View>
     </View>
   );
   return onPress ? (
@@ -248,18 +249,6 @@ export default function SettingsScreen() {
   </Pressable>
 )}
       <View>
-        <Text style={styles.sectionTitle}>개인정보 관리</Text>
-        <Card style={styles.listCard}>
-          <SettingsRow
-            icon="shield-checkmark-outline"
-            label="데이터 처리 동의 관리"
-            right={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}
-            onPress={openConsentModal}
-          />
-        </Card>
-      </View>
-
-      <View>
         <Text style={styles.sectionTitle}>알림 설정</Text>
         <Card style={styles.listCard}>
           {prefsLoading ? (
@@ -320,16 +309,6 @@ export default function SettingsScreen() {
             onPress={confirmLogout}
           />
         </Card>
-        {/* F28: 파괴적 액션(탈퇴)은 별도 구역에 경고색으로 분리 */}
-        <Card style={styles.withdrawCard}>
-          <SettingsRow
-            icon="trash-outline"
-            label="회원 탈퇴"
-            right={<Ionicons name="chevron-forward" size={18} color={colors.coralDark} />}
-            onPress={handleWithdraw}
-            destructive
-          />
-        </Card>
       </View>
 
       <View>
@@ -352,6 +331,30 @@ export default function SettingsScreen() {
           />
         </Card>
       </View>
+
+      {/* F61: 개인정보·동의 관리는 설정 최하단 (다른 앱 관례 — 카카오/토스/당근) */}
+      <View>
+        <Text style={styles.sectionTitle}>개인정보 관리</Text>
+        <Card style={styles.listCard}>
+          <SettingsRow
+            icon="shield-checkmark-outline"
+            label="데이터 처리 동의 관리"
+            right={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}
+            onPress={openConsentModal}
+          />
+        </Card>
+      </View>
+
+      {/* F28: 파괴적 액션(탈퇴)은 맨 마지막에 경고색으로 분리 */}
+      <Card style={styles.withdrawCard}>
+        <SettingsRow
+          icon="trash-outline"
+          label="회원 탈퇴"
+          right={<Ionicons name="chevron-forward" size={18} color={colors.coralDark} />}
+          onPress={handleWithdraw}
+          destructive
+        />
+      </Card>
 
       {/* 안면 이미지 처리방침 확인 */}
       <Modal
@@ -481,6 +484,7 @@ const styles = StyleSheet.create({
   listCard: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   rowPressed: { opacity: 0.6 },
   rowLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  rowRight: { alignItems: 'center', justifyContent: 'center' },
   rowLabel: { ...typography.body, color: colors.textPrimary },
   rowLabelDestructive: { ...typography.body, color: colors.coralDark },
   divider: { height: 1, backgroundColor: colors.border },

@@ -23,6 +23,11 @@ export interface NearestStation {
   stationName: string;
   /** 주소 첫 토큰에서 뽑은 시/도 표시명 (예: "서울") */
   cityName: string;
+  /**
+   * F56: 주소 두 번째 토큰에서 뽑은 시/군/구 표시명 (예: "해운대구").
+   * addr 예: "부산 해운대구 우동 ..." → token[1] = "해운대구". 없으면 null.
+   */
+  districtName: string | null;
 }
 
 /**
@@ -78,9 +83,11 @@ export class StationClient {
         return null;
       }
       const addr = nearest.addr ?? '';
-      // addr 예: "서울 중구 덕수궁길 15 ..." — 첫 토큰이 시/도 약칭이라 그대로 표시용으로 쓴다
-      const cityName = addr.split(/\s+/)[0] || DEFAULT_REGION.cityName;
-      return { stationName: nearest.stationName, cityName };
+      // addr 예: "부산 해운대구 우동 ..." — 첫 토큰 시/도 약칭, 둘째 토큰 시/군/구.
+      const tokens = addr.split(/\s+/);
+      const cityName = tokens[0] || DEFAULT_REGION.cityName;
+      const districtName = tokens[1] || null;
+      return { stationName: nearest.stationName, cityName, districtName };
     } catch (e) {
       this.logger.warn(`AirKorea nearby station lookup failed: ${errorName(e)}`);
       return null;

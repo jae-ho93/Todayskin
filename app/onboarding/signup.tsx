@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../../src/api/client';
+import { useToast } from '../../src/components/Toast';
 import { SocialLoginButtons } from '../../src/components/SocialLoginButtons';
 import { clearPendingConsents, getPendingConsents } from '../../src/lib/pendingConsents';
 import { saveSession } from '../../src/lib/session';
@@ -67,6 +68,7 @@ type Field = 'name' | 'phone' | 'birthDate';
 // ① 전화번호+OTP 인증 (소셜 가입 병행) → ② 이름·생년월일·성별.
 // 각 단계는 스크롤 없는 한 화면에 맞춰 구성한다.
 export default function SignupScreen() {
+  const { showToast } = useToast();
   const [phase, setPhase] = useState<'phone' | 'profile'>('phone');
   const [name, setName] = useState('');
   const [phoneDigits, setPhoneDigits] = useState('');
@@ -151,6 +153,8 @@ export default function SignupScreen() {
       await api.verifyOtp(phoneDigits, otpCode, 'signup');
       setPhoneVerified(true);
       Keyboard.dismiss();
+      // F59: 문자앱 복귀 자동 검증 완료 피드백
+      showToast('휴대폰 인증이 완료됐어요', { type: 'success' });
     } catch (e) {
       setError(e instanceof Error ? e.message : '인증을 확인하지 못했어요. 다시 시도해주세요.');
     } finally {
@@ -286,9 +290,8 @@ export default function SignupScreen() {
               )}
 
               {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-            </View>
 
-            <View style={styles.footer}>
+              {/* F58: CTA를 필드 직하로 — 하단 고정 footer와 분리 */}
               <Pressable
                 onPress={() => setPhase('profile')}
                 disabled={!phoneVerified}
@@ -305,6 +308,9 @@ export default function SignupScreen() {
                 <Text style={styles.loginLink}>이미 계정이 있으신가요? 로그인</Text>
               </Pressable>
               <SocialLoginButtons compact busyProvider={busyProvider} onToken={handleSocialToken} onError={setError} />
+            </View>
+
+            <View style={styles.footer}>
               <Text style={styles.terms}>
                 가입하면{' '}
                 <Text style={styles.termsLink} onPress={() => router.push('/legal/terms')}>
@@ -389,9 +395,8 @@ export default function SignupScreen() {
               </View>
 
               {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-            </View>
 
-            <View style={styles.footer}>
+              {/* F58: CTA를 필드 직하로 — 하단 고정 footer와 분리 */}
               <Pressable
                 onPress={handleSubmit}
                 disabled={!isValid || submitting}
@@ -407,6 +412,9 @@ export default function SignupScreen() {
                   <Text style={styles.ctaText}>가입하고 시작하기</Text>
                 )}
               </Pressable>
+            </View>
+
+            <View style={styles.footer}>
               <Text style={styles.terms}>
                 가입하면{' '}
                 <Text style={styles.termsLink} onPress={() => router.push('/legal/terms')}>

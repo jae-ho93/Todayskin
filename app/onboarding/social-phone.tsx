@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, KeyboardAvoidingView, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../../src/api/client';
+import { useToast } from '../../src/components/Toast';
 import { saveSession } from '../../src/lib/session';
 import { colors, radius, spacing, typography } from '../../src/theme';
 
@@ -10,6 +11,7 @@ const validPhone = (value: string) => value.length === 11 && /^01[016789]/.test(
 const displayPhone = (value: string) => value.length <= 3 ? value : value.length <= 7 ? `${value.slice(0, 3)}-${value.slice(3)}` : `${value.slice(0, 3)}-${value.slice(3, 7)}-${value.slice(7, 11)}`;
 
 export default function SocialPhoneScreen() {
+  const { showToast } = useToast();
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [recipientNumber, setRecipientNumber] = useState('');
@@ -47,6 +49,8 @@ export default function SocialPhoneScreen() {
       await api.verifyOtp(phone, code, 'social_link');
       const user = await api.socialLinkPhone(phone);
       await saveSession(user);
+      // F59: 문자앱 복귀 자동 검증 완료 피드백
+      showToast('휴대폰 인증이 완료됐어요', { type: 'success' });
       router.replace('/(tabs)');
     } catch (e) { setError(e instanceof Error ? e.message : '인증을 확인하지 못했어요. 다시 시도해주세요.'); }
     finally { setBusy(false); }

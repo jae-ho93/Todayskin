@@ -29,6 +29,8 @@ interface CollectedWeather {
   uv: UvForecastWithTime;
   air: AirQualityDataWithTime;
   regionName: string;
+  /** F56: 시/군/구 표시명 (예: "해운대구"). 없으면 null. */
+  districtName: string | null;
   kmaAreaNo: string;
   airkoreaStation: string;
   lat: number | null;
@@ -179,6 +181,7 @@ export class WeatherService {
     let areaNo: string;
     let stationName: string;
     let regionName: string;
+    let districtName: string | null = null;
     let cityName: string | null = null;
     let uv: UvForecastWithTime;
     let air: AirQualityDataWithTime;
@@ -202,8 +205,11 @@ export class WeatherService {
         this.kmaClient.fetchUvIndex(areaNo),
       ]);
       stationName = nearest?.stationName ?? region.airkoreaStationName;
-      regionName = nearest?.cityName ?? region.cityName;
+      // F56: 시/도는 근사표의 정식 명칭(예: '부산광역시'), 구/군은 최인접 측정소 주소
+      // 토큰(예: '해운대구'). 측정소 조회 실패 시 근사표 대표 구로 폴백한다.
+      regionName = region.cityName;
       cityName = nearest?.cityName ?? null;
+      districtName = nearest?.districtName ?? region.airkoreaStationName;
       uv = uvResult;
       air = await this.airKoreaClient.fetchAirQuality(stationName);
     } else {
@@ -221,6 +227,7 @@ export class WeatherService {
       uv,
       air,
       regionName,
+      districtName,
       kmaAreaNo: areaNo,
       airkoreaStation: stationName,
       lat: latOut,
@@ -234,6 +241,7 @@ export class WeatherService {
     const dto = new WeatherSnapshotDto();
     dto.observedAt = this.resolveObservedAt(c).toISOString();
     dto.regionName = c.regionName;
+    dto.districtName = c.districtName;
     dto.source = source;
 
     dto.uvIndex = c.uv.current;
@@ -415,6 +423,7 @@ export class WeatherService {
           observedAt,
           regionName: c.regionName,
           cityName: c.cityName,
+          districtName: c.districtName,
           latitude: c.lat,
           longitude: c.lon,
           kmaAreaNo: c.kmaAreaNo,

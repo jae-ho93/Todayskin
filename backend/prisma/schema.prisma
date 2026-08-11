@@ -329,6 +329,8 @@ model WeatherSnapshot {
   collectedAt     DateTime @default(now()) @map("collected_at")
   regionName      String   @map("region_name")
   cityName        String?  @map("city_name")
+  /// F56: 시/군/구 표시명 (예: "해운대구"). 없으면 null.
+  districtName    String?  @map("district_name")
   latitude        Float?
   longitude       Float?
   kmaAreaNo       String?  @map("kma_area_no")

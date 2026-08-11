@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../../src/api/client';
 import { SocialLoginButtons } from '../../src/components/SocialLoginButtons';
+import { useToast } from '../../src/components/Toast';
 import { saveSession } from '../../src/lib/session';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type { SocialProvider } from '../../src/types';
@@ -32,6 +33,7 @@ function isValidPhoneDigits(digits: string): boolean {
 
 // 화면: 로그인 — 전화번호 입력 후 OTP(인증번호) 확인을 거쳐야 로그인된다 (서버가 강제)
 export default function LoginScreen() {
+  const { showToast } = useToast();
   const [phoneDigits, setPhoneDigits] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState('');
@@ -95,6 +97,8 @@ export default function LoginScreen() {
       await api.verifyOtp(phoneDigits, otpCode, 'login');
       const user = await api.login(phoneDigits);
       await saveSession(user);
+      // F59: 문자앱에서 돌아온 자동 검증이 끝났다는 피드백을 명시한다
+      showToast('인증 완료 — 로그인되었어요', { type: 'success' });
       router.replace('/(tabs)');
     } catch (e) {
       setError(e instanceof Error ? e.message : '인증을 확인하지 못했어요. 다시 시도해주세요.');
@@ -211,10 +215,11 @@ export default function LoginScreen() {
             <Pressable onPress={() => router.replace('/onboarding/signup')} hitSlop={8}>
               <Text style={styles.signupLink}>아직 계정이 없으신가요? 회원가입</Text>
             </Pressable>
+            {/* F58: 소셜을 필드 흐름 안으로 — 화면 하단 고정 제거 */}
+            <SocialLoginButtons compact busyProvider={busyProvider} onToken={handleSocialToken} onError={setError} />
           </View>
 
           <View style={styles.footer}>
-            <SocialLoginButtons compact busyProvider={busyProvider} onToken={handleSocialToken} onError={setError} />
             <Text style={styles.terms}>
               계속하면{' '}
               <Text style={styles.termsLink} onPress={() => router.push('/legal/terms')}>
@@ -237,8 +242,8 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.xl },
   keyboardAvoiding: { flex: 1 },
   body: { flex: 1, paddingVertical: spacing.xl },
-  // F54: 필드를 중앙보다 살짝 위(상단 25~35%)로, CTA는 middle 안에서 필드 직하에 붙는다
-  middle: { flex: 1, justifyContent: 'flex-start', gap: spacing.xl, marginTop: spacing.xxl },
+  // F58: 필드 그룹을 화면 중간으로 (F54의 상단 고정을 완화), CTA·소셜은 middle 안에서 필드 흐름에 붙는다
+  middle: { flex: 1, justifyContent: 'center', gap: spacing.xl },
   headline: { ...typography.displayLg, color: colors.textPrimary },
   subtitle: { ...typography.body, color: colors.textSecondary, marginTop: spacing.sm },
   field: { gap: spacing.sm },

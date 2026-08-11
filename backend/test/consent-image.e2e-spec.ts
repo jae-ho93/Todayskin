@@ -174,7 +174,8 @@ describe('Consent & Image Storage (e2e)', () => {
       .attach('front', JPEG_1x1, 'front.jpg')
       .expect(201);
 
-    expect(res.body.thumbnailUri).toMatch(/^memory:\/\//);
+    // BE-2026-08-12: memory 스토어 thumbnailUri는 dev-storage http URL로 발급된다
+    expect(res.body.thumbnailUri).toMatch(/^http:\/\/127\.0\.0\.1:3000\/dev-storage\//);
     const img = await prisma.diagnosisImage.findUnique({
       where: { diagnosisId: res.body.id },
     });
