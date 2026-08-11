@@ -112,8 +112,11 @@ class SkinAnalyzer:
         for part_name, score in scores["parts"].items():
             results[part_name]["score"] = score
 
-        # N8: 정규화 캔버스 좌표의 얼굴 랜드마크(478점). NestJS Diagnosis.landmarks에 저장.
-        landmarks_points = res.landmarks_norm.astype(float).tolist()
+        # N8/F36: 원본 이미지 기준 0~1 정규화 좌표의 얼굴 랜드마크(478점).
+        # 프론트는 원본 사진 위에 viewBox 0 0 1 1로 오버레이하므로, 워프 캔버스(800x900)
+        # 좌표가 아니라 원본 픽셀을 이미지 크기로 나눈 0~1 값으로 저장해야 정렬된다.
+        h, w = img.shape[:2]
+        landmarks_points = (pts / np.array([w, h], dtype=np.float64)).astype(float).tolist()
         return {
             "parts": results,
             "overall_score": scores["overall"],

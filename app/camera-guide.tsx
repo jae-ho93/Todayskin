@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../src/api/client';
 import { useUserLocation } from '../src/hooks/useUserLocation';
 import { colors, radius, shadow, spacing, typography } from '../src/theme';
@@ -21,6 +21,8 @@ const TIPS = [
 
 // 화면 3: 얼굴 촬영 가이드
 export default function CameraGuideScreen() {
+  // F31: 닫기(X) 버튼이 상태바(다이나믹 아일랜드·배터리)와 겹치지 않도록 상단 인셋을 명시적으로 확보한다.
+  const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState<'intro' | 'capture' | 'analyzing'>('intro');
   const [permission, requestPermission] = useCameraPermissions();
   const [error, setError] = useState<string | null>(null);
@@ -150,7 +152,11 @@ export default function CameraGuideScreen() {
     return (
       <>
       <SafeAreaView style={styles.introSafeArea}>
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.introCloseButton}>
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={12}
+          style={[styles.introCloseButton, { marginTop: insets.top }]}
+        >
           <Ionicons name="close" size={22} color={colors.textPrimary} />
         </Pressable>
 

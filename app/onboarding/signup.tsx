@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   Keyboard,
   KeyboardAvoidingView,
   Linking,
@@ -84,6 +85,9 @@ export default function SignupScreen() {
 
   const nameInputRef = useRef<TextInput>(null);
   const birthDateInputRef = useRef<TextInput>(null);
+  // F34: 문자 앱을 연 뒤 복귀 시에만 자동 검증한다.
+  const smsOpenedRef = useRef(false);
+  const verifyOtpRef = useRef<() => Promise<void>>(async () => {});
 
   const trimmedName = name.trim();
   const isNameValid = trimmedName.length > 0 && trimmedName.length <= 20;
@@ -128,9 +132,10 @@ export default function SignupScreen() {
 
   const openSms = async () => {
     try {
+      smsOpenedRef.current = true;
       await Linking.openURL(`sms:${recipientNumber}?body=${encodeURIComponent(`인증코드 ${otpCode}`)}`);
     } catch {
-      setError('문자 앱을 열 수 없어요. 아래 번호로 인증코드를 직접 보내주세요.');
+      setError('문자 앱을 열 수 없어요. 다시 시도해주세요.');
     }
   };
 
@@ -143,11 +148,23 @@ export default function SignupScreen() {
       setPhoneVerified(true);
       Keyboard.dismiss();
     } catch (e) {
-      setError(e instanceof Error ? e.message : '인증번호가 올바르지 않습니다.');
+      setError(e instanceof Error ? e.message : '인증을 확인하지 못했어요. 다시 시도해주세요.');
     } finally {
       setVerifyingOtp(false);
     }
   };
+  verifyOtpRef.current = handleVerifyOtp;
+
+  // F34: 문자 앱에서 복귀하면 자동으로 인증을 확인한다 (수동 “문자를 보냈어요” 버튼 대체).
+  useEffect(() => {
+    if (!otpSent || phoneVerified || verifyingOtp) return;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && smsOpenedRef.current && otpCode.length === 6) {
+        void verifyOtpRef.current();
+      }
+    });
+    return () => subscription.remove();
+  }, [otpSent, phoneVerified, verifyingOtp, otpCode]);
 
   const handleSubmit = async () => {
     if (!isValid || submitting) return;
@@ -225,7 +242,6 @@ export default function SignupScreen() {
                   onBlur={() => setFocusedField(null)}
                   maxLength={13}
                   editable={!phoneVerified}
-                  autoFocus
                 />
                 {/* number-pad 키보드는 iOS에 리턴키가 없어서, 버튼을 화면에 직접 둔다 */}
                 {!otpSent && !phoneVerified && (
@@ -248,27 +264,15 @@ export default function SignupScreen() {
 
               {otpSent && !phoneVerified && (
                 <View style={styles.field}>
-                  <Text style={styles.label}>아래 번호로 인증코드를 보내주세요</Text>
-                  <View style={styles.codeCard}><Text style={styles.recipient}>{recipientNumber}</Text><Text style={styles.code}>인증코드 {otpCode}</Text></View>
-                  <Pressable onPress={openSms} style={styles.smsButton}><Text style={styles.smsButtonText}>문자 앱 열기</Text></Pressable>
+                  <Text style={styles.label}>인증 문자를 보내면 자동으로 확인돼요</Text>
+                  <Pressable onPress={openSms} style={styles.smsButton}>
+                    <Text style={styles.smsButtonText}>인증하기</Text>
+                  </Pressable>
                   <View style={styles.otpActionRow}>
                     <Pressable onPress={handleSendOtp} disabled={sendingOtp} hitSlop={8}>
                       <Text style={styles.nextButtonText}>새 코드 받기</Text>
                     </Pressable>
-                    <Pressable
-                      onPress={handleVerifyOtp}
-                      disabled={!isOtpValid || verifyingOtp}
-                      hitSlop={8}
-                      style={styles.nextButton}
-                    >
-                      {verifyingOtp ? (
-                        <ActivityIndicator size="small" color={colors.sageDark} />
-                      ) : (
-                        <Text style={[styles.nextButtonText, !isOtpValid && styles.nextButtonTextDisabled]}>
-                          문자를 보냈어요
-                        </Text>
-                      )}
-                    </Pressable>
+                    {verifyingOtp && <ActivityIndicator size="small" color={colors.sageDark} />}
                   </View>
                 </View>
               )}
@@ -441,9 +445,6 @@ const styles = StyleSheet.create({
   otpActionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   nextButtonText: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },
   nextButtonTextDisabled: { color: colors.gray300 },
-  codeCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, alignItems: 'center', gap: spacing.xs },
-  recipient: { ...typography.body, color: colors.textSecondary },
-  code: { ...typography.headline, color: colors.textPrimary },
   smsButton: { borderWidth: 1, borderColor: colors.sage, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center' },
   smsButtonText: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },
   verifiedText: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },

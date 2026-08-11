@@ -1,8 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Image,
+  PanResponder,
   Pressable,
   StyleSheet,
   Text,
@@ -13,6 +16,7 @@ import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { EvidenceBadge } from '../../src/components/EvidenceBadge';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
+import { gradeToColor } from '../../src/lib/skinGrade';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type {
   AirStatus,
@@ -131,6 +135,34 @@ export default function HistoryScreen() {
     setCurrentMonth(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
   };
 
+  // F37: 캘린더 좌우 스와이프로 앞/뒤 월 이동.
+  // 가로 움직임이 우세할 때만 잡아서 세로 ScrollView(pull-to-refresh 포함)와 충돌하지 않게 한다.
+  const swipeX = useRef(new Animated.Value(0)).current;
+  const cardWidthRef = useRef(0);
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) =>
+        Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+      onPanResponderMove: (_, g) => swipeX.setValue(g.dx),
+      onPanResponderRelease: (_, g) => {
+        const width = cardWidthRef.current || 320;
+        if (g.dx <= -width * 0.25) {
+          moveMonth(1);
+          swipeX.setValue(0);
+        } else if (g.dx >= width * 0.25) {
+          moveMonth(-1);
+          swipeX.setValue(0);
+        } else {
+          Animated.spring(swipeX, { toValue: 0, useNativeDriver: true }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(swipeX, { toValue: 0, useNativeDriver: true }).start();
+      },
+      onPanResponderTerminationRequest: () => false,
+    }),
+  ).current;
+
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     await load();
@@ -177,6 +209,13 @@ export default function HistoryScreen() {
 
       <Text style={styles.sectionTitle}>날짜별 기록</Text>
       <Card style={styles.calendarCard}>
+        <Animated.View
+          onLayout={(e) => {
+            cardWidthRef.current = e.nativeEvent.layout.width;
+          }}
+          style={{ transform: [{ translateX: swipeX }] }}
+          {...panResponder.panHandlers}
+        >
         <View style={styles.calendarHeader}>
           <Pressable onPress={() => moveMonth(-1)} hitSlop={10}><Ionicons name="chevron-back" size={20} color={colors.textSecondary} /></Pressable>
           <Text style={styles.calendarTitle}>{currentMonth.slice(0, 4)}년 {Number(currentMonth.slice(5, 7))}월</Text>
@@ -201,6 +240,7 @@ export default function HistoryScreen() {
           );
         })}
         </View>
+        </Animated.View>
       </Card>
 
       {dayLoading ? (
@@ -251,7 +291,9 @@ function DiagnosisCard({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
           {d.parts.map((p) => (
             <View key={p.part} style={styles.partRow}>
               <Text style={styles.partLabel} numberOfLines={1}>{p.label}</Text>
-              <Text style={styles.partGrade} numberOfLines={1}>{p.grade}</Text>
+              <View style={[styles.partGradeBadge, { backgroundColor: gradeToColor(p.grade) + '22' }]}>
+                <Text style={[styles.partGradeText, { color: gradeToColor(p.grade) }]}>{p.grade}</Text>
+              </View>
               <Text style={styles.partValue} numberOfLines={1} ellipsizeMode="tail">
                 {p.moisture != null ? `수분 ${p.moisture}` : ''}
                 {p.moisture != null && p.elasticity != null ? ' · ' : ''}
@@ -272,9 +314,18 @@ function DiagnosisCard({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
               </View>
               <Text style={styles.recExplanation}>{r.explanation}</Text>
               {r.products.length > 0 && (
-                <Text style={styles.recProducts}>
-                  관련 제품: {r.products.map((p) => `${p.brand} ${p.name}`).join(', ')}
-                </Text>
+                <Pressable
+                  onPress={() => router.push(`/recommendation/${r.id}`)}
+                  style={({ pressed }) => [
+                    styles.recProductsButton,
+                    pressed && styles.recProductsButtonPressed,
+                  ]}
+                >
+                  <Text style={styles.recProductsButtonText}>
+                    관련 제품 보기 ({r.products.length})
+                  </Text>
+                  <Ionicons name="chevron-forward" size={14} color={colors.sageDark} />
+                </Pressable>
               )}
             </View>
           ))}
@@ -464,9 +515,14 @@ const styles = StyleSheet.create({
   weatherMetric: { ...typography.caption, color: colors.textSecondary },
   partsBlock: { gap: spacing.xs },
   partRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  partLabel: { ...typography.bodySm, color: colors.textPrimary, flexShrink: 1 },
-  partGrade: { ...typography.bodySm, color: colors.sageDark, fontWeight: '600', flexShrink: 0 },
-  partValue: { ...typography.caption, color: colors.textTertiary, flex: 1 },
+  partLabel: { ...typography.bodySm, color: colors.textPrimary, flex: 1 },
+  partGradeBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+  },
+  partGradeText: { ...typography.bodySm, fontWeight: '700' },
+  partValue: { ...typography.caption, color: colors.textTertiary, textAlign: 'right' },
   recsBlock: { gap: spacing.sm },
   recBlock: {
     backgroundColor: colors.gray50,
@@ -477,7 +533,20 @@ const styles = StyleSheet.create({
   recHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   recTitle: { ...typography.bodySm, color: colors.textPrimary, fontWeight: '600', flex: 1 },
   recExplanation: { ...typography.caption, color: colors.textSecondary },
-  recProducts: { ...typography.caption, color: colors.sageDark },
+  recProductsButton: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    marginTop: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.sage,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+  },
+  recProductsButtonPressed: { opacity: 0.6 },
+  recProductsButtonText: { ...typography.caption, color: colors.sageDark, fontWeight: '700' },
   noRec: { ...typography.caption, color: colors.textTertiary },
 
   // 이미지 / 랜드마크
@@ -500,5 +569,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   imageExpiredText: { ...typography.caption, color: colors.textTertiary },
-  landmarkCaption: { ...typography.caption, color: colors.sageDark },
+  landmarkCaption: { ...typography.caption, color: colors.sageDark, marginTop: spacing.xs },
 });
