@@ -3,7 +3,6 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -16,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../src/api/client';
 import { Card } from '../src/components/Card';
+import { useToast } from '../src/components/Toast';
 import { colors, radius, spacing, typography } from '../src/theme';
 import type { Gender, User } from '../src/types';
 
@@ -63,6 +63,8 @@ export default function MyInfoScreen() {
     setEditingName(true);
   };
 
+  const { showToast } = useToast();
+
   const saveName = async () => {
     const name = draftName.trim();
     if (!name || name.length > 20 || savingName) return;
@@ -71,8 +73,9 @@ export default function MyInfoScreen() {
       const updated = await api.updateMe({ name });
       setUser(updated);
       setEditingName(false);
+      showToast('이름을 저장했어요', { type: 'success' });
     } catch {
-      Alert.alert('수정 실패', '이름을 저장하지 못했어요. 잠시 후 다시 시도해주세요.');
+      showToast('이름을 저장하지 못했어요. 잠시 후 다시 시도해주세요.', { type: 'error' });
     } finally {
       setSavingName(false);
     }
@@ -86,9 +89,10 @@ export default function MyInfoScreen() {
     try {
       const updated = await api.updateMe({ gender });
       setUser(updated);
+      showToast('성별을 저장했어요', { type: 'success' });
     } catch {
       setUser(prev); // 실패 시 롤백
-      Alert.alert('수정 실패', '성별을 저장하지 못했어요. 잠시 후 다시 시도해주세요.');
+      showToast('성별을 저장하지 못했어요. 잠시 후 다시 시도해주세요.', { type: 'error' });
     } finally {
       setSavingGender(false);
     }

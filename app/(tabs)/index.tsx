@@ -93,7 +93,10 @@ export default function HomeDashboard() {
           if (pollTimerRef.current) clearInterval(pollTimerRef.current);
           pollTimerRef.current = null;
           setRecommendationsRefreshing(false);
-          setRecommendations([...(aGrade ?? []), ...job.result]);
+          // F38: job.result는 { recommendations: [...] } 래핑 객체 — 배열로 언랩
+          const live = (job.result as { recommendations?: Recommendation[] } | null)
+            ?.recommendations ?? [];
+          setRecommendations([...(aGrade ?? []), ...live]);
         } else if (job?.status === 'FAILED' || attempts >= 20) {
           if (pollTimerRef.current) clearInterval(pollTimerRef.current);
           pollTimerRef.current = null;

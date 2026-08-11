@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -15,6 +16,7 @@ import {
 import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
+import { useToast } from '../../src/components/Toast';
 import { clearSession } from '../../src/lib/session';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type { ConsentPurpose, ConsentPurposeInfo, ConsentRecord, User } from '../../src/types';
@@ -56,6 +58,9 @@ function SettingsRow({
 
 // 화면 9: 설정 / 개인정보 관리 — N19에서 알림·동의·탈퇴를 실제 API와 동기화한다.
 export default function SettingsScreen() {
+  // F44: 버전은 하드코딩 대신 app.json(expo) 값과 동기화
+  const appVersion = Constants.expoConfig?.version ?? '1.0.0';
+
   // ── 알림 설정 (서버 NotificationPreference 연동) ──
   const [weatherAlert, setWeatherAlert] = useState(false);
   const [recommendAlert, setRecommendAlert] = useState(false);
@@ -146,14 +151,17 @@ export default function SettingsScreen() {
     setConsentsLoading(false);
   };
 
+  const { showToast } = useToast();
+
   const revokeConsent = async (purpose: ConsentPurpose) => {
     if (revokingPurpose) return;
     setRevokingPurpose(purpose);
     try {
       await api.upsertConsent(purpose, false);
       setMyConsents(await api.getMyConsents());
+      showToast('동의를 철회했어요', { type: 'success' });
     } catch {
-      Alert.alert('철회 실패', '동의 철회에 실패했어요. 잠시 후 다시 시도해주세요.');
+      showToast('동의 철회에 실패했어요. 잠시 후 다시 시도해주세요.', { type: 'error' });
     } finally {
       setRevokingPurpose(null);
     }
@@ -165,8 +173,9 @@ export default function SettingsScreen() {
     try {
       await api.upsertConsent(purpose, true);
       setMyConsents(await api.getMyConsents());
+      showToast('동의했어요', { type: 'success' });
     } catch {
-      Alert.alert('동의 실패', '동의 상태를 저장하지 못했어요. 잠시 후 다시 시도해주세요.');
+      showToast('동의 상태를 저장하지 못했어요. 잠시 후 다시 시도해주세요.', { type: 'error' });
     } finally {
       setRevokingPurpose(null);
     }
@@ -326,13 +335,20 @@ export default function SettingsScreen() {
       <View>
         <Text style={styles.sectionTitle}>앱</Text>
         <Card>
-          <SettingsRow icon="information-circle-outline" label="버전" right={<Text style={styles.versionText}>1.0.0</Text>} />
+          <SettingsRow icon="information-circle-outline" label="버전" right={<Text style={styles.versionText}>{appVersion}</Text>} />
           <View style={styles.divider} />
           <SettingsRow
             icon="document-text-outline"
+            label="이용약관"
+            right={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}
+            onPress={() => router.push('/legal/terms')}
+          />
+          <View style={styles.divider} />
+          <SettingsRow
+            icon="shield-checkmark-outline"
             label="개인정보 처리방침"
             right={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}
-            onPress={openPolicyModal}
+            onPress={() => router.push('/legal/privacy')}
           />
         </Card>
       </View>

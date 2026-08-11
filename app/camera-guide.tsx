@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../src/api/client';
+import { useToast } from '../src/components/Toast';
 import { useUserLocation } from '../src/hooks/useUserLocation';
 import { colors, radius, shadow, spacing, typography } from '../src/theme';
 import type { ConsentPurposeInfo } from '../src/types';
@@ -23,6 +24,7 @@ const TIPS = [
 export default function CameraGuideScreen() {
   // F31: 닫기(X) 버튼이 상태바(다이나믹 아일랜드·배터리)와 겹치지 않도록 상단 인셋을 명시적으로 확보한다.
   const insets = useSafeAreaInsets();
+  const { showToast } = useToast();
   const [phase, setPhase] = useState<'intro' | 'capture' | 'analyzing'>('intro');
   const [permission, requestPermission] = useCameraPermissions();
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +103,7 @@ export default function CameraGuideScreen() {
         runAction(action);
       }
     } catch {
-      Alert.alert('동의 저장 실패', '동의를 저장하지 못했어요. 잠시 후 다시 시도해주세요.');
+      showToast('동의를 저장하지 못했어요. 잠시 후 다시 시도해주세요.', { type: 'error' });
     } finally {
       setConsentSubmitting(false);
     }

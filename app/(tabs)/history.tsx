@@ -14,15 +14,11 @@ import {
 import Svg, { Circle, Polyline } from 'react-native-svg';
 import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
-import { EvidenceBadge } from '../../src/components/EvidenceBadge';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
-import { gradeToColor } from '../../src/lib/skinGrade';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type {
-  AirStatus,
   CalendarDayHistory,
   CalendarDiagnosis,
-  CalendarWeather,
   ScoreSeries,
 } from '../../src/types';
 
@@ -48,17 +44,6 @@ function monthBounds(month: string): { from: string; to: string } {
   const [year, value] = month.split('-').map(Number);
   const last = new Date(year, value, 0).getDate();
   return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, '0')}` };
-}
-
-function formatTime(iso: string): string {
-  const kst = new Date(new Date(iso).getTime() + 9 * 3600 * 1000);
-  return `${String(kst.getUTCHours()).padStart(2, '0')}:${String(kst.getUTCMinutes()).padStart(2, '0')}`;
-}
-
-const AIR_LABEL: Record<AirStatus, string> = { good: '좋음', moderate: '보통', bad: '나쁨' };
-
-function airLabel(s?: AirStatus | null): string {
-  return s ? AIR_LABEL[s] : '측정 불가';
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -129,28 +114,44 @@ export default function HistoryScreen() {
     return [...Array.from({ length: firstWeekday }, () => null), ...Array.from({ length: count }, (_, index) => `${currentMonth}-${String(index + 1).padStart(2, '0')}`)];
   }, [currentMonth]);
   const recordedDates = useMemo(() => new Set(scoreSeries?.points.map((point) => point.date) ?? []), [scoreSeries]);
-  const moveMonth = (offset: number) => {
-    const [year, month] = currentMonth.split('-').map(Number);
-    const next = new Date(year, month - 1 + offset, 1);
-    setCurrentMonth(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
-  };
+  // F40: moveMonth를 useCallback으로 감싸고 최신 참조를 ref에 보관한다.
+  // PanResponder는 첫 렌더에 1회만 생성되므로(성능) 클로저가 moveMonthRef를 통해
+  // 항상 최신 상태를 읽도록 한다 — stale 클로저로 인한 왼쪽 무반응/2개월 점프 해결.
+  const moveMonth = useCallback((offset: number) => {
+    setCurrentMonth((prev) => {
+      const [year, month] = prev.split('-').map(Number);
+      const next = new Date(year, month - 1 + offset, 1);
+      return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`;
+    });
+  }, []);
+  const moveMonthRef = useRef(moveMonth);
+  useEffect(() => {
+    moveMonthRef.current = moveMonth;
+  }, [moveMonth]);
 
   // F37: 캘린더 좌우 스와이프로 앞/뒤 월 이동.
   // 가로 움직임이 우세할 때만 잡아서 세로 ScrollView(pull-to-refresh 포함)와 충돌하지 않게 한다.
+  // F40: 릴리스에서 월 이동을 1회만 처리하도록 swipeHandledRef 가드 사용.
   const swipeX = useRef(new Animated.Value(0)).current;
   const cardWidthRef = useRef(0);
+  const swipeHandledRef = useRef(false);
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, g) =>
         Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+      onPanResponderGrant: () => {
+        swipeHandledRef.current = false;
+      },
       onPanResponderMove: (_, g) => swipeX.setValue(g.dx),
       onPanResponderRelease: (_, g) => {
+        if (swipeHandledRef.current) return;
+        swipeHandledRef.current = true;
         const width = cardWidthRef.current || 320;
         if (g.dx <= -width * 0.25) {
-          moveMonth(1);
+          moveMonthRef.current(1);
           swipeX.setValue(0);
         } else if (g.dx >= width * 0.25) {
-          moveMonth(-1);
+          moveMonthRef.current(-1);
           swipeX.setValue(0);
         } else {
           Animated.spring(swipeX, { toValue: 0, useNativeDriver: true }).start();
@@ -269,184 +270,92 @@ export default function HistoryScreen() {
 }
 
 // ── N8 통합 히스토리 카드 ──────────────────────────
-
+// F39: 진단 카드 = 랜드마크 썸네일(좌) + 시각·점수·상태(우) 가로 카드.
+// 전체 카드 탭 또는 “상세기록 보기” → app/diagnosis/[id] 상세 화면 이동.
+// 부위 분석·날씨·추천·제품은 상세 화면에서 정돈된 레이아웃으로 표시한다.
 function DiagnosisCard({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
+  // capturedAt은 UTC ISO — Asia/Seoul(UTC+9) 기준 날짜로 변환해야 서버 집계(history/:date)와 일치한다.
+  const capturedDate = new Date(new Date(d.capturedAt).getTime() + 9 * 3600 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const openDetail = () =>
+    router.push({ pathname: `/diagnosis/${d.id}`, params: { date: capturedDate } });
+
   return (
-    <Card style={styles.diagCard}>
-      <View style={styles.diagHeader}>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={styles.diagTime}>{formatTime(d.capturedAt)} 촬영</Text>
-          {statusLabel(d.status) && <Text style={styles.diagMeta}>{statusLabel(d.status)}</Text>}
-        </View>
-        <View style={styles.scoreBadge}>
-          <Text style={styles.scoreBadgeValue}>{d.overallScore}</Text>
-          <Text style={styles.scoreBadgeLabel}>점</Text>
-        </View>
-      </View>
-
-      {d.weather && <WeatherSummary weather={d.weather} />}
-
-      {d.parts.length > 0 && (
-        <View style={styles.partsBlock}>
-          {d.parts.map((p) => (
-            <View key={p.part} style={styles.partRow}>
-              <Text style={styles.partLabel} numberOfLines={1}>{p.label}</Text>
-              <View style={[styles.partGradeBadge, { backgroundColor: gradeToColor(p.grade) + '22' }]}>
-                <Text style={[styles.partGradeText, { color: gradeToColor(p.grade) }]}>{p.grade}</Text>
-              </View>
-              <Text style={styles.partValue} numberOfLines={1} ellipsizeMode="tail">
-                {p.moisture != null ? `수분 ${p.moisture}` : ''}
-                {p.moisture != null && p.elasticity != null ? ' · ' : ''}
-                {p.elasticity != null ? `탄력 ${p.elasticity}` : ''}
-              </Text>
+    <Pressable onPress={openDetail} style={({ pressed }) => [pressed && styles.diagCardPressed]}>
+      <Card style={styles.diagCard}>
+        <View style={styles.diagRow}>
+          <MediaThumb diagnosis={d} />
+          <View style={styles.diagInfo}>
+            <Text style={styles.diagTime}>{formatTimeKo(d.capturedAt)} 촬영</Text>
+            {statusLabel(d.status) && <Text style={styles.diagMeta}>{statusLabel(d.status)}</Text>}
+            <View style={styles.scoreBadge}>
+              <Text style={styles.scoreBadgeValue}>{d.overallScore}</Text>
+              <Text style={styles.scoreBadgeLabel}>점</Text>
             </View>
-          ))}
-        </View>
-      )}
-
-      {d.recommendations.length > 0 ? (
-        <View style={styles.recsBlock}>
-          {d.recommendations.map((r) => (
-            <View key={r.id} style={styles.recBlock}>
-              <View style={styles.recHeader}>
-                <EvidenceBadge grade={r.grade} />
-                <Text style={styles.recTitle}>{r.title}</Text>
-              </View>
-              <Text style={styles.recExplanation}>{r.explanation}</Text>
-              {r.products.length > 0 && (
-                <Pressable
-                  onPress={() => router.push(`/recommendation/${r.id}`)}
-                  style={({ pressed }) => [
-                    styles.recProductsButton,
-                    pressed && styles.recProductsButtonPressed,
-                  ]}
-                >
-                  <Text style={styles.recProductsButtonText}>
-                    관련 제품 보기 ({r.products.length})
-                  </Text>
-                  <Ionicons name="chevron-forward" size={14} color={colors.sageDark} />
-                </Pressable>
-              )}
+            <View style={styles.detailButton}>
+              <Text style={styles.detailButtonText}>상세기록 보기</Text>
+              <Ionicons name="chevron-forward" size={14} color={colors.sageDark} />
             </View>
-          ))}
+          </View>
         </View>
-      ) : (
-        <Text style={styles.noRec}>이 진단에는 추천이 없어요</Text>
-      )}
-
-      <MediaBlock diagnosis={d} />
-    </Card>
+      </Card>
+    </Pressable>
   );
 }
 
-function WeatherSummary({ weather: w }: { weather: CalendarWeather }) {
-  const source = w.source === 'UNAVAILABLE' ? '측정 불가' : w.source;
-  return (
-    <View style={styles.weatherBlock}>
-      <Text style={styles.weatherRegion}>
-        {w.regionName} · {source}
-      </Text>
-      <View style={styles.weatherMetrics}>
-        <Text style={styles.weatherMetric}>자외선 {w.uvIndex ?? '-'} ({airLabel(w.uvStatus)})</Text>
-        <Text style={styles.weatherMetric}>초미세먼지 {w.pm25 ?? '-'}</Text>
-        <Text style={styles.weatherMetric}>미세먼지 {w.pm10 ?? '-'}</Text>
-      </View>
-    </View>
-  );
+// 촬영 시각 “오후 3:40” 형식 (F39)
+function formatTimeKo(iso: string): string {
+  const kst = new Date(new Date(iso).getTime() + 9 * 3600 * 1000);
+  const hour = kst.getUTCHours();
+  const minute = String(kst.getUTCMinutes()).padStart(2, '0');
+  const period = hour < 12 ? '오전' : '오후';
+  const h12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${period} ${h12}:${minute}`;
 }
 
-// 이미지와 랜드마크 오버레이를 같은 영역에 겹쳐 렌더링한다.
-// 이미지를 cover 크롭하면 랜드마크 좌표(정규화 0~1)가 잘린 영역과 어긋나므로,
-// 원본 비율을 그대로 유지한 채 표시 크기를 계산해 그 안에 이미지+SVG를 겹친다.
-function MediaBlock({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
+// 썸네일 — 이미지(가능 시) + 랜드마크 오버레이. 랜드마크만 있으면 점만 표시.
+function MediaThumb({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
   const img = d.image;
   const landmarks = d.landmarks;
-  // 이미지 컨테이너의 실제 너비(onLayout)와 원본 세로/가로 비율(onLoad)로 표시 크기를 구한다.
-  const [boxWidth, setBoxWidth] = useState(0);
-  const [imageRatio, setImageRatio] = useState<number | null>(null); // height / width
+  const expired = img ? new Date(img.expiresAt).getTime() <= Date.now() : false;
 
   if (!img && !landmarks) {
     return (
-      <View style={styles.mediaNotice}>
-        <Ionicons name="lock-closed-outline" size={14} color={colors.textTertiary} />
-        <Text style={styles.mediaNoticeText}>
-          사진 저장 동의를 하지 않아 이미지·랜드마크는 표시되지 않아요
-        </Text>
+      <View style={styles.thumbBox}>
+        <Ionicons name="lock-closed-outline" size={20} color={colors.textTertiary} />
       </View>
     );
   }
 
-  const expired = img ? new Date(img.expiresAt).getTime() <= Date.now() : false;
+  const overlay = landmarks ? (
+    <Svg
+      style={StyleSheet.absoluteFill}
+      width="100%"
+      height="100%"
+      viewBox="0 0 1 1"
+      preserveAspectRatio="none"
+    >
+      {landmarks.points.map(([x, y], i) => (
+        <Circle key={i} cx={x} cy={y} r={0.01} fill="rgba(107,181,164,0.9)" />
+      ))}
+    </Svg>
+  ) : null;
 
-  // 비율 유지 + 최대 높이 240px로 클램프. 축소는 비율이 유지되므로 랜드마크 정렬이 흐트러지지 않는다.
-  const displaySize = useMemo(() => {
-    if (!boxWidth || !imageRatio) return null;
-    const MAX_HEIGHT = 240;
-    let width = boxWidth;
-    let height = boxWidth * imageRatio;
-    if (height > MAX_HEIGHT) {
-      height = MAX_HEIGHT;
-      width = MAX_HEIGHT / imageRatio;
-    }
-    return { width, height };
-  }, [boxWidth, imageRatio]);
+  if (img && !expired) {
+    return (
+      <View style={styles.thumbBox}>
+        <Image source={{ uri: img.url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        {overlay}
+      </View>
+    );
+  }
 
+  // 이미지 만료 or 이미지만 없고 랜드마크만 있는 경우 — 회색 배경에 점 표시
   return (
-    <View style={styles.mediaBlock}>
-      {img ? (
-        expired ? (
-          <View style={styles.imageBox}>
-            <Ionicons name="time-outline" size={22} color={colors.textTertiary} />
-            <Text style={styles.imageExpiredText}>
-              이미지 링크가 만료됐어요 — 새로고침으로 다시 받아주세요
-            </Text>
-          </View>
-        ) : (
-          <View
-            style={styles.imageBox}
-            onLayout={(e) => setBoxWidth(e.nativeEvent.layout.width)}
-          >
-            {displaySize ? (
-              <View style={{ width: displaySize.width, height: displaySize.height }}>
-                <Image
-                  source={{ uri: img.url }}
-                  style={StyleSheet.absoluteFill}
-                  resizeMode="contain"
-                  onLoad={(e) => {
-                    const { width, height } = e.nativeEvent.source;
-                    if (width > 0 && height > 0) setImageRatio(height / width);
-                  }}
-                />
-                {landmarks && (
-                  <Svg
-                    style={StyleSheet.absoluteFill}
-                    width="100%"
-                    height="100%"
-                    viewBox="0 0 1 1"
-                    preserveAspectRatio="none"
-                  >
-                    {landmarks.points.map(([x, y], i) => (
-                      <Circle key={i} cx={x} cy={y} r={0.01} fill="rgba(107,181,164,0.9)" />
-                    ))}
-                  </Svg>
-                )}
-              </View>
-            ) : (
-              <ActivityIndicator color={colors.sage} />
-            )}
-          </View>
-        )
-      ) : (
-        <View style={styles.mediaNotice}>
-          <Ionicons name="image-outline" size={14} color={colors.textTertiary} />
-          <Text style={styles.mediaNoticeText}>보관 이미지가 없어요</Text>
-        </View>
-      )}
-      {landmarks && (
-        <Text style={styles.landmarkCaption}>
-          얼굴 랜드마크 {landmarks.points.length}점 · {landmarks.version}
-        </Text>
-      )}
+    <View style={styles.thumbBox}>
+      <Ionicons name="scan-outline" size={20} color={colors.textTertiary} />
+      {overlay}
     </View>
   );
 }
@@ -486,9 +395,20 @@ const styles = StyleSheet.create({
   date: { ...typography.body, color: colors.textPrimary },
   score: { ...typography.headline, color: colors.sageDark },
 
-  // 진단 카드
+  // 진단 카드 (F39 — 랜드마크 썸네일 + 요약 가로 카드)
   diagCard: { gap: spacing.md },
-  diagHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  diagCardPressed: { opacity: 0.85 },
+  diagRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'stretch' },
+  thumbBox: {
+    width: 96,
+    minHeight: 120,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+    backgroundColor: colors.gray100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  diagInfo: { flex: 1, gap: spacing.xs, alignItems: 'flex-start' },
   diagTime: { ...typography.body, color: colors.textPrimary, fontWeight: '600' },
   diagMeta: { ...typography.caption, color: colors.textTertiary },
   scoreBadge: {
@@ -504,70 +424,16 @@ const styles = StyleSheet.create({
   },
   scoreBadgeValue: { ...typography.headline, color: colors.sageDark },
   scoreBadgeLabel: { ...typography.caption, color: colors.sageDark },
-  weatherBlock: {
-    backgroundColor: colors.gray50,
-    borderRadius: radius.md,
-    padding: spacing.sm,
-    gap: spacing.xs,
-  },
-  weatherRegion: { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
-  weatherMetrics: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  weatherMetric: { ...typography.caption, color: colors.textSecondary },
-  partsBlock: { gap: spacing.xs },
-  partRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  partLabel: { ...typography.bodySm, color: colors.textPrimary, flex: 1 },
-  partGradeBadge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: radius.full,
-  },
-  partGradeText: { ...typography.bodySm, fontWeight: '700' },
-  partValue: { ...typography.caption, color: colors.textTertiary, textAlign: 'right' },
-  recsBlock: { gap: spacing.sm },
-  recBlock: {
-    backgroundColor: colors.gray50,
-    borderRadius: radius.md,
-    padding: spacing.sm,
-    gap: spacing.xs,
-  },
-  recHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  recTitle: { ...typography.bodySm, color: colors.textPrimary, fontWeight: '600', flex: 1 },
-  recExplanation: { ...typography.caption, color: colors.textSecondary },
-  recProductsButton: {
-    alignSelf: 'flex-start',
+  detailButton: {
+    marginTop: 'auto',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
-    marginTop: spacing.xs,
     borderWidth: 1,
     borderColor: colors.sage,
     borderRadius: radius.full,
     paddingHorizontal: spacing.md,
     paddingVertical: 4,
   },
-  recProductsButtonPressed: { opacity: 0.6 },
-  recProductsButtonText: { ...typography.caption, color: colors.sageDark, fontWeight: '700' },
-  noRec: { ...typography.caption, color: colors.textTertiary },
-
-  // 이미지 / 랜드마크
-  mediaBlock: { gap: spacing.xs },
-  mediaNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    backgroundColor: colors.gray50,
-    borderRadius: radius.md,
-    padding: spacing.sm,
-  },
-  mediaNoticeText: { ...typography.caption, color: colors.textTertiary, flex: 1 },
-  imageBox: {
-    minHeight: 120,
-    borderRadius: radius.md,
-    overflow: 'hidden',
-    backgroundColor: colors.gray100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  imageExpiredText: { ...typography.caption, color: colors.textTertiary },
-  landmarkCaption: { ...typography.caption, color: colors.sageDark, marginTop: spacing.xs },
+  detailButtonText: { ...typography.caption, color: colors.sageDark, fontWeight: '700' },
 });

@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { EvidenceBadge } from '../../src/components/EvidenceBadge';
 import { IngredientChip } from '../../src/components/IngredientChip';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
+import { useToast } from '../../src/components/Toast';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type { Product, Recommendation } from '../../src/types';
 
@@ -57,21 +58,29 @@ export default function RecommendationDetailScreen() {
 
   const relatedProducts = products.filter((p) => recommendation.relatedProductIds.includes(p.id));
 
+  const { showToast } = useToast();
+
   const openPurchaseUrl = async (product: Product) => {
     if (!product.purchaseUrl) {
-      Alert.alert('구매 링크 준비 중', '이 제품의 구매 페이지는 아직 연결되지 않았어요.');
+      showToast('이 제품의 구매 페이지는 아직 연결되지 않았어요', { type: 'info' });
       return;
     }
     try {
       await Linking.openURL(product.purchaseUrl);
     } catch {
-      Alert.alert('페이지를 열 수 없어요', '구매 링크를 다시 확인해주세요.');
+      showToast('구매 링크를 다시 확인해주세요', { type: 'error' });
     }
   };
 
   return (
     <ScreenContainer>
-      <Pressable onPress={() => router.back()} hitSlop={12} style={styles.closeButton}>
+      <Pressable
+        onPress={() => router.back()}
+        hitSlop={12}
+        style={styles.closeButton}
+        accessibilityRole="button"
+        accessibilityLabel="닫기"
+      >
         <Ionicons name="close" size={22} color={colors.textPrimary} />
       </Pressable>
 

@@ -208,7 +208,17 @@ export default function LoginScreen() {
               <Text style={styles.signupLink}>아직 계정이 없으신가요? 회원가입</Text>
             </Pressable>
             <SocialLoginButtons compact busyProvider={busyProvider} onToken={handleSocialToken} onError={setError} />
-            <Text style={styles.terms}>계속하면 서비스 이용약관과 개인정보 처리방침에 동의한 것으로 간주됩니다.</Text>
+            <Text style={styles.terms}>
+              계속하면{' '}
+              <Text style={styles.termsLink} onPress={() => router.push('/legal/terms')}>
+                이용약관
+              </Text>
+              과{' '}
+              <Text style={styles.termsLink} onPress={() => router.push('/legal/privacy')}>
+                개인정보 처리방침
+              </Text>
+              에 동의한 것으로 간주됩니다.
+            </Text>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -262,4 +272,5 @@ const styles = StyleSheet.create({
   smsButton: { borderWidth: 1, borderColor: colors.sage, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center' },
   smsButtonText: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },
   terms: { ...typography.caption, color: colors.textTertiary, textAlign: 'center' },
+  termsLink: { color: colors.sageDark, fontWeight: '700' },
 });

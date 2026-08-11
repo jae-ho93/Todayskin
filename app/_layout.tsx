@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { LocationProvider } from '../src/hooks/useUserLocation';
+import { ToastProvider } from '../src/components/Toast';
 import { onSessionExpired } from '../src/lib/session';
 import { colors } from '../src/theme';
 
@@ -17,6 +18,7 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <LocationProvider>
+        <ToastProvider>
         <StatusBar style="dark" />
         <Stack
           screenOptions={{
@@ -30,9 +32,13 @@ export default function RootLayout() {
           <Stack.Screen name="my-info" />
           <Stack.Screen name="diagnosis-result" />
           <Stack.Screen name="recommendation/[id]" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="diagnosis/[id]" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="legal/terms" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="legal/privacy" options={{ presentation: 'modal' }} />
           <Stack.Screen name="trend" />
           <Stack.Screen name="weather-detail" />
         </Stack>
+        </ToastProvider>
       </LocationProvider>
     </SafeAreaProvider>
   );

@@ -298,7 +298,17 @@ export default function SignupScreen() {
               </Pressable>
 
               <SocialLoginButtons compact busyProvider={busyProvider} onToken={handleSocialToken} onError={setError} />
-              <Text style={styles.terms}>가입하면 서비스 이용약관과 개인정보 처리방침에 동의한 것으로 간주됩니다.</Text>
+              <Text style={styles.terms}>
+                가입하면{' '}
+                <Text style={styles.termsLink} onPress={() => router.push('/legal/terms')}>
+                  이용약관
+                </Text>
+                과{' '}
+                <Text style={styles.termsLink} onPress={() => router.push('/legal/privacy')}>
+                  개인정보 처리방침
+                </Text>
+                에 동의한 것으로 간주됩니다.
+              </Text>
               <Pressable onPress={() => router.replace('/onboarding/login')} hitSlop={8}>
                 <Text style={styles.loginLink}>이미 계정이 있으신가요? 로그인</Text>
               </Pressable>
@@ -393,7 +403,17 @@ export default function SignupScreen() {
                   <Text style={styles.ctaText}>가입하고 시작하기</Text>
                 )}
               </Pressable>
-              <Text style={styles.terms}>가입하면 서비스 이용약관과 개인정보 처리방침에 동의한 것으로 간주됩니다.</Text>
+              <Text style={styles.terms}>
+                가입하면{' '}
+                <Text style={styles.termsLink} onPress={() => router.push('/legal/terms')}>
+                  이용약관
+                </Text>
+                과{' '}
+                <Text style={styles.termsLink} onPress={() => router.push('/legal/privacy')}>
+                  개인정보 처리방침
+                </Text>
+                에 동의한 것으로 간주됩니다.
+              </Text>
             </View>
           </View>
         )}
@@ -467,4 +487,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   terms: { ...typography.caption, color: colors.textTertiary, textAlign: 'center' },
+  termsLink: { color: colors.sageDark, fontWeight: '700' },
 });
