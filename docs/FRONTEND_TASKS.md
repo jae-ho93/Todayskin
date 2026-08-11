@@ -745,7 +745,7 @@ F0 → F1 → F2 → F3 → F6 → F4 → F16 → F8 → F10 → F15 → F13 →
 
 - [x] `app/(tabs)/settings.tsx` — 동의 관리 섹션 하단 이동
 
-### F62. 로그인/회원가입 키보드 대응 — 포커스 필드 유지 + 글자겹침 해소 (신규, 2026-08-12)
+### F62. 로그인/회원가입 키보드 대응 — 포커스 필드 유지 + 글자겹침 해소 (신규, 2026-08-12) — 완료 (2026-08-12)
 
 > **실기기 증상**: ① 휴대폰 번호 입력을 누르면 **소셜까지 위로 밀려 올라옴**
 > ② 로그인창에서 **글자겹침** 발생. 원인: F58의 `middle: justifyContent: 'center'` +
@@ -758,5 +758,5 @@ F0 → F1 → F2 → F3 → F6 → F4 → F16 → F8 → F10 → F15 → F13 →
 >    필드는 화면 상단 1/3 근처
 > ③ login/signup(두 단계) 동일 적용
 
-- [ ] `app/onboarding/login.tsx` — ScrollView + flex-start
-- [ ] `app/onboarding/signup.tsx` — ScrollView + flex-start (phone/profile 두 단계)
+- [x] `app/onboarding/login.tsx` — ScrollView + flex-start
+- [x] `app/onboarding/signup.tsx` — ScrollView + flex-start (phone/profile 두 단계)
