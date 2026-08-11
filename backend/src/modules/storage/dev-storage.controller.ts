@@ -25,7 +25,7 @@ export class DevStorageController {
     @Inject(IMAGE_OBJECT_STORE) private readonly store: ImageObjectStore,
   ) {}
 
-  @Get(':bucket/:path*')
+  @Get(':bucket/*path')
   async serve(
     @Param('bucket') bucket: string,
     @Param('path') path: string[],
