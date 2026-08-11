@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
@@ -29,30 +29,42 @@ export default function ProductsScreen() {
   // 피부 기반 / 날씨+피부 기반은 아직 이 화면에 연결하지 않아 구역만 둔다.
   const [weatherProducts, setWeatherProducts] = useState<Product[] | null>(null);
   const [weatherProductsLoading, setWeatherProductsLoading] = useState(false);
+  const [weatherProductsRefreshing, setWeatherProductsRefreshing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+    setWeatherProductsRefreshing(false);
     // N12: 날씨는 서버가 직접 조회한다. 클라이언트는 좌표만 전달하고 weather 본문을
     // 보내지 않으므로 조작된 날씨로 추천을 왜곡할 수 없다.
     const weatherResponse = await api.getWeatherProductsFast(coords ?? undefined);
 
-let products = weatherResponse?.items ?? null;
-if (products !== null) {
-  setWeatherProducts(products);
-}
+    const products = weatherResponse?.items ?? null;
+    setWeatherProducts(products);
 
-// F2: LIVE 폴링
-if (weatherResponse?.source === 'LIVE' && weatherResponse?.jobId) {
-  const pollInterval = setInterval(async () => {
-    const job = await api.pollJob<Product[]>(weatherResponse.jobId);
-    if (job?.status === 'COMPLETED' && job.result) {
-      clearInterval(pollInterval);
-      setWeatherProducts(job.result);
-    } else if (job?.status === 'FAILED') {
-      clearInterval(pollInterval);
+    if (weatherResponse?.source !== 'LIVE' && weatherResponse?.jobId) {
+      setWeatherProductsRefreshing(true);
+      let attempts = 0;
+      pollTimerRef.current = setInterval(async () => {
+        attempts += 1;
+        const job = await api.pollJob<Product[]>(weatherResponse.jobId);
+        if (job?.status === 'COMPLETED' && job.result) {
+          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+          setWeatherProductsRefreshing(false);
+          setWeatherProducts(job.result);
+        } else if (job?.status === 'FAILED' || attempts >= 20) {
+          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+          setWeatherProductsRefreshing(false);
+          // 실패/timeout: 현재 CACHED/FALLBACK 실제품을 유지한다.
+        }
+      }, 1000);
     }
-  }, 1000);
-}
   }, [coords]);
 
   useEffect(() => {
@@ -64,6 +76,10 @@ if (weatherResponse?.source === 'LIVE' && weatherResponse?.jobId) {
     });
     return () => {
       cancelled = true;
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
     };
   }, [locationLoading, load]);
 
@@ -111,6 +127,7 @@ if (weatherResponse?.source === 'LIVE' && weatherResponse?.jobId) {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>날씨 기반 추천</Text>
+        {weatherProductsRefreshing && <Text style={styles.refreshingLabel}>최신 제품으로 갱신 중…</Text>}
         {weatherProductsLoading ? (
           <View style={styles.loadingRow}>
             <ActivityIndicator color={colors.sage} />
@@ -188,6 +205,7 @@ const styles = StyleSheet.create({
   section: { gap: spacing.sm },
   sectionTitle: { ...typography.headline, color: colors.textPrimary },
   emptyText: { ...typography.bodySm, color: colors.textTertiary },
+  refreshingLabel: { ...typography.caption, color: colors.sageDark },
   loadingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   list: { gap: spacing.md },
   timingGroup: { gap: spacing.xs },
