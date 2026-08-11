@@ -554,6 +554,14 @@ F0 → F1 → F2 → F3 → F6 → F4 → F16 → F8 → F10 → F15 → F13 →
 
 ### F44. 설정 버전 표기 동기화 + 접근성 기본 (신규, 2026-08-12) — 완료 (2026-08-12)
 
+> **문제**: 설정의 “버전 1.0.0”이 하드코딩 — app.json 버전과 어긋날 수 있음.
+> 접근성 라벨도 일부 화면에만 있음.
+> **수정 방향**: ① `expo-constants`의 `nativeApplicationVersion`으로 버전 표기
+> (하드코딩 제거) ② 주요 탭·아이콘 버튼에 accessibilityLabel/role 추가 (스크린리더),
+> 터치 영역 최소 44px 확인
+
+- [x] 버전 expo-constants 동기화 + 주요 요소 접근성 라벨
+
 ### F46. 진단 상세 화면 UI 정리 (신규, 2026-08-12) — 완료 (2026-08-12)
 
 > 실기기 리뷰: ① 종합 피부 스코어의 “완료” 상태 라벨이 방해됨 → 제거
@@ -573,15 +581,6 @@ F0 → F1 → F2 → F3 → F6 → F4 → F16 → F8 → F10 → F15 → F13 →
 
 - [x] `app/onboarding/login.tsx` — body/middle 레이아웃 (CTA를 필드 아래로)
 - [x] `app/onboarding/signup.tsx` — 로그인 링크를 CTA 아래로 이동 + 동일 레이아웃
-
-> **문제**: 설정의 “버전 1.0.0”이 하드코딩 — app.json 버전과 어긋날 수 있음.
-> 접근성 라벨도 일부 화면에만 있음.
-> **수정 방향**: ① `expo-constants`의 `nativeApplicationVersion`으로 버전 표기
-> (하드코딩 제거) ② 주요 탭·아이콘 버튼에 accessibilityLabel/role 추가 (스크린리더),
-> 터치 영역 최소 44px 확인
-
-- [x] 버전 expo-constants 동기화 + 주요 요소 접근성 라벨
-
 
 ### F48. 로그인/회원가입 키패드 닫기 불가 (신규, 2026-08-12 실기기)
 
@@ -654,12 +653,25 @@ F0 → F1 → F2 → F3 → F6 → F4 → F16 → F8 → F10 → F15 → F13 →
 
 - [ ] `app/(tabs)/history.tsx` — 추천 3개 표시 (제목 1줄 말줄임)
 
+### F54. 로그인 CTA를 입력 필드 직하로 (토스식 배치) (신규, 2026-08-12)
 
-> **문제**: 설정의 “버전 1.0.0”이 하드코딩 — app.json 버전과 어긋날 수 있음.
-> 접근성 라벨도 일부 화면에만 있음.
-> **수정 방향**: ① `expo-constants`의 `nativeApplicationVersion`으로 버전 표기
-> (하드코딩 제거) ② 주요 탭·아이콘 버튼에 accessibilityLabel/role 추가 (스크린리더),
-> 터치 영역 최소 44px 확인
+> **요구**: 로그인 CTA가 여전히 화면 하단(footer)에 있어 입력 필드와의 빈 공간이 크다.
+> 토스/당근 패턴 — 핵심 액션 버튼은 **입력 컨텍스트에 붙는다**.
+> **수정 방향** (`app/onboarding/login.tsx`):
+> ① `middle: justifyContent: 'center' → 'flex-end'` — 필드가 중앙보다 살짝 위
+> ② CTA를 middle 끝(입력 필드 바로 아래, 간격 ~16px)으로 이동 — 키보드가 열려도 안 가림
+> ③ 회원가입 링크는 CTA 아래, 소셜+약관은 하단 고정 (토스/당근과 동일 계층)
 
-- [x] 버전 expo-constants 동기화 + 주요 요소 접근성 라벨
+- [ ] `app/onboarding/login.tsx` — middle flex-end + CTA 필드 직하 이동
 
+### F55. 설정 리스트 컴팩트화 — “뚱뚱한 버튼” 제거 (신규, 2026-08-12)
+
+> **요구**: 설정 행이 카드 패딩 + `minHeight 52 + paddingVertical` 중복으로
+> “버튼 덩어리”처럼 뚱뚱해 보인다. 토스식 리스트 질감으로 정돈.
+> **수정 방향** (`app/(tabs)/settings.tsx`):
+> ① 설정 카드 padding `lg → md` (카드 안 패딩 최소화)
+> ② `row: paddingVertical` 제거 — `minHeight`(44~52)만으로 높이 고정 + `alignItems: center`
+> ③ 같은 카드 내 다중 행 사이 1px divider 추가 (토스/카카오 패턴)
+> ④ 아이콘 20·라벨 body·chevron 16-18 유지 — 밀도 있는 리스트
+
+- [ ] `app/(tabs)/settings.tsx` — 컴팩트 카드 + 행 패딩 제거 + divider
