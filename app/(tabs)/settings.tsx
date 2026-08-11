@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { api } from '../../src/api/client';
@@ -16,7 +17,12 @@ import { Card } from '../../src/components/Card';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { clearSession } from '../../src/lib/session';
 import { colors, radius, spacing, typography } from '../../src/theme';
-import type { ConsentPurpose, ConsentPurposeInfo, ConsentRecord, User } from '../../src/types'
+import type { ConsentPurpose, ConsentPurposeInfo, ConsentRecord, User } from '../../src/types';
+
+function maskPhone(phone: string | null): string {
+  if (!phone) return '전화번호 미연결';
+  return phone.replace(/(\d{3})(\d{4})(\d{4})/, '$1-****-$3');
+}
 function SettingsRow({
   icon,
   label,
@@ -55,7 +61,11 @@ export default function SettingsScreen() {
   const [recommendAlert, setRecommendAlert] = useState(false);
   const [prefsLoading, setPrefsLoading] = useState(true);
   const [prefsError, setPrefsError] = useState<string | null>(null);
+  const [pushDeliveryAvailable, setPushDeliveryAvailable] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [editingName, setEditingName] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
   // 낙관적 갱신 중 연타로 요청이 뒤섞이지 않도록 저장 완료까지 토글을 잠근다.
   const prefsSavingRef = useRef(false);
 
@@ -77,6 +87,7 @@ export default function SettingsScreen() {
       // 잘못 보였다가 토글이 다른 쪽 설정을 덮어쓰지 않게 한다.
       setWeatherAlert(prefs.uvAlertEnabled || prefs.dustAlertEnabled);
       setRecommendAlert(prefs.pushEnabled);
+      setPushDeliveryAvailable(prefs.pushDeliveryAvailable === true);
     } else {
       setPrefsError('알림 설정을 불러오지 못했어요');
     }
@@ -151,6 +162,19 @@ export default function SettingsScreen() {
     }
   };
 
+  const agreeConsent = async (purpose: ConsentPurpose) => {
+    if (revokingPurpose) return;
+    setRevokingPurpose(purpose);
+    try {
+      await api.upsertConsent(purpose, true);
+      setMyConsents(await api.getMyConsents());
+    } catch {
+      Alert.alert('동의 실패', '동의 상태를 저장하지 못했어요. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setRevokingPurpose(null);
+    }
+  };
+
   const handleWithdraw = () => {
     Alert.alert(
       '회원 탈퇴',
@@ -178,6 +202,35 @@ export default function SettingsScreen() {
     );
   };
 
+  const confirmLogout = () => {
+    Alert.alert('로그아웃', '현재 계정에서 로그아웃할까요?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '로그아웃',
+        style: 'destructive',
+        onPress: async () => {
+          await api.logout();
+          await clearSession();
+        },
+      },
+    ]);
+  };
+
+  const saveProfile = async () => {
+    const name = editingName.trim();
+    if (!name || profileSaving) return;
+    setProfileSaving(true);
+    try {
+      const updated = await api.updateMe({ name });
+      setUser(updated);
+      setProfileModalOpen(false);
+    } catch {
+      Alert.alert('수정 실패', '프로필을 저장하지 못했어요.');
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
   const policy = registry?.find((r) => r.purpose === 'diagnosis_image_processing');
 
   return (
@@ -189,9 +242,9 @@ export default function SettingsScreen() {
     <View style={styles.profileContent}>
       <View>
         <Text style={styles.profileName}>{user.name}</Text>
-        <Text style={styles.profilePhone}>{user.phoneNumber}</Text>
+        <Text style={styles.profilePhone}>{maskPhone(user.phoneNumber)}</Text>
       </View>
-      <Pressable onPress={() => {}}>
+      <Pressable onPress={() => { setEditingName(user.name); setProfileModalOpen(true); }}>
         <Text style={styles.profileEdit}>수정</Text>
       </Pressable>
     </View>
@@ -232,6 +285,7 @@ export default function SettingsScreen() {
                   <Switch
                     value={weatherAlert}
                     onValueChange={toggleWeatherAlert}
+                    disabled={!pushDeliveryAvailable}
                     trackColor={{ true: colors.sage, false: colors.gray200 }}
                   />
                 }
@@ -244,11 +298,15 @@ export default function SettingsScreen() {
                   <Switch
                     value={recommendAlert}
                     onValueChange={toggleRecommendAlert}
+                    disabled={!pushDeliveryAvailable}
                     trackColor={{ true: colors.sage, false: colors.gray200 }}
                   />
                 }
               />
             </>
+          )}
+          {!prefsLoading && !pushDeliveryAvailable && (
+            <Text style={styles.readyText}>푸시 알림은 준비 중이에요. 현재 설정은 변경할 수 없어요.</Text>
           )}
           {prefsError && <Text style={styles.errorText}>{prefsError}</Text>}
         </Card>
@@ -257,16 +315,19 @@ export default function SettingsScreen() {
       <View>
         <Text style={styles.sectionTitle}>계정</Text>
         <Card>
+          <SettingsRow
+            icon="people-outline"
+            label="소셜 계정"
+            right={<Text style={styles.readyBadge}>로그인 화면에서 연결</Text>}
+          />
+          <View style={styles.divider} />
           {/* N18: clearSession()이 루트 레이아웃의 세션 만료 콜백을 통해
               로그인 화면으로 안내하므로 여기서 별도로 이동하지 않는다. */}
           <SettingsRow
             icon="log-out-outline"
             label="로그아웃"
             right={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}
-            onPress={async () => {
-              await api.logout();
-              await clearSession();
-            }}
+            onPress={confirmLogout}
           />
           <View style={styles.divider} />
           <SettingsRow
@@ -280,22 +341,24 @@ export default function SettingsScreen() {
       </View>
 
       <View>
-        <Text style={styles.sectionTitle}>구독 관리</Text>
-        <View style={styles.planRow}>
-          <Card style={styles.planCard}>
-            <Text style={styles.planName}>무료</Text>
-            <Text style={styles.planPrice}>₩0</Text>
-            <Text style={styles.planDesc}>날씨 기반 알림{'\n'}기본 추천</Text>
-          </Card>
-          <Card style={[styles.planCard, styles.planCardActive]}>
-            <Text style={[styles.planName, styles.planNameActive]}>프리미엄</Text>
-            <Text style={[styles.planPrice, styles.planNameActive]}>₩4,900/월</Text>
-            <Text style={[styles.planDesc, styles.planDescActive]}>
-              정밀 지표{'\n'}개인화 패턴 분석
-            </Text>
-          </Card>
-        </View>
+        <Text style={styles.sectionTitle}>앱</Text>
+        <Card>
+          <SettingsRow icon="information-circle-outline" label="버전" right={<Text style={styles.versionText}>1.0.0</Text>} />
+        </Card>
       </View>
+
+      <Modal visible={profileModalOpen} transparent animationType="fade" onRequestClose={() => setProfileModalOpen(false)}>
+        <View style={[styles.modalOverlay, styles.profileModalOverlay]}>
+          <View style={styles.profileModal}>
+            <Text style={styles.modalTitle}>프로필 수정</Text>
+            <TextInput value={editingName} onChangeText={setEditingName} maxLength={20} placeholder="이름" style={styles.profileInput} autoFocus />
+            <View style={styles.profileActions}>
+              <Pressable onPress={() => setProfileModalOpen(false)}><Text style={styles.cancelText}>취소</Text></Pressable>
+              <Pressable onPress={saveProfile} disabled={!editingName.trim() || profileSaving}><Text style={styles.saveText}>{profileSaving ? '저장 중…' : '저장'}</Text></Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* 안면 이미지 처리방침 확인 */}
       <Modal
@@ -385,7 +448,13 @@ export default function SettingsScreen() {
                           )}
                         </Pressable>
                       ) : (
-                        <Text style={styles.revokedBadge}>철회됨</Text>
+                        <Pressable
+                          onPress={() => agreeConsent(c.purpose)}
+                          disabled={revokingPurpose !== null}
+                          style={styles.agreeButton}
+                        >
+                          <Text style={styles.agreeButtonText}>다시 동의</Text>
+                        </Pressable>
                       )}
                     </View>
                   );
@@ -415,12 +484,21 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: colors.border },
   prefsLoading: { paddingVertical: spacing.lg, alignItems: 'center' },
   errorText: { ...typography.caption, color: colors.coralDark, marginTop: spacing.sm },
+  readyText: { ...typography.caption, color: colors.textTertiary, marginTop: spacing.sm },
+  versionText: { ...typography.bodySm, color: colors.textSecondary },
+  readyBadge: { ...typography.caption, color: colors.textTertiary },
   planRow: { flexDirection: 'row', gap: spacing.md },
   profileCard: { marginBottom: spacing.md },
 profileContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md },
 profileName: { ...typography.subtitle, fontWeight: '600', color: colors.textPrimary },
 profilePhone: { ...typography.caption, color: colors.textTertiary },
 profileEdit: { ...typography.body, color: colors.sage },
+  profileModalOverlay: { justifyContent: 'center' },
+  profileModal: { margin: spacing.xl, backgroundColor: colors.background, borderRadius: radius.lg, padding: spacing.xl, gap: spacing.lg },
+  profileInput: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md, ...typography.body, color: colors.textPrimary },
+  profileActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.xl },
+  cancelText: { ...typography.body, color: colors.textSecondary },
+  saveText: { ...typography.body, color: colors.sageDark, fontWeight: '700' },
   planCard: { flex: 1, gap: spacing.xs },
   planCardActive: { backgroundColor: colors.sage },
   planName: { ...typography.subtitle, color: colors.textPrimary },
@@ -479,5 +557,13 @@ profileEdit: { ...typography.body, color: colors.sage },
   },
   revokeButtonPressed: { backgroundColor: colors.coralLight ?? colors.gray100 },
   revokeButtonText: { ...typography.bodySm, color: colors.coralDark, fontWeight: '600' },
+  agreeButton: {
+    borderWidth: 1,
+    borderColor: colors.sage,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  agreeButtonText: { ...typography.bodySm, color: colors.sageDark, fontWeight: '600' },
   revokedBadge: { ...typography.caption, color: colors.textTertiary },
 });
