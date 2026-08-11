@@ -100,10 +100,10 @@ export default function DiagnosisDetailScreen() {
             )}
           </View>
         </View>
-        {statusLabel(d.status) && (
-          <Text style={styles.statusText}>{statusLabel(d.status)}</Text>
-        )}
       </Card>
+
+      {/* 날씨 — 촬영 당시 스냅샷 기준, 스코어 바로 아래 */}
+      {d.weather && <WeatherCard weather={d.weather} capturedAt={d.capturedAt} />}
 
       {/* 부위 분석 2×3 그리드 */}
       {d.parts.length > 0 && (
@@ -130,9 +130,6 @@ export default function DiagnosisDetailScreen() {
           </View>
         </View>
       )}
-
-      {/* 날씨 */}
-      {d.weather && <WeatherCard weather={d.weather} />}
 
       {/* 추천 */}
       {d.recommendations.length > 0 ? (
@@ -173,16 +170,16 @@ export default function DiagnosisDetailScreen() {
 
 // ── 하위 컴포넌트 ──────────────────────────
 
-function statusLabel(s?: string | null): string {
-  const map: Record<string, string> = {
-    PENDING: '분석 중',
-    COMPLETED: '완료',
-    FAILED: '실패',
-  };
-  return s ? map[s] ?? s : '';
+function formatCapturedAt(iso: string): string {
+  const kst = new Date(new Date(iso).getTime() + 9 * 3600 * 1000);
+  const hour = kst.getUTCHours();
+  const minute = String(kst.getUTCMinutes()).padStart(2, '0');
+  const period = hour < 12 ? '오전' : '오후';
+  const h12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${period} ${h12}:${minute}`;
 }
 
-function WeatherCard({ weather: w }: { weather: CalendarWeather }) {
+function WeatherCard({ weather: w, capturedAt }: { weather: CalendarWeather; capturedAt: string }) {
   const source = w.source === 'UNAVAILABLE' ? '측정 불가' : w.source;
   return (
     <Card style={styles.weatherCard}>
@@ -192,6 +189,7 @@ function WeatherCard({ weather: w }: { weather: CalendarWeather }) {
           <Text style={styles.sourceText}>{source}</Text>
         </View>
       </View>
+      <Text style={styles.weatherTime}>촬영 시점 기준 · {formatCapturedAt(capturedAt)}</Text>
       <View style={styles.weatherMetrics}>
         <WeatherMetric label="자외선" value={w.uvIndex} status={w.uvStatus} />
         <WeatherMetric label="초미세먼지" value={w.pm25} status={w.pm25Status} />
@@ -281,11 +279,6 @@ function MediaBlock({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
         <Ionicons name={expired ? 'time-outline' : 'scan-outline'} size={26} color={colors.textTertiary} />
       )}
       {overlay}
-      {landmarks && (
-        <Text style={styles.landmarkCaption}>
-          얼굴 랜드마크 {landmarks.points.length}점 · {landmarks.version}
-        </Text>
-      )}
     </View>
   );
 }
@@ -334,7 +327,6 @@ const styles = StyleSheet.create({
   scoreLabel: { ...typography.caption, color: colors.sageDark },
   scoreTitle: { ...typography.subtitle, color: colors.textPrimary },
   scoreMeta: { ...typography.caption, color: colors.textTertiary },
-  statusText: { ...typography.caption, color: colors.textSecondary },
 
   section: { gap: spacing.sm },
   sectionTitle: { ...typography.headline, color: colors.textPrimary },
@@ -353,8 +345,9 @@ const styles = StyleSheet.create({
   partGradeText: { ...typography.bodySm, fontWeight: '700' },
   partValue: { ...typography.caption, color: colors.textSecondary },
 
-  weatherCard: { gap: spacing.sm },
+  weatherCard: { gap: spacing.xs },
   weatherHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  weatherTime: { ...typography.caption, color: colors.textTertiary },
   weatherRegion: { ...typography.subtitle, color: colors.textPrimary, flex: 1 },
   sourceBadge: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.full },
   sourceLive: { backgroundColor: colors.sageLight },
@@ -401,16 +394,4 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
   },
   mediaNoticeText: { ...typography.caption, color: colors.textTertiary, flex: 1 },
-  landmarkCaption: {
-    position: 'absolute',
-    bottom: spacing.xs,
-    left: spacing.sm,
-    ...typography.caption,
-    color: colors.textPrimary,
-    backgroundColor: 'rgba(255,255,255,0.8)',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: radius.full,
-    overflow: 'hidden',
-  },
 });

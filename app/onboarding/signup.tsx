@@ -301,6 +301,9 @@ export default function SignupScreen() {
                 <Text style={styles.ctaText}>다음</Text>
               </Pressable>
 
+              <Pressable onPress={() => router.replace('/onboarding/login')} hitSlop={8}>
+                <Text style={styles.loginLink}>이미 계정이 있으신가요? 로그인</Text>
+              </Pressable>
               <SocialLoginButtons compact busyProvider={busyProvider} onToken={handleSocialToken} onError={setError} />
               <Text style={styles.terms}>
                 가입하면{' '}
@@ -313,9 +316,6 @@ export default function SignupScreen() {
                 </Text>
                 에 동의한 것으로 간주됩니다.
               </Text>
-              <Pressable onPress={() => router.replace('/onboarding/login')} hitSlop={8}>
-                <Text style={styles.loginLink}>이미 계정이 있으신가요? 로그인</Text>
-              </Pressable>
             </View>
           </View>
         ) : (
@@ -429,8 +429,8 @@ export default function SignupScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.xl },
   keyboardAvoiding: { flex: 1 },
-  body: { flex: 1, justifyContent: 'space-between', paddingVertical: spacing.xl, gap: spacing.xl },
-  middle: { gap: spacing.xl },
+  body: { flex: 1, paddingVertical: spacing.xl },
+  middle: { flex: 1, justifyContent: 'center', gap: spacing.xl },
   headline: { ...typography.displayLg, color: colors.textPrimary },
   subtitle: { ...typography.body, color: colors.textSecondary, marginTop: spacing.sm },
   backLink: { marginBottom: spacing.sm },
