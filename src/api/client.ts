@@ -9,6 +9,7 @@ import type {
   Job,
   NotificationPreferences,
   OtpPurpose,
+  OtpSendResponse,
   Product,
   Recommendation,
   RecommendationsFastResponse,
@@ -352,7 +353,7 @@ export const api = {
   // ──────────────── 인증 (OTP, 가입, 로그인) ────────────────
 
   sendOtp: (phoneNumber: string, purpose: OtpPurpose) =>
-    postJson<{ message: string }>('/otp/send', { phoneNumber, purpose }),
+    postJson<OtpSendResponse>('/otp/send', { phoneNumber, purpose }),
   verifyOtp: (phoneNumber: string, code: string, purpose: OtpPurpose) =>
     postJson<{ message: string }>('/otp/verify', { phoneNumber, code, purpose }),
   signup: (payload: SignupRequest) => postJson<User>('/auth/signup', payload),

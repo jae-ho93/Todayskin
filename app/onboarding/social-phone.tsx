@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../../src/api/client';
 import { saveSession } from '../../src/lib/session';
@@ -12,6 +12,7 @@ const displayPhone = (value: string) => value.length <= 3 ? value : value.length
 export default function SocialPhoneScreen() {
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
+  const [recipientNumber, setRecipientNumber] = useState('');
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,9 +20,14 @@ export default function SocialPhoneScreen() {
   const sendOtp = async () => {
     if (!validPhone(phone) || busy) return;
     setBusy(true); setError(null);
-    try { await api.sendOtp(phone, 'social_link'); setSent(true); }
+    try { const response = await api.sendOtp(phone, 'social_link'); setCode(response.code); setRecipientNumber(response.recipientNumber); setSent(true); }
     catch (e) { setError(e instanceof Error ? e.message : '인증번호를 보내지 못했습니다.'); }
     finally { setBusy(false); }
+  };
+
+  const openSms = async () => {
+    try { await Linking.openURL(`sms:${recipientNumber}?body=${encodeURIComponent(`인증코드 ${code}`)}`); }
+    catch { setError('문자 앱을 열 수 없어요. 아래 번호로 인증코드를 직접 보내주세요.'); }
   };
 
   const linkPhone = async () => {
@@ -46,15 +52,16 @@ export default function SocialPhoneScreen() {
         <View style={styles.field}>
           <Text style={styles.label}>휴대폰 번호 (선택)</Text>
           <TextInput style={styles.input} keyboardType="number-pad" placeholder="010-1234-5678" placeholderTextColor={colors.gray300} value={displayPhone(phone)} onChangeText={(v) => { setPhone(v.replace(/\D/g, '').slice(0, 11)); setSent(false); setCode(''); setError(null); }} editable={!sent} />
-          <Pressable onPress={sendOtp} disabled={!validPhone(phone) || busy} style={styles.textButton}><Text style={[styles.textButtonLabel, (!validPhone(phone) || busy) && styles.muted]}>인증번호 받기</Text></Pressable>
+          <Pressable onPress={sendOtp} disabled={!validPhone(phone) || busy} style={styles.textButton}><Text style={[styles.textButtonLabel, (!validPhone(phone) || busy) && styles.muted]}>문자 인증 시작하기</Text></Pressable>
         </View>
         {sent && <View style={styles.field}>
-          <Text style={styles.label}>인증번호</Text>
-          <TextInput style={styles.input} keyboardType="number-pad" placeholder="6자리 숫자" placeholderTextColor={colors.gray300} value={code} onChangeText={(v) => setCode(v.replace(/\D/g, '').slice(0, 6))} maxLength={6} autoFocus />
+          <Text style={styles.label}>아래 번호로 인증코드를 보내주세요</Text>
+          <View style={styles.codeCard}><Text style={styles.recipient}>{recipientNumber}</Text><Text style={styles.code}>인증코드 {code}</Text></View>
+          <Pressable onPress={openSms} style={styles.smsButton}><Text style={styles.smsButtonText}>문자 앱 열기</Text></Pressable>
         </View>}
         {error && <Text style={styles.error}>{error}</Text>}
         <View style={styles.footer}>
-          {sent && <Pressable onPress={linkPhone} disabled={code.length !== 6 || busy} style={[styles.cta, (code.length !== 6 || busy) && styles.ctaDisabled]}>{busy ? <ActivityIndicator color={colors.textInverse} /> : <Text style={styles.ctaText}>연결하고 시작하기</Text>}</Pressable>}
+          {sent && <Pressable onPress={linkPhone} disabled={code.length !== 6 || busy} style={[styles.cta, (code.length !== 6 || busy) && styles.ctaDisabled]}>{busy ? <ActivityIndicator color={colors.textInverse} /> : <Text style={styles.ctaText}>문자를 보냈어요</Text>}</Pressable>}
           <Pressable onPress={() => router.replace('/(tabs)')} disabled={busy} hitSlop={8}><Text style={styles.skip}>지금은 건너뛰기</Text></Pressable>
         </View>
       </KeyboardAvoidingView>
@@ -74,6 +81,11 @@ const styles = StyleSheet.create({
   textButton: { alignSelf: 'flex-end', paddingVertical: spacing.sm },
   textButtonLabel: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },
   muted: { color: colors.gray300 },
+  codeCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, alignItems: 'center', gap: spacing.xs },
+  recipient: { ...typography.body, color: colors.textSecondary },
+  code: { ...typography.headline, color: colors.textPrimary },
+  smsButton: { borderWidth: 1, borderColor: colors.sage, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center' },
+  smsButtonText: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },
   error: { ...typography.bodySm, color: colors.coralDark },
   footer: { gap: spacing.lg },
   cta: { minHeight: 54, borderRadius: radius.md, backgroundColor: colors.sage, alignItems: 'center', justifyContent: 'center' },
