@@ -39,7 +39,7 @@ function SettingsRow({
   const content = (
     <View style={styles.row}>
       <View style={styles.rowLeft}>
-        <Ionicons name={icon} size={18} color={destructive ? colors.coralDark : colors.textSecondary} />
+        <Ionicons name={icon} size={20} color={destructive ? colors.coralDark : colors.textSecondary} />
         <Text style={[styles.rowLabel, destructive && styles.rowLabelDestructive]}>{label}</Text>
       </View>
       {right}
@@ -218,12 +218,15 @@ export default function SettingsScreen() {
   return (
     <ScreenContainer>
       <Text style={styles.title}>설정</Text>
-{/* 프로필 헤더 — 카드 전체가 탭 영역. 별도 내 정보 화면(/my-info)으로 이동 (F22) */}
+{/* 프로필 헤더 — 이니셜 아바타 + 이름/전화. 카드 전체가 탭 영역 → 내 정보 화면(/my-info) (F22/F28) */}
 {user && (
   <Pressable onPress={() => router.push('/my-info')} accessibilityRole="button" accessibilityLabel="내 정보" style={({ pressed }) => pressed && styles.rowPressed}>
     <Card style={styles.profileCard}>
       <View style={styles.profileContent}>
-        <View>
+        <View style={styles.profileAvatar}>
+          <Text style={styles.profileAvatarText}>{(user.name ?? '사').charAt(0)}</Text>
+        </View>
+        <View style={styles.profileText}>
           <Text style={styles.profileName}>{user.name}</Text>
           <Text style={styles.profilePhone}>{maskPhone(user.phoneNumber)}</Text>
         </View>
@@ -239,15 +242,8 @@ export default function SettingsScreen() {
         <Text style={styles.sectionTitle}>개인정보 관리</Text>
         <Card>
           <SettingsRow
-            icon="body-outline"
-            label="안면 이미지 처리방침 확인"
-            right={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}
-            onPress={openPolicyModal}
-          />
-          <View style={styles.divider} />
-          <SettingsRow
-            icon="close-circle-outline"
-            label="데이터 처리 동의 철회"
+            icon="shield-checkmark-outline"
+            label="데이터 처리 동의 관리"
             right={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}
             onPress={openConsentModal}
           />
@@ -290,11 +286,11 @@ export default function SettingsScreen() {
               />
             </>
           )}
-          {!prefsLoading && !pushDeliveryAvailable && (
-            <Text style={styles.readyText}>푸시 알림은 준비 중이에요. 현재 설정은 변경할 수 없어요.</Text>
-          )}
-          {prefsError && <Text style={styles.errorText}>{prefsError}</Text>}
         </Card>
+        {!prefsLoading && !pushDeliveryAvailable && (
+          <Text style={styles.readyText}>푸시 알림은 준비 중이에요. 현재 설정은 변경할 수 없어요.</Text>
+        )}
+        {prefsError && <Text style={styles.errorText}>{prefsError}</Text>}
       </View>
 
       <View>
@@ -314,11 +310,13 @@ export default function SettingsScreen() {
             right={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}
             onPress={confirmLogout}
           />
-          <View style={styles.divider} />
+        </Card>
+        {/* F28: 파괴적 액션(탈퇴)은 별도 구역에 경고색으로 분리 */}
+        <Card style={styles.withdrawCard}>
           <SettingsRow
             icon="trash-outline"
             label="회원 탈퇴"
-            right={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}
+            right={<Ionicons name="chevron-forward" size={18} color={colors.coralDark} />}
             onPress={handleWithdraw}
             destructive
           />
@@ -329,6 +327,13 @@ export default function SettingsScreen() {
         <Text style={styles.sectionTitle}>앱</Text>
         <Card>
           <SettingsRow icon="information-circle-outline" label="버전" right={<Text style={styles.versionText}>1.0.0</Text>} />
+          <View style={styles.divider} />
+          <SettingsRow
+            icon="document-text-outline"
+            label="개인정보 처리방침"
+            right={<Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />}
+            onPress={openPolicyModal}
+          />
         </Card>
       </View>
 
@@ -384,36 +389,42 @@ export default function SettingsScreen() {
               <View style={styles.modalEmpty}>
                 <ActivityIndicator color={colors.sage} />
               </View>
-            ) : myConsents === null ? (
+            ) : registry === null && myConsents === null ? (
               <View style={styles.modalEmpty}>
                 <Text style={styles.modalEmptyText}>동의 내역을 불러올 수 없어요</Text>
               </View>
-            ) : myConsents.length === 0 ? (
+            ) : (registry ?? (myConsents ?? [])).length === 0 ? (
               <View style={styles.modalEmpty}>
                 <Text style={styles.modalEmptyText}>저장된 동의 내역이 없어요</Text>
               </View>
             ) : (
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md }}>
-                {myConsents.map((c) => {
-                  const info = registry?.find((r) => r.purpose === c.purpose);
+                {/* F26: registry 기준으로 전 항목 표시 — 아직 동의한 적 없는 항목도 "미동의"로 노출해 재동의 경로 제공 */}
+                {(registry ?? (myConsents ?? []).map((c) => ({ purpose: c.purpose, title: c.purpose, description: '', required: false, currentVersion: c.version, withdrawalPolicy: 'keep_results' as const }))).map((info) => {
+                  const purpose = info.purpose;
+                  const record = myConsents?.find((c) => c.purpose === purpose);
+                  const agreed = record?.agreed ?? false;
                   return (
-                    <View key={c.purpose} style={styles.consentItem}>
+                    <View key={purpose} style={styles.consentItem}>
                       <View style={{ flex: 1, gap: 2 }}>
-                        <Text style={styles.consentItemTitle}>{info?.title ?? c.purpose}</Text>
+                        <Text style={styles.consentItemTitle}>{info.title}</Text>
                         <Text style={styles.consentItemState}>
-                          {c.agreed ? `동의 중 (v${c.version})` : '철회됨'}
+                          {record ? (agreed ? `동의 중 (v${record.version})` : '철회됨') : '미동의'}
                         </Text>
+                        {info.description ? (
+                          <Text style={styles.consentItemDesc} numberOfLines={2}>{info.description}</Text>
+                        ) : null}
                       </View>
-                      {c.agreed ? (
+                      {agreed ? (
                         <Pressable
-                          onPress={() => revokeConsent(c.purpose)}
+                          onPress={() => revokeConsent(purpose)}
                           disabled={revokingPurpose !== null}
                           style={({ pressed }) => [
                             styles.revokeButton,
                             pressed && styles.revokeButtonPressed,
                           ]}
                         >
-                          {revokingPurpose === c.purpose ? (
+                          {revokingPurpose === purpose ? (
                             <ActivityIndicator size="small" color={colors.coralDark} />
                           ) : (
                             <Text style={styles.revokeButtonText}>철회</Text>
@@ -421,11 +432,11 @@ export default function SettingsScreen() {
                         </Pressable>
                       ) : (
                         <Pressable
-                          onPress={() => agreeConsent(c.purpose)}
+                          onPress={() => agreeConsent(purpose)}
                           disabled={revokingPurpose !== null}
                           style={styles.agreeButton}
                         >
-                          <Text style={styles.agreeButtonText}>다시 동의</Text>
+                          <Text style={styles.agreeButtonText}>{record ? '다시 동의' : '동의'}</Text>
                         </Pressable>
                       )}
                     </View>
@@ -447,6 +458,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: 52,
     paddingVertical: spacing.sm,
   },
   rowPressed: { opacity: 0.6 },
@@ -459,9 +471,24 @@ const styles = StyleSheet.create({
   readyText: { ...typography.caption, color: colors.textTertiary, marginTop: spacing.sm },
   versionText: { ...typography.bodySm, color: colors.textSecondary },
   readyBadge: { ...typography.caption, color: colors.textTertiary },
+  withdrawCard: {
+    marginTop: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.coralLight ?? colors.coral,
+  },
   planRow: { flexDirection: 'row', gap: spacing.md },
     profileCard: { marginBottom: spacing.md },
   profileContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md },
+  profileAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.full,
+    backgroundColor: colors.sageLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileAvatarText: { ...typography.headline, color: colors.sageDark, fontWeight: '700' },
+  profileText: { flex: 1, gap: 2 },
   profileName: { ...typography.subtitle, fontWeight: '600', color: colors.textPrimary },
   profilePhone: { ...typography.caption, color: colors.textTertiary },
   profileChevron: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
@@ -515,6 +542,7 @@ const styles = StyleSheet.create({
   },
   consentItemTitle: { ...typography.bodySm, color: colors.textPrimary, fontWeight: '600' },
   consentItemState: { ...typography.caption, color: colors.textTertiary },
+  consentItemDesc: { ...typography.caption, color: colors.textTertiary },
   revokeButton: {
     borderWidth: 1,
     borderColor: colors.coral,
