@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -9,7 +10,6 @@ import {
   StyleSheet,
   Switch,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { api } from '../../src/api/client';
@@ -63,9 +63,6 @@ export default function SettingsScreen() {
   const [prefsError, setPrefsError] = useState<string | null>(null);
   const [pushDeliveryAvailable, setPushDeliveryAvailable] = useState(false);
   const [user, setUser] = useState<User | null>(null);
-  const [profileModalOpen, setProfileModalOpen] = useState(false);
-  const [editingName, setEditingName] = useState('');
-  const [profileSaving, setProfileSaving] = useState(false);
   // 낙관적 갱신 중 연타로 요청이 뒤섞이지 않도록 저장 완료까지 토글을 잠근다.
   const prefsSavingRef = useRef(false);
 
@@ -216,39 +213,27 @@ export default function SettingsScreen() {
     ]);
   };
 
-  const saveProfile = async () => {
-    const name = editingName.trim();
-    if (!name || profileSaving) return;
-    setProfileSaving(true);
-    try {
-      const updated = await api.updateMe({ name });
-      setUser(updated);
-      setProfileModalOpen(false);
-    } catch {
-      Alert.alert('수정 실패', '프로필을 저장하지 못했어요.');
-    } finally {
-      setProfileSaving(false);
-    }
-  };
-
   const policy = registry?.find((r) => r.purpose === 'diagnosis_image_processing');
 
   return (
     <ScreenContainer>
       <Text style={styles.title}>설정</Text>
-{/* 프로필 헤더 */}
+{/* 프로필 헤더 — 카드 전체가 탭 영역. 별도 내 정보 화면(/my-info)으로 이동 (F22) */}
 {user && (
-  <Card style={styles.profileCard}>
-    <View style={styles.profileContent}>
-      <View>
-        <Text style={styles.profileName}>{user.name}</Text>
-        <Text style={styles.profilePhone}>{maskPhone(user.phoneNumber)}</Text>
+  <Pressable onPress={() => router.push('/my-info')} accessibilityRole="button" accessibilityLabel="내 정보" style={({ pressed }) => pressed && styles.rowPressed}>
+    <Card style={styles.profileCard}>
+      <View style={styles.profileContent}>
+        <View>
+          <Text style={styles.profileName}>{user.name}</Text>
+          <Text style={styles.profilePhone}>{maskPhone(user.phoneNumber)}</Text>
+        </View>
+        <View style={styles.profileChevron}>
+          <Text style={styles.profileEdit}>내 정보</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.sage} />
+        </View>
       </View>
-      <Pressable onPress={() => { setEditingName(user.name); setProfileModalOpen(true); }}>
-        <Text style={styles.profileEdit}>수정</Text>
-      </Pressable>
-    </View>
-  </Card>
+    </Card>
+  </Pressable>
 )}
       <View>
         <Text style={styles.sectionTitle}>개인정보 관리</Text>
@@ -346,19 +331,6 @@ export default function SettingsScreen() {
           <SettingsRow icon="information-circle-outline" label="버전" right={<Text style={styles.versionText}>1.0.0</Text>} />
         </Card>
       </View>
-
-      <Modal visible={profileModalOpen} transparent animationType="fade" onRequestClose={() => setProfileModalOpen(false)}>
-        <View style={[styles.modalOverlay, styles.profileModalOverlay]}>
-          <View style={styles.profileModal}>
-            <Text style={styles.modalTitle}>프로필 수정</Text>
-            <TextInput value={editingName} onChangeText={setEditingName} maxLength={20} placeholder="이름" style={styles.profileInput} autoFocus />
-            <View style={styles.profileActions}>
-              <Pressable onPress={() => setProfileModalOpen(false)}><Text style={styles.cancelText}>취소</Text></Pressable>
-              <Pressable onPress={saveProfile} disabled={!editingName.trim() || profileSaving}><Text style={styles.saveText}>{profileSaving ? '저장 중…' : '저장'}</Text></Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       {/* 안면 이미지 처리방침 확인 */}
       <Modal
@@ -488,17 +460,12 @@ const styles = StyleSheet.create({
   versionText: { ...typography.bodySm, color: colors.textSecondary },
   readyBadge: { ...typography.caption, color: colors.textTertiary },
   planRow: { flexDirection: 'row', gap: spacing.md },
-  profileCard: { marginBottom: spacing.md },
-profileContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md },
-profileName: { ...typography.subtitle, fontWeight: '600', color: colors.textPrimary },
-profilePhone: { ...typography.caption, color: colors.textTertiary },
-profileEdit: { ...typography.body, color: colors.sage },
-  profileModalOverlay: { justifyContent: 'center' },
-  profileModal: { margin: spacing.xl, backgroundColor: colors.background, borderRadius: radius.lg, padding: spacing.xl, gap: spacing.lg },
-  profileInput: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md, ...typography.body, color: colors.textPrimary },
-  profileActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.xl },
-  cancelText: { ...typography.body, color: colors.textSecondary },
-  saveText: { ...typography.body, color: colors.sageDark, fontWeight: '700' },
+    profileCard: { marginBottom: spacing.md },
+  profileContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md },
+  profileName: { ...typography.subtitle, fontWeight: '600', color: colors.textPrimary },
+  profilePhone: { ...typography.caption, color: colors.textTertiary },
+  profileChevron: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  profileEdit: { ...typography.body, color: colors.sage },
   planCard: { flex: 1, gap: spacing.xs },
   planCardActive: { backgroundColor: colors.sage },
   planName: { ...typography.subtitle, color: colors.textPrimary },

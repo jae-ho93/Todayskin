@@ -4,15 +4,12 @@ import {
   ActivityIndicator,
   Keyboard,
   KeyboardAvoidingView,
-  LayoutAnimation,
   Linking,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  UIManager,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -22,10 +19,6 @@ import { clearPendingConsents, getPendingConsents } from '../../src/lib/pendingC
 import { saveSession } from '../../src/lib/session';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type { Gender, SocialProvider } from '../../src/types';
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 // 010 번호는 항상 11자리(3-4-4)다. 정규식의 \d{3,4} 같은 가변 길이 매칭을 쓰면
 // 10자리까지만 입력한 상태(마지막 한 자리 남음)에서도 "완성"으로 오판해 너무 일찍 다음
@@ -69,8 +62,11 @@ function toIsoDate(digits: string): string {
 
 type Field = 'name' | 'phone' | 'birthDate';
 
+// 화면: 회원가입 — 2단계 분리 (당근 패턴).
+// ① 전화번호+OTP 인증 (소셜 가입 병행) → ② 이름·생년월일·성별.
+// 각 단계는 스크롤 없는 한 화면에 맞춰 구성한다.
 export default function SignupScreen() {
-  const [step, setStep] = useState(0); // 0: 이름만, 1: +전화번호(+OTP), 2: +생년월일
+  const [phase, setPhase] = useState<'phone' | 'profile'>('phone');
   const [name, setName] = useState('');
   const [phoneDigits, setPhoneDigits] = useState('');
   const [otpSent, setOtpSent] = useState(false);
@@ -82,11 +78,11 @@ export default function SignupScreen() {
   const [birthDateDigits, setBirthDateDigits] = useState('');
   const [gender, setGender] = useState<Gender | null>(null); // 선택 입력이라 폼 유효성엔 영향 없음
   const [busyProvider, setBusyProvider] = useState<SocialProvider | null>(null);
-  const [focusedField, setFocusedField] = useState<Field | null>('name');
+  const [focusedField, setFocusedField] = useState<Field | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const phoneInputRef = useRef<TextInput>(null);
+  const nameInputRef = useRef<TextInput>(null);
   const birthDateInputRef = useRef<TextInput>(null);
 
   const trimmedName = name.trim();
@@ -94,37 +90,17 @@ export default function SignupScreen() {
   const isPhoneValid = isValidPhoneDigits(phoneDigits);
   const isOtpValid = otpCode.length === 6;
   const isBirthDateValid = isValidBirthDate(birthDateDigits);
-  const isValid = isNameValid && isPhoneValid && phoneVerified && isBirthDateValid;
+  const isValid = isNameValid && phoneVerified && isBirthDateValid;
 
-  const revealStep = (next: number) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setStep((s) => Math.max(s, next));
-  };
+  // 2단계 진입 시 이름 입력칸에 포커스
+  useEffect(() => {
+    if (phase === 'profile') nameInputRef.current?.focus();
+  }, [phase]);
 
   // 마지막 항목까지 다 채워서 폼 전체가 유효해지면 자동으로 키보드를 내려 CTA 버튼이 바로 보이게 한다
   useEffect(() => {
     if (isValid) Keyboard.dismiss();
   }, [isValid]);
-
-  // step이 바뀌어 새 입력칸이 화면에 막 마운트된 "다음" 렌더에서 포커스를 옮긴다.
-  // setStep과 같은 틱에서 바로 .focus()를 부르면 아직 마운트 전이라 씹히기 때문에 분리했다.
-  useEffect(() => {
-    if (step === 1) phoneInputRef.current?.focus();
-    if (step === 2) birthDateInputRef.current?.focus();
-  }, [step]);
-
-  // 각 필드는 타이핑 도중 자동으로 넘어가지 않고, 키보드의 "다음" 버튼(리턴키)을 눌러야만 다음 칸이 나타난다
-  const handleNameSubmit = () => {
-    if (!isNameValid) return;
-    revealStep(1);
-  };
-
-  // 이름이 유효해지면 자동으로 전화번호 필드로 포커스 이동
-  useEffect(() => {
-    if (isNameValid && step === 0) {
-      revealStep(1);
-    }
-  }, [isNameValid, step]);
 
   // 번호를 다시 바꾸면 이전 인증은 무효 — 새 번호로 다시 인증번호를 받아야 한다
   const handlePhoneChange = (v: string) => {
@@ -165,7 +141,7 @@ export default function SignupScreen() {
     try {
       await api.verifyOtp(phoneDigits, otpCode, 'signup');
       setPhoneVerified(true);
-      revealStep(2);
+      Keyboard.dismiss();
     } catch (e) {
       setError(e instanceof Error ? e.message : '인증번호가 올바르지 않습니다.');
     } finally {
@@ -228,168 +204,195 @@ export default function SignupScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View>
-            <Text style={styles.headline}>회원가입</Text>
-            <Text style={styles.subtitle}>휴대폰 인증으로 가입하거나 소셜 계정으로 바로 시작하세요</Text>
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>이름</Text>
-            <TextInput
-              style={[styles.input, focusedField === 'name' && styles.inputFocused]}
-              placeholder="홍길동"
-              placeholderTextColor={colors.gray300}
-              value={name}
-              onChangeText={setName}
-              onFocus={() => setFocusedField('name')}
-              onBlur={() => setFocusedField(null)}
-              maxLength={20}
-              returnKeyType="next"
-              onSubmitEditing={handleNameSubmit}
-              blurOnSubmit={false}
-              autoFocus
-            />
-          </View>
-
-          {step >= 1 && (
-            <View style={styles.field}>
-              <Text style={styles.label}>휴대폰 번호</Text>
-              <TextInput
-                ref={phoneInputRef}
-                style={[styles.input, focusedField === 'phone' && styles.inputFocused]}
-                placeholder="010-1234-5678"
-                placeholderTextColor={colors.gray300}
-                keyboardType="number-pad"
-                value={formatPhoneDisplay(phoneDigits)}
-                onChangeText={handlePhoneChange}
-                onFocus={() => setFocusedField('phone')}
-                onBlur={() => setFocusedField(null)}
-                maxLength={13}
-                editable={!phoneVerified}
-              />
-              {/* number-pad 키보드는 iOS에 리턴키가 없어서, 버튼을 화면에 직접 둔다 */}
-              {!otpSent && !phoneVerified && (
-                <Pressable
-                  onPress={handleSendOtp}
-                  disabled={!isPhoneValid || sendingOtp}
-                  hitSlop={8}
-                  style={styles.nextButton}
-                >
-                  {sendingOtp ? (
-                    <ActivityIndicator size="small" color={colors.sageDark} />
-                  ) : (
-                    <Text style={[styles.nextButtonText, !isPhoneValid && styles.nextButtonTextDisabled]}>
-                      문자 인증 시작하기
-                    </Text>
-                  )}
-                </Pressable>
-              )}
+        {phase === 'phone' ? (
+          <View style={styles.body}>
+            <View>
+              <Text style={styles.headline}>회원가입</Text>
+              <Text style={styles.subtitle}>휴대폰 인증으로 가입하거나 소셜 계정으로 바로 시작하세요</Text>
             </View>
-          )}
 
-          {otpSent && !phoneVerified && (
-            <View style={styles.field}>
-              <Text style={styles.label}>아래 번호로 인증코드를 보내주세요</Text>
-              <View style={styles.codeCard}><Text style={styles.recipient}>{recipientNumber}</Text><Text style={styles.code}>인증코드 {otpCode}</Text></View>
-              <Pressable onPress={openSms} style={styles.smsButton}><Text style={styles.smsButtonText}>문자 앱 열기</Text></Pressable>
-              <View style={styles.otpActionRow}>
-                <Pressable onPress={handleSendOtp} disabled={sendingOtp} hitSlop={8}>
-                  <Text style={styles.nextButtonText}>새 코드 받기</Text>
-                </Pressable>
-                <Pressable
-                  onPress={handleVerifyOtp}
-                  disabled={!isOtpValid || verifyingOtp}
-                  hitSlop={8}
-                  style={styles.nextButton}
-                >
-                  {verifyingOtp ? (
-                    <ActivityIndicator size="small" color={colors.sageDark} />
-                  ) : (
-                    <Text style={[styles.nextButtonText, !isOtpValid && styles.nextButtonTextDisabled]}>
-                      문자를 보냈어요
-                    </Text>
-                  )}
-                </Pressable>
-              </View>
-            </View>
-          )}
-
-          {step >= 2 && (
-            <View style={styles.field}>
-              <Text style={styles.label}>생년월일</Text>
-              <TextInput
-                ref={birthDateInputRef}
-                style={[styles.input, focusedField === 'birthDate' && styles.inputFocused]}
-                placeholder="2000.01.01"
-                placeholderTextColor={colors.gray300}
-                keyboardType="number-pad"
-                value={formatBirthDateDisplay(birthDateDigits)}
-                onChangeText={(v) => setBirthDateDigits(v.replace(/[^0-9]/g, '').slice(0, 8))}
-                onFocus={() => setFocusedField('birthDate')}
-                onBlur={() => setFocusedField(null)}
-                maxLength={10}
-              />
-            </View>
-          )}
-
-          {step >= 2 && (
-            <View style={styles.field}>
-              <Text style={styles.label}>성별 (선택)</Text>
-              <View style={styles.genderRow}>
-                {(
-                  [
-                    { value: 'female' as const, label: '여성' },
-                    { value: 'male' as const, label: '남성' },
-                  ]
-                ).map((option) => {
-                  const selected = gender === option.value;
-                  return (
-                    <Pressable
-                      key={option.value}
-                      onPress={() => setGender(selected ? null : option.value)}
-                      style={[styles.genderPill, selected && styles.genderPillSelected]}
-                    >
-                      <Text style={[styles.genderPillText, selected && styles.genderPillTextSelected]}>
-                        {option.label}
+            <View style={styles.middle}>
+              <View style={styles.field}>
+                <Text style={styles.label}>휴대폰 번호</Text>
+                <TextInput
+                  style={[styles.input, focusedField === 'phone' && styles.inputFocused]}
+                  placeholder="010-1234-5678"
+                  placeholderTextColor={colors.gray300}
+                  keyboardType="number-pad"
+                  value={formatPhoneDisplay(phoneDigits)}
+                  onChangeText={handlePhoneChange}
+                  onFocus={() => setFocusedField('phone')}
+                  onBlur={() => setFocusedField(null)}
+                  maxLength={13}
+                  editable={!phoneVerified}
+                  autoFocus
+                />
+                {/* number-pad 키보드는 iOS에 리턴키가 없어서, 버튼을 화면에 직접 둔다 */}
+                {!otpSent && !phoneVerified && (
+                  <Pressable
+                    onPress={handleSendOtp}
+                    disabled={!isPhoneValid || sendingOtp}
+                    hitSlop={8}
+                    style={styles.nextButton}
+                  >
+                    {sendingOtp ? (
+                      <ActivityIndicator size="small" color={colors.sageDark} />
+                    ) : (
+                      <Text style={[styles.nextButtonText, !isPhoneValid && styles.nextButtonTextDisabled]}>
+                        문자 인증 시작하기
                       </Text>
-                    </Pressable>
-                  );
-                })}
+                    )}
+                  </Pressable>
+                )}
               </View>
+
+              {otpSent && !phoneVerified && (
+                <View style={styles.field}>
+                  <Text style={styles.label}>아래 번호로 인증코드를 보내주세요</Text>
+                  <View style={styles.codeCard}><Text style={styles.recipient}>{recipientNumber}</Text><Text style={styles.code}>인증코드 {otpCode}</Text></View>
+                  <Pressable onPress={openSms} style={styles.smsButton}><Text style={styles.smsButtonText}>문자 앱 열기</Text></Pressable>
+                  <View style={styles.otpActionRow}>
+                    <Pressable onPress={handleSendOtp} disabled={sendingOtp} hitSlop={8}>
+                      <Text style={styles.nextButtonText}>새 코드 받기</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={handleVerifyOtp}
+                      disabled={!isOtpValid || verifyingOtp}
+                      hitSlop={8}
+                      style={styles.nextButton}
+                    >
+                      {verifyingOtp ? (
+                        <ActivityIndicator size="small" color={colors.sageDark} />
+                      ) : (
+                        <Text style={[styles.nextButtonText, !isOtpValid && styles.nextButtonTextDisabled]}>
+                          문자를 보냈어요
+                        </Text>
+                      )}
+                    </Pressable>
+                  </View>
+                </View>
+              )}
+
+              {phoneVerified && (
+                <Text style={styles.verifiedText}>휴대폰 인증이 완료됐어요 ✓</Text>
+              )}
+
+              {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
             </View>
-          )}
 
-          {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-        </ScrollView>
+            <View style={styles.footer}>
+              <Pressable
+                onPress={() => setPhase('profile')}
+                disabled={!phoneVerified}
+                style={({ pressed }) => [
+                  styles.cta,
+                  !phoneVerified && styles.ctaDisabled,
+                  pressed && phoneVerified && styles.ctaPressed,
+                ]}
+              >
+                <Text style={styles.ctaText}>다음</Text>
+              </Pressable>
 
-        <View style={styles.footer}>
-          <Pressable
-            onPress={handleSubmit}
-            disabled={!isValid || submitting}
-            style={({ pressed }) => [
-              styles.cta,
-              (!isValid || submitting) && styles.ctaDisabled,
-              pressed && isValid && !submitting && styles.ctaPressed,
-            ]}
-          >
-            {submitting ? (
-              <ActivityIndicator color={colors.textInverse} />
-            ) : (
-              <Text style={styles.ctaText}>가입하고 시작하기</Text>
-            )}
-          </Pressable>
+              <SocialLoginButtons compact busyProvider={busyProvider} onToken={handleSocialToken} onError={setError} />
+              <Text style={styles.terms}>가입하면 서비스 이용약관과 개인정보 처리방침에 동의한 것으로 간주됩니다.</Text>
+              <Pressable onPress={() => router.replace('/onboarding/login')} hitSlop={8}>
+                <Text style={styles.loginLink}>이미 계정이 있으신가요? 로그인</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.body}>
+            <View>
+              <Pressable onPress={() => setPhase('phone')} hitSlop={8} style={styles.backLink}>
+                <Text style={styles.backLinkText}>← 이전</Text>
+              </Pressable>
+              <Text style={styles.headline}>마지막 단계예요</Text>
+              <Text style={styles.subtitle}>이름과 생년월일을 입력해주세요</Text>
+            </View>
 
-          <Pressable onPress={() => router.replace('/onboarding/login')} hitSlop={8}>
-            <Text style={styles.loginLink}>이미 계정이 있으신가요? 로그인</Text>
-          </Pressable>
-          <SocialLoginButtons busyProvider={busyProvider} onToken={handleSocialToken} onError={setError} />
-          <Text style={styles.terms}>가입하면 서비스 이용약관과 개인정보 처리방침에 동의한 것으로 간주됩니다.</Text>
-        </View>
+            <View style={styles.middle}>
+              <View style={styles.field}>
+                <Text style={styles.label}>이름</Text>
+                <TextInput
+                  ref={nameInputRef}
+                  style={[styles.input, focusedField === 'name' && styles.inputFocused]}
+                  placeholder="홍길동"
+                  placeholderTextColor={colors.gray300}
+                  value={name}
+                  onChangeText={setName}
+                  onFocus={() => setFocusedField('name')}
+                  onBlur={() => setFocusedField(null)}
+                  maxLength={20}
+                  returnKeyType="next"
+                  onSubmitEditing={() => birthDateInputRef.current?.focus()}
+                  blurOnSubmit={false}
+                />
+              </View>
+
+              <View style={styles.field}>
+                <Text style={styles.label}>생년월일</Text>
+                <TextInput
+                  ref={birthDateInputRef}
+                  style={[styles.input, focusedField === 'birthDate' && styles.inputFocused]}
+                  placeholder="2000.01.01"
+                  placeholderTextColor={colors.gray300}
+                  keyboardType="number-pad"
+                  value={formatBirthDateDisplay(birthDateDigits)}
+                  onChangeText={(v) => setBirthDateDigits(v.replace(/[^0-9]/g, '').slice(0, 8))}
+                  onFocus={() => setFocusedField('birthDate')}
+                  onBlur={() => setFocusedField(null)}
+                  maxLength={10}
+                />
+              </View>
+
+              <View style={styles.field}>
+                <Text style={styles.label}>성별 (선택)</Text>
+                <View style={styles.genderRow}>
+                  {(
+                    [
+                      { value: 'female' as const, label: '여성' },
+                      { value: 'male' as const, label: '남성' },
+                    ]
+                  ).map((option) => {
+                    const selected = gender === option.value;
+                    return (
+                      <Pressable
+                        key={option.value}
+                        onPress={() => setGender(selected ? null : option.value)}
+                        style={[styles.genderPill, selected && styles.genderPillSelected]}
+                      >
+                        <Text style={[styles.genderPillText, selected && styles.genderPillTextSelected]}>
+                          {option.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+            </View>
+
+            <View style={styles.footer}>
+              <Pressable
+                onPress={handleSubmit}
+                disabled={!isValid || submitting}
+                style={({ pressed }) => [
+                  styles.cta,
+                  (!isValid || submitting) && styles.ctaDisabled,
+                  pressed && isValid && !submitting && styles.ctaPressed,
+                ]}
+              >
+                {submitting ? (
+                  <ActivityIndicator color={colors.textInverse} />
+                ) : (
+                  <Text style={styles.ctaText}>가입하고 시작하기</Text>
+                )}
+              </Pressable>
+              <Text style={styles.terms}>가입하면 서비스 이용약관과 개인정보 처리방침에 동의한 것으로 간주됩니다.</Text>
+            </View>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -398,9 +401,12 @@ export default function SignupScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.xl },
   keyboardAvoiding: { flex: 1 },
-  scrollContent: { flexGrow: 1, gap: spacing.xxl, justifyContent: 'center', paddingVertical: spacing.xl },
+  body: { flex: 1, justifyContent: 'space-between', paddingVertical: spacing.xl, gap: spacing.xl },
+  middle: { gap: spacing.xl },
   headline: { ...typography.displayLg, color: colors.textPrimary },
   subtitle: { ...typography.body, color: colors.textSecondary, marginTop: spacing.sm },
+  backLink: { marginBottom: spacing.sm },
+  backLinkText: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },
   field: { gap: spacing.sm },
   label: { ...typography.subtitle, color: colors.textSecondary },
   input: {
@@ -440,6 +446,7 @@ const styles = StyleSheet.create({
   code: { ...typography.headline, color: colors.textPrimary },
   smsButton: { borderWidth: 1, borderColor: colors.sage, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center' },
   smsButtonText: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },
+  verifiedText: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },
   error: { ...typography.bodySm, color: colors.coralDark },
   footer: { gap: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.md },
   cta: {

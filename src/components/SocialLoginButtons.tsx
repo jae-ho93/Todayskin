@@ -20,9 +20,11 @@ type Props = {
   busyProvider: SocialProvider | null;
   onToken: (provider: SocialProvider, token: string) => Promise<void>;
   onError: (message: string | null) => void;
+  /** true면 풀폭 텍스트 버튼 대신 아이콘 원형 48px 3개 (토스/배민 스타일) */
+  compact?: boolean;
 };
 
-export function SocialLoginButtons({ busyProvider, onToken, onError }: Props) {
+export function SocialLoginButtons({ busyProvider, onToken, onError, compact = false }: Props) {
   const kakaoClientId = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
   const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
   const googleAndroidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
@@ -115,6 +117,19 @@ export function SocialLoginButtons({ busyProvider, onToken, onError }: Props) {
   };
 
   const disabled = busyProvider !== null;
+  if (compact) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.divider}><View style={styles.line} /><Text style={styles.or}>소셜 계정으로 계속</Text><View style={styles.line} /></View>
+        <View style={styles.iconRow}>
+          <SocialIcon label="카카오로 계속하기" background="#FEE500" color="#191919" icon="chatbubble" loading={busyProvider === 'kakao'} disabled={disabled} onPress={() => kakaoClientId ? promptKakao() : showNotConfigured('카카오')} />
+          <SocialIcon label="Google로 계속하기" background={colors.surface} color={colors.textPrimary} icon="logo-google" outlined loading={busyProvider === 'google'} disabled={disabled} onPress={() => (googleIosClientId || googleAndroidClientId || googleWebClientId) ? promptGoogle() : showNotConfigured('Google')} />
+          <SocialIcon label="Apple로 계속하기" background="#000000" color="#FFFFFF" icon="logo-apple" loading={busyProvider === 'apple'} disabled={disabled} onPress={handleApple} />
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.divider}><View style={styles.line} /><Text style={styles.or}>소셜 계정으로 계속</Text><View style={styles.line} /></View>
@@ -122,6 +137,14 @@ export function SocialLoginButtons({ busyProvider, onToken, onError }: Props) {
       <SocialButton label="Google로 계속하기" background={colors.surface} color={colors.textPrimary} icon="logo-google" loading={busyProvider === 'google'} disabled={disabled} onPress={() => (googleIosClientId || googleAndroidClientId || googleWebClientId) ? promptGoogle() : showNotConfigured('Google')} />
       <SocialButton label="Apple로 계속하기" background="#000000" color="#FFFFFF" icon="logo-apple" loading={busyProvider === 'apple'} disabled={disabled} onPress={handleApple} />
     </View>
+  );
+}
+
+function SocialIcon({ label, background, color, icon, outlined, loading, disabled, onPress }: { label: string; background: string; color: string; icon: keyof typeof Ionicons.glyphMap; outlined?: boolean; loading: boolean; disabled: boolean; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.iconButton, { backgroundColor: background }, outlined && styles.outlined, disabled && styles.disabled, pressed && !disabled && styles.pressed]}>
+      {loading ? <ActivityIndicator color={color} /> : <Ionicons name={icon} size={22} color={color} />}
+    </Pressable>
   );
 }
 
@@ -141,6 +164,15 @@ const styles = StyleSheet.create({
   button: { minHeight: 52, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg },
   outlined: { borderWidth: 1, borderColor: colors.border },
   buttonText: { ...typography.subtitle, fontWeight: '700' },
+  // 컴팩트: 아이콘 원형 48px — Apple HIG 최소 터치 타깃(44pt) 충족
+  iconRow: { flexDirection: 'row', justifyContent: 'center', gap: spacing.xl },
+  iconButton: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   disabled: { opacity: 0.55 },
   pressed: { opacity: 0.8 },
 });

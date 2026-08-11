@@ -224,6 +224,19 @@ async function authPutJson<T>(path: string, body: unknown): Promise<T> {
   return data as T;
 }
 
+async function authPatchJson<T>(path: string, body: unknown): Promise<T> {
+  // 백엔드 라우트는 PATCH(/auth/me) — PUT이 아니다. method 불일치 시 404가 난다.
+  const res = await fetchWithAuth(path, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+    timeoutMs: 8000,
+    contentType: 'application/json',
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(extractErrorMessage(data, res.status));
+  return data as T;
+}
+
 export const api = {
   // 기상청/에어코리아 등 외부 정부 API를 순차 호출하다 보니 응답이 0.5~16초까지 들쭉날쭉하다
   // (백엔드 자체 타임아웃 예산이 최대 약 16초). 기본 2.5초 타임아웃으로는 정상 응답도 자주 잘려서
@@ -337,7 +350,7 @@ export const api = {
   // F0: 현재 로그인 유저 부분 갱신 — name, gender (N28 설정에서 호출)
   // phone 변경은 별도 OTP 흐름 (이번 범위 밖)
   updateMe: (patch: { name?: string; gender?: Gender }) =>
-    authPutJson<User>('/auth/me', patch),
+    authPatchJson<User>('/auth/me', patch),
 
   // ──────────────── 기존 제품·추천 ────────────────
 
