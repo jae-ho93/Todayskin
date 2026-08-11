@@ -133,10 +133,31 @@ export default function CameraGuideScreen() {
 
         {error && <Text style={styles.introErrorText}>{error}</Text>}
 
+        {/* 카메라 권한 섹션 */}
+        <View style={styles.permissionSection}>
+          <Text style={styles.permissionSectionTitle}>📷 카메라 권한</Text>
+          <Text style={styles.permissionSectionBody}>
+            피부 분석을 위해 카메라 접근이 필요합니다.
+          </Text>
+
+          {permission.granted ? (
+            <View style={styles.permissionGranted}>
+              <Text style={styles.permissionGrantedText}>✓ 권한 허용됨</Text>
+            </View>
+          ) : (
+            <Pressable
+              style={styles.permissionRetryButton}
+              onPress={requestPermission}
+            >
+              <Text style={styles.permissionRetryText}>다시 시도</Text>
+            </Pressable>
+          )}
+        </View>
+
         <Pressable
-          style={[styles.introCta, wentOutside === null && styles.introCtaDisabled]}
+          style={[styles.introCta, (wentOutside === null || !permission.granted) && styles.introCtaDisabled]}
           onPress={() => setPhase('capture')}
-          disabled={wentOutside === null}
+          disabled={wentOutside === null || !permission.granted}
         >
           <Text style={styles.introCtaText}>촬영 시작하기</Text>
         </Pressable>
@@ -421,4 +442,30 @@ const styles = StyleSheet.create({
   },
   analyzingTitle: { ...typography.displaySm, color: colors.textPrimary },
   analyzingBody: { ...typography.body, color: colors.textSecondary, textAlign: 'center' },
+
+  // 카메라 권한 섹션
+  permissionSection: {
+    backgroundColor: colors.sage,
+    borderRadius: radius.md,
+    paddingVertical: spacing.lg,
+    alignItems: "center",
+  },
+  permissionSectionTitle: { ...typography.headline, color: colors.textPrimary },
+  permissionSectionBody: { ...typography.body, color: colors.textSecondary, textAlign: "center" },
+  permissionGranted: {
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: "rgba(0, 180, 100, 0.1)",
+  },
+  permissionGrantedText: { ...typography.subtitle, color: colors.sage, textAlign: "center" },
+  permissionRetryButton: {
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.sage,
+  },
+  permissionRetryText: { ...typography.subtitle, color: colors.textInverse },
 });
