@@ -172,11 +172,14 @@ export default function DiagnosisDetailScreen() {
 
 function formatCapturedAt(iso: string): string {
   const kst = new Date(new Date(iso).getTime() + 9 * 3600 * 1000);
+  const year = kst.getUTCFullYear();
+  const month = kst.getUTCMonth() + 1;
+  const day = kst.getUTCDate();
   const hour = kst.getUTCHours();
   const minute = String(kst.getUTCMinutes()).padStart(2, '0');
   const period = hour < 12 ? '오전' : '오후';
   const h12 = hour % 12 === 0 ? 12 : hour % 12;
-  return `${period} ${h12}:${minute}`;
+  return `${year}년 ${month}월 ${day}일 ${period} ${h12}:${minute}`;
 }
 
 function WeatherCard({ weather: w, capturedAt }: { weather: CalendarWeather; capturedAt: string }) {
@@ -189,7 +192,7 @@ function WeatherCard({ weather: w, capturedAt }: { weather: CalendarWeather; cap
           <Text style={styles.sourceText}>{source}</Text>
         </View>
       </View>
-      <Text style={styles.weatherTime}>촬영 시점 기준 · {formatCapturedAt(capturedAt)}</Text>
+      <Text style={styles.weatherTime}>{formatCapturedAt(capturedAt)} 촬영</Text>
       <View style={styles.weatherMetrics}>
         <WeatherMetric label="자외선" value={w.uvIndex} status={w.uvStatus} />
         <WeatherMetric label="초미세먼지" value={w.pm25} status={w.pm25Status} />
