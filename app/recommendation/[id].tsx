@@ -19,6 +19,7 @@ export default function RecommendationDetailScreen() {
   const [loading, setLoading] = useState(true);
   // 관련 제품은 부가 정보라 불러오기 실패해도 조용히 빈 목록으로 둔다(별도 실패 UI 없음)
   const [products, setProducts] = useState<Product[]>([]);
+  const { showToast } = useToast();
 
   useEffect(() => {
     if (!id) return;
@@ -57,8 +58,6 @@ export default function RecommendationDetailScreen() {
   }
 
   const relatedProducts = products.filter((p) => recommendation.relatedProductIds.includes(p.id));
-
-  const { showToast } = useToast();
 
   const openPurchaseUrl = async (product: Product) => {
     if (!product.purchaseUrl) {
