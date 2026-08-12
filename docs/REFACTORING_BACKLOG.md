@@ -16,6 +16,7 @@
 | B4 | ✅ 완료 (2026-08-12) | `refactor/r-batch-04-db-migration` | 운영 작업(코드 밖): ① 마이그레이션 배포 후 R11 스윕을 `RETENTION_SWEEP_MODE=dry-run`으로 켜서 삭제 대상 규모 확인 → ② RDS 스냅샷 확보 → ③ `delete`로 전환. 기본값 `off`이므로 배포만으로는 아무 데이터도 지워지지 않는다 |
 | B5 | ✅ 완료 (2026-08-12) | `refactor/r-batch-05-backend-structure` | 운영 작업(코드 밖): R9 캐시 TTL 10분이므로 상품 시드 직후 즉시 반영이 필요하면 `POST /admin/products/cache/invalidate`를 호출한다. R30 타임아웃 조정이 필요하면 `GEMINI_TIMEOUT_MS`로 조절 |
 | B6 | ✅ 완료 (2026-08-12) | `refactor/r-batch-06-contract-frontend` | 남은 일(코드 밖 없음). 보류 항목 2건: R27 3번(StyleSheet 분리), R28의 수기 타입 → 생성 타입 전면 재export. 백엔드 DTO를 바꾸면 `npm run openapi:export --prefix backend && npm run openapi:types`를 돌려 커밋해야 CI가 통과한다 |
+| B6 사후 검증 | ✅ 완료 (2026-08-12) | `fix/b6-followup-behavior-parity` | 독립 검증에서 나온 동작 편차 6건 정리 — 아래 "B6 사후 검증" 참고 |
 
 ## 작업 묶음 (Batch)
 
@@ -30,6 +31,30 @@
 | **B4. DB (한 마이그레이션)** ✅ | R33, R10, R11, R21 | `refactor/r-batch-04-db-migration` | 인덱스·컬럼·보존을 한 마이그레이션으로 묶음 |
 | **B5. 백엔드 구조 (동작 보존)** ✅ | R7, R8, R9, R12, R20, R22, R23, R24, R30, R35 | `refactor/r-batch-05-backend-structure` | 순수 구조 개선 — 동작 불변 목표 |
 | **B6. 계약·프론트 구조** ✅ | R5, R14, R25, R26, R27, R28 | `refactor/r-batch-06-contract-frontend` | B2 완료 후 권장 (strict·테스트가 회귀를 잡음) |
+
+## B6 사후 검증 (2026-08-12)
+
+B6 머지 후 원본 화면과 1:1 대조 + 독립 검증(게이트 8종 재실행, 뮤테이션 테스트 8건)을 돌렸다.
+동작 보존은 확인됐고(치명·중요 0건), 발견한 편차 6건을 `fix/b6-followup-behavior-parity`에서 정리했다.
+
+| # | 편차 | 처리 |
+|---|---|---|
+| 1 | `useHomeDashboard`의 catch가 `weather`를 오류로 내리지 않아 스피너가 남을 수 있었다(현재 `authFetch`가 예외를 삼켜 도달 불가한 잠재 결함) | 수정 — catch에서 성공 값이 없으면 `errorState`로 내린다 |
+| 2 | 재발송 중·재발송 실패 시 이미 받은 코드를 버려서 "인증하기" 버튼이 사라졌다 | 수정 — `sending`도 직전 코드를 들고 있고, 실패 시 그 코드로 되돌린다 |
+| 3 | `verify()`가 직전 오류 문구를 지우지 않아 성공 토스트와 빨간 문구가 함께 남았다 | 수정 — 새 시도 시작 시 `onError(null)` |
+| 4 | 동의 연타(in-flight) 시 `false`를 돌려줘 거짓 실패 토스트가 떴다(UI에서 버튼이 disabled라 거의 도달 불가) | 수정 — 반환을 `'ok' \| 'busy' \| 'failed'`로 넓혀 `busy`는 조용히 넘긴다 |
+| 5 | 스코어를 이미 보여주는 중 조회가 일시 실패하면 카드가 사라졌다(원본은 카드 + 오류 문구를 동시에 띄웠다) | 수정 — 성공 값이 있으면 유지하고 토스트로만 알린다 (F52와 일관) |
+| 6 | 제품 화면이 로드 시작 시 이전 잡을 취소하지 않아 홈과 비대칭이었다 | 수정 — `load()` 첫 줄에서 `cancel()` |
+
+**의도된 차이로 남긴 것**: 공개 조회 타임아웃이 2.5초(`safeFetch` 기본값) → 4초(`fetchWithAuth` 기본값)로 늘었다.
+외부 정부 API 지연으로 정상 응답이 실패로 오인되던 쪽이 더 잦았으므로 관대해지는 방향을 유지한다.
+
+**커버리지 갭 해소**: "갱신 실패 시 기존 데이터를 유지한다"는 규칙에 테스트가 없어 뮤테이션이 살아남았다.
+`useHomeDashboard.test.tsx`에 갱신 중 값 유지·갱신 실패 시 값 유지 2건을 추가해 못을 박았다.
+
+**여전히 남은 잠재 결합**: `/weather`, `/products`, `/consents/registry`에 나중에 `JwtAuthGuard`가 붙으면
+만료 토큰으로 401 → refresh 실패 → `clearSession()` 경로가 열려 공개 조회 한 번이 조용한 로그아웃이 된다.
+그때는 `authFetch`에 refresh를 타지 않는 옵션을 둔다.
 
 ## 선후관계 (순서가 중요한 것)
 

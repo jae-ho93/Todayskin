@@ -115,7 +115,6 @@ export default function SignupScreen() {
 
   const handleSendOtp = () => {
     if (!isPhoneValid || phoneVerification.sending) return;
-    setError(null);
     void phoneVerification.sendCode(phoneDigits);
   };
 

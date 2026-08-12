@@ -14,6 +14,9 @@ export type ConsentsState =
   | { status: 'loading' }
   | { status: 'ready'; data: ConsentsData };
 
+/** `busy`는 다른 항목이 처리 중이어서 아무 것도 하지 않았다는 뜻이다. */
+export type SetAgreementResult = 'ok' | 'busy' | 'failed';
+
 /**
  * R27: 설정 화면의 동의 모달 상태.
  *
@@ -38,10 +41,13 @@ export function useConsents() {
     setState({ status: 'ready', data: { registry: registryRef.current, records } });
   }, []);
 
-  /** 동의 상태 변경 후 목록을 다시 읽는다. 성공 여부를 돌려줘 화면이 토스트를 고른다. */
+  /**
+   * 동의 상태 변경 후 목록을 다시 읽는다. 결과를 돌려줘 화면이 토스트를 고른다.
+   * `busy`는 다른 항목이 처리 중이라 무시했다는 뜻 — 실패가 아니므로 화면은 조용히 넘긴다.
+   */
   const setAgreement = useCallback(
-    async (purpose: ConsentPurpose, agreed: boolean): Promise<boolean> => {
-      if (revokingPurpose) return false;
+    async (purpose: ConsentPurpose, agreed: boolean): Promise<SetAgreementResult> => {
+      if (revokingPurpose) return 'busy';
       setRevokingPurpose(purpose);
       try {
         await api.upsertConsent(purpose, agreed);
@@ -49,9 +55,9 @@ export function useConsents() {
         setState((prev) =>
           prev.status === 'ready' ? { ...prev, data: { ...prev.data, records } } : prev,
         );
-        return true;
+        return 'ok';
       } catch {
-        return false;
+        return 'failed';
       } finally {
         setRevokingPurpose(null);
       }

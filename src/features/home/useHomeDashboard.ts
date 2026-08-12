@@ -46,6 +46,9 @@ export function useHomeDashboard({ onRefreshFailed }: UseHomeDashboardOptions = 
   const mountedRef = useRef(true);
   const onRefreshFailedRef = useRef(onRefreshFailed);
   onRefreshFailedRef.current = onRefreshFailed;
+  // 갱신 실패 시 "지울지 유지할지"를 판단하려면 직전 값을 setState 업데이터 밖에서 읽어야 한다.
+  const skinRef = useRef(skin);
+  skinRef.current = skin;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -79,8 +82,14 @@ export function useHomeDashboard({ onRefreshFailed }: UseHomeDashboardOptions = 
         return;
       }
       if (skinResult.status === 'error') {
-        setSkin(errorState);
-        setRecommendations(errorState);
+        // F52: 이미 보여주고 있던 스코어는 일시적 실패로 지우지 않는다. 화면이 값과
+        // "불러올 수 없어요"를 동시에 띄우는 모순을 피하려고 토스트로만 알린다.
+        if (skinRef.current.status === 'success') {
+          onRefreshFailedRef.current?.();
+        } else {
+          setSkin(errorState);
+          setRecommendations(errorState);
+        }
         return;
       }
       setSkin(successState(skinResult.data));
@@ -112,6 +121,8 @@ export function useHomeDashboard({ onRefreshFailed }: UseHomeDashboardOptions = 
       if (hasDataRef.current) {
         onRefreshFailedRef.current?.();
       } else {
+        // 아직 아무것도 못 받은 상태라면 로딩 스피너가 영원히 남지 않게 전부 오류로 내린다.
+        setWeather((prev) => (prev.status === 'success' ? prev : errorState));
         setSkin(errorState);
         setRecommendations(errorState);
       }

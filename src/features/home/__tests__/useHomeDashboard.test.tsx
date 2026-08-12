@@ -1,3 +1,4 @@
+import { act } from 'react-test-renderer';
 import { api } from '../../../api/client';
 import { flush, renderHook } from '../../../test-utils/renderHook';
 import { useHomeDashboard } from '../useHomeDashboard';
@@ -60,7 +61,7 @@ describe('useHomeDashboard', () => {
     expect(api.generateRecommendationsFast).not.toHaveBeenCalled();
   });
 
-  it('스코어 조회가 실패하면 스코어·추천이 error다', async () => {
+  it('첫 조회부터 스코어가 실패하면 스코어·추천이 error다', async () => {
     jest.spyOn(api, 'getSkinScore').mockResolvedValue({ status: 'error' });
 
     const { result } = renderHook(() => useHomeDashboard());
@@ -68,6 +69,51 @@ describe('useHomeDashboard', () => {
 
     expect(result.current.skin.status).toBe('error');
     expect(result.current.recommendations.status).toBe('error');
+  });
+
+  // F52: 값을 이미 보여주는 중이면 일시적 실패로 지우지 않는다 — 화면이 값과
+  // "불러올 수 없어요"를 동시에 띄우거나 카드가 사라지는 걸 막는다.
+  it('이미 스코어를 보여주고 있으면 갱신 실패로 지우지 않고 알리기만 한다', async () => {
+    const onRefreshFailed = jest.fn();
+    const { result } = renderHook(() => useHomeDashboard({ onRefreshFailed }));
+    await flush();
+    expect(result.current.skin.status).toBe('success');
+
+    jest.spyOn(api, 'getSkinScore').mockResolvedValue({ status: 'error' });
+    await act(async () => {
+      await result.current.reload();
+    });
+
+    expect(result.current.skin).toEqual({ status: 'success', data: skinScore });
+    expect(onRefreshFailed).toHaveBeenCalled();
+  });
+
+  it('갱신 중에는 이미 보여주던 값을 로딩으로 되돌리지 않는다', async () => {
+    const { result } = renderHook(() => useHomeDashboard());
+    await flush();
+    expect(result.current.weather.status).toBe('success');
+
+    // 갱신 응답을 붙잡아 둔 채로 "갱신 중" 시점의 상태를 관찰한다.
+    let releaseWeather = () => {};
+    jest.spyOn(api, 'getWeather').mockReturnValue(
+      new Promise((resolve) => {
+        releaseWeather = () => resolve({ status: 'ok', data: weather });
+      }),
+    );
+
+    let reloading: Promise<void> = Promise.resolve();
+    act(() => {
+      reloading = result.current.reload();
+    });
+    await flush();
+
+    expect(result.current.weather).toEqual({ status: 'success', data: weather });
+    expect(result.current.recommendations.status).toBe('success');
+
+    await act(async () => {
+      releaseWeather();
+      await reloading;
+    });
   });
 
   it('날씨 조회 실패는 스코어·추천에 영향을 주지 않는다', async () => {

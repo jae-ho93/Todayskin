@@ -92,18 +92,20 @@ export default function SettingsScreen() {
   };
 
   const revokeConsent = async (purpose: ConsentPurpose) => {
-    const ok = await setAgreement(purpose, false);
+    const result = await setAgreement(purpose, false);
+    if (result === 'busy') return;
     showToast(
-      ok ? '동의를 철회했어요' : '동의 철회에 실패했어요. 잠시 후 다시 시도해주세요.',
-      { type: ok ? 'success' : 'error' },
+      result === 'ok' ? '동의를 철회했어요' : '동의 철회에 실패했어요. 잠시 후 다시 시도해주세요.',
+      { type: result === 'ok' ? 'success' : 'error' },
     );
   };
 
   const agreeConsent = async (purpose: ConsentPurpose) => {
-    const ok = await setAgreement(purpose, true);
+    const result = await setAgreement(purpose, true);
+    if (result === 'busy') return;
     showToast(
-      ok ? '동의했어요' : '동의 상태를 저장하지 못했어요. 잠시 후 다시 시도해주세요.',
-      { type: ok ? 'success' : 'error' },
+      result === 'ok' ? '동의했어요' : '동의 상태를 저장하지 못했어요. 잠시 후 다시 시도해주세요.',
+      { type: result === 'ok' ? 'success' : 'error' },
     );
   };
 

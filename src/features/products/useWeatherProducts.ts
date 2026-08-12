@@ -20,7 +20,7 @@ export function useWeatherProducts() {
   const [state, setState] = useState<AsyncState<Product[]>>(loadingState);
   const [refreshing, setRefreshing] = useState(false);
   const mountedRef = useRef(true);
-  const { refreshing: liveRefreshing, watch } = useAsyncJob<Product>(
+  const { refreshing: liveRefreshing, watch, cancel } = useAsyncJob<Product>(
     unwrapJobItems('products'),
   );
 
@@ -32,6 +32,8 @@ export function useWeatherProducts() {
   }, []);
 
   const load = useCallback(async () => {
+    // 이전 잡 대기를 먼저 끊는다 — 새 응답을 기다리는 동안 낡은 결과가 끼어들지 않게.
+    cancel();
     // N12: 날씨는 서버가 직접 조회한다. 클라이언트는 좌표만 전달하고 weather 본문을
     // 보내지 않으므로 조작된 날씨로 추천을 왜곡할 수 없다.
     const response = await api.getWeatherProductsFast(coords ?? undefined);
@@ -39,7 +41,7 @@ export function useWeatherProducts() {
 
     setState(response ? successState(response.items ?? []) : errorState);
     watch(response, (items) => setState(successState(items)));
-  }, [coords, watch]);
+  }, [coords, watch, cancel]);
 
   useEffect(() => {
     if (locationLoading) return;
