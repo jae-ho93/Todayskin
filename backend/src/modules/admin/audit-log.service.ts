@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { maskMetadataDeep } from '../../common/logging/redact.logger';
 
 /**
  * 감사 로그 서비스.
@@ -8,7 +9,8 @@ import { PrismaService } from '../../prisma/prisma.service';
  * ADMIN role policy: ADMIN endpoint 만들 때 @Roles(Role.ADMIN) + 감사 로그.
  *
  * 응답 본문·secret은 저장하지 않고 행위 종류·대상·결과·메타만 저장한다.
- * 민감정보(전화번호 등)는 N1 redact 로거와 동일 규칙으로 마스킹해 저장한다.
+ * N48: metadata는 저장 직전에 재귀 마스킹을 강제한다 — 호출자가 실수로
+ * 전화번호·토큰을 넣어도 감사 테이블에 평문으로 남지 않는다 (Pino 로그와 동일 규칙).
  */
 @Injectable()
 export class AuditLogService {
@@ -33,7 +35,10 @@ export class AuditLogService {
           targetType: params.targetType ?? null,
           targetId: params.targetId ? String(params.targetId) : null,
           result: params.result ?? 'success',
-          metadata: (params.metadata as never) ?? undefined,
+          // N48: 호출자 주석 규율에 의존하지 않고 서비스가 마스킹을 보장한다.
+          metadata: params.metadata
+            ? (maskMetadataDeep(params.metadata) as never)
+            : undefined,
           ipAddress: params.ipAddress ?? null,
         },
       });

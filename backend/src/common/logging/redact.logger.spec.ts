@@ -5,6 +5,7 @@ import {
   maskCoordinates,
   maskApiKeys,
   maskSensitiveData,
+  maskMetadataDeep,
 } from './redact.logger';
 
 describe('민감정보 마스킹', () => {
@@ -102,6 +103,62 @@ describe('민감정보 마스킹', () => {
 
     it('민감정보가 없으면 원본 반환', () => {
       expect(maskSensitiveData('일반 메시지입니다')).toBe('일반 메시지입니다');
+    });
+  });
+
+  // N48: 감사 로그 metadata 저장 직전에 강제되는 재귀 마스킹.
+  describe('maskMetadataDeep', () => {
+    it('중첩 객체·배열 안의 문자열 패턴을 마스킹한다', () => {
+      const result = maskMetadataDeep({
+        note: '전화 01012345678',
+        nested: { list: ['생일 1990-01-15'] },
+      }) as { note: string; nested: { list: string[] } };
+
+      expect(result.note).toBe('전화 010****5678');
+      expect(result.nested.list[0]).toBe('생일 1990-**-**');
+    });
+
+    it('민감 키는 패턴이 못 잡는 값이어도 통째로 가린다', () => {
+      const result = maskMetadataDeep({
+        refreshToken: 'opaque-random-value',
+        otpCode: 123456,
+        phoneNumber: '01012345678',
+      }) as Record<string, unknown>;
+
+      expect(result.refreshToken).toBe('[REDACTED]');
+      expect(result.otpCode).toBe('[REDACTED]');
+      // 패턴이 잡는 값은 부분 마스킹을 유지해 추적 가능성을 남긴다.
+      expect(result.phoneNumber).toBe('010****5678');
+    });
+
+    it('statusCode 같은 일반 키는 건드리지 않는다', () => {
+      const result = maskMetadataDeep({
+        statusCode: 404,
+        from: 'USER',
+        to: 'ADMIN',
+        imagesDeleted: 3,
+      });
+
+      expect(result).toEqual({
+        statusCode: 404,
+        from: 'USER',
+        to: 'ADMIN',
+        imagesDeleted: 3,
+      });
+    });
+
+    it('원본 객체를 변경하지 않는다', () => {
+      const original = { phoneNumber: '01012345678' };
+      maskMetadataDeep(original);
+      expect(original.phoneNumber).toBe('01012345678');
+    });
+
+    it('과도한 중첩은 잘라낸다 (순환·폭탄 방어)', () => {
+      let nested: Record<string, unknown> = { value: 'leaf' };
+      for (let i = 0; i < 12; i += 1) nested = { child: nested };
+
+      const json = JSON.stringify(maskMetadataDeep(nested));
+      expect(json).toContain('[REDACTED_DEPTH]');
     });
   });
 });
