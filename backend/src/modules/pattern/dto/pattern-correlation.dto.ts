@@ -40,6 +40,7 @@ export class PatternCorrelationDto {
   sampleSize!: number;
 
   @ApiPropertyOptional({
+    type: String,
     description: '상관관계는 인과관계가 아님을 고정 문구로 명시한다.',
     example: '이 관계는 통계적 관찰일 뿐 인과관계를 의미하지 않아요.',
   })

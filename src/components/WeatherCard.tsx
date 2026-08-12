@@ -1,15 +1,10 @@
 import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { WeatherSnapshot } from '../types';
+import { AIR_STATUS_LABEL } from '../lib/air-status';
 import { colors, spacing, typography } from '../theme';
 import { Card } from './Card';
 import { StatusBadge } from './StatusBadge';
-
-const CAI_LABEL: Record<'good' | 'moderate' | 'bad', string> = {
-  good: '좋음',
-  moderate: '보통',
-  bad: '나쁨',
-};
 
 export function WeatherCard({ weather }: { weather: WeatherSnapshot }) {
   return (
@@ -22,7 +17,9 @@ export function WeatherCard({ weather }: { weather: WeatherSnapshot }) {
           <Text style={styles.moreLink}>자세히 보기 →</Text>
         </View>
         {weather.caiStatus && (
-          <Text style={styles.caiLine}>오늘 종합 대기질: {CAI_LABEL[weather.caiStatus]}</Text>
+          <Text style={styles.caiLine}>
+            오늘 종합 대기질: {AIR_STATUS_LABEL[weather.caiStatus]}
+          </Text>
         )}
         <View style={styles.badgeRow}>
           <StatusBadge status={weather.uvStatusPeak ?? weather.uvStatus} label="자외선" />

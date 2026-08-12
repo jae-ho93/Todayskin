@@ -10,13 +10,13 @@ import { PHONE_PATTERN } from './signup.dto';
  * 'social_link'로 완료해 본인확인을 마쳐야 한다. 생년월일은 선택 — 제공하면 함께 저장.
  */
 export class LinkPhoneDto {
-  @ApiProperty({ example: '010-1234-5678', description: '연결할 휴대폰 번호 (OTP 본인확인 필요)' })
+  @ApiProperty({ type: String, example: '010-1234-5678', description: '연결할 휴대폰 번호 (OTP 본인확인 필요)' })
   @IsString()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @Matches(PHONE_PATTERN, { message: '올바른 휴대폰 번호 형식이 아닙니다 (예: 010-1234-5678)' })
   phoneNumber!: string;
 
-  @ApiPropertyOptional({ example: '2000-01-01', description: '생년월일 (선택, YYYY-MM-DD)' })
+  @ApiPropertyOptional({ type: String, example: '2000-01-01', description: '생년월일 (선택, YYYY-MM-DD)' })
   @IsOptional()
   @IsString()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))

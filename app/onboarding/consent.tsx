@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../../src/api/client';
+import { RetryButton } from '../../src/components/RetryButton';
 import { setPendingConsent } from '../../src/lib/pendingConsents';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type { ConsentPurpose, ConsentPurposeInfo } from '../../src/types';
@@ -19,17 +20,16 @@ export default function OnboardingConsent() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const { social } = useLocalSearchParams<{ social?: string }>();
 
-  useEffect(() => {
-    let cancelled = false;
-    api.getConsentRegistry().then((result) => {
-      if (cancelled) return;
-      setRegistry(result);
-      setLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
+  const loadRegistry = useCallback(async () => {
+    setLoading(true);
+    const result = await api.getConsentRegistry();
+    setRegistry(result.status === 'ok' ? result.data : null);
+    setLoading(false);
   }, []);
+
+  useEffect(() => {
+    void loadRegistry();
+  }, [loadRegistry]);
 
   const requiredPurposes = registry?.filter((r) => r.required) ?? [];
   const allRequiredAgreed = requiredPurposes.every((r) => agreed[r.purpose]);
@@ -68,18 +68,7 @@ export default function OnboardingConsent() {
       <SafeAreaView style={[styles.safeArea, styles.centered]}>
         <Ionicons name="cloud-offline-outline" size={32} color={colors.textTertiary} />
         <Text style={styles.unavailableTitle}>동의 항목을 불러올 수 없어요</Text>
-        <Pressable
-          onPress={() => {
-            setLoading(true);
-            api.getConsentRegistry().then((result) => {
-              setRegistry(result);
-              setLoading(false);
-            });
-          }}
-          style={styles.retryButton}
-        >
-          <Text style={styles.retryButtonText}>다시 시도</Text>
-        </Pressable>
+        <RetryButton onPress={() => void loadRegistry()} disabled={loading} />
       </SafeAreaView>
     );
   }

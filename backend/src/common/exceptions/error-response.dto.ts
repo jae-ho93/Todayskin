@@ -4,7 +4,7 @@ export class ErrorResponseDto {
   @ApiProperty({ example: 400 })
   statusCode!: number;
 
-  @ApiProperty({ example: 'Bad Request' })
+  @ApiProperty({ type: String, example: 'Bad Request' })
   error!: string;
 
   @ApiProperty({ example: 'phoneNumber은 필수입니다' })

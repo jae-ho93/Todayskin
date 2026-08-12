@@ -2,11 +2,9 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  AppState,
   InputAccessoryView,
   Keyboard,
   KeyboardAvoidingView,
-  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -19,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../../src/api/client';
 import { useToast } from '../../src/components/Toast';
 import { SocialLoginButtons } from '../../src/components/SocialLoginButtons';
+import { usePhoneVerification } from '../../src/features/auth/usePhoneVerification';
 import { clearPendingConsents, getPendingConsents } from '../../src/lib/pendingConsents';
 import { saveSession } from '../../src/lib/session';
 import { colors, radius, spacing, typography } from '../../src/theme';
@@ -74,12 +73,6 @@ export default function SignupScreen() {
   const [phase, setPhase] = useState<'phone' | 'profile'>('phone');
   const [name, setName] = useState('');
   const [phoneDigits, setPhoneDigits] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpCode, setOtpCode] = useState('');
-  const [recipientNumber, setRecipientNumber] = useState('');
-  const [phoneVerified, setPhoneVerified] = useState(false);
-  const [sendingOtp, setSendingOtp] = useState(false);
-  const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [birthDateDigits, setBirthDateDigits] = useState('');
   const [gender, setGender] = useState<Gender | null>(null); // 선택 입력이라 폼 유효성엔 영향 없음
   const [busyProvider, setBusyProvider] = useState<SocialProvider | null>(null);
@@ -87,16 +80,20 @@ export default function SignupScreen() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const phoneVerification = usePhoneVerification({
+    purpose: 'signup',
+    onError: setError,
+    // F59: 문자앱 복귀 자동 검증 완료 피드백
+    onVerified: () => showToast('휴대폰 인증이 완료됐어요', { type: 'success' }),
+  });
+  const phoneVerified = phoneVerification.verified;
+
   const nameInputRef = useRef<TextInput>(null);
   const birthDateInputRef = useRef<TextInput>(null);
-  // F34: 문자 앱을 연 뒤 복귀 시에만 자동 검증한다.
-  const smsOpenedRef = useRef(false);
-  const verifyOtpRef = useRef<() => Promise<void>>(async () => {});
 
   const trimmedName = name.trim();
   const isNameValid = trimmedName.length > 0 && trimmedName.length <= 20;
   const isPhoneValid = isValidPhoneDigits(phoneDigits);
-  const isOtpValid = otpCode.length === 6;
   const isBirthDateValid = isValidBirthDate(birthDateDigits);
   const isValid = isNameValid && phoneVerified && isBirthDateValid;
 
@@ -113,68 +110,14 @@ export default function SignupScreen() {
   // 번호를 다시 바꾸면 이전 인증은 무효 — 새 번호로 다시 인증번호를 받아야 한다
   const handlePhoneChange = (v: string) => {
     setPhoneDigits(v.replace(/[^0-9]/g, '').slice(0, 11));
-    setOtpSent(false);
-    setOtpCode('');
-    setPhoneVerified(false);
+    phoneVerification.reset();
   };
 
-  const handleSendOtp = async () => {
-    if (!isPhoneValid || sendingOtp) return;
-    setSendingOtp(true);
+  const handleSendOtp = () => {
+    if (!isPhoneValid || phoneVerification.sending) return;
     setError(null);
-    try {
-      const response = await api.sendOtp(phoneDigits, 'signup');
-      setOtpCode(response.code);
-      setRecipientNumber(response.recipientNumber);
-      setOtpSent(true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '인증번호 발송에 실패했습니다.');
-    } finally {
-      setSendingOtp(false);
-    }
+    void phoneVerification.sendCode(phoneDigits);
   };
-
-  const openSms = async () => {
-    try {
-      smsOpenedRef.current = true;
-      // iOS는 `?body=` 대신 `&body=`를 요구한다 — 문자 시트가 본문 채워진 채 열린다.
-      const sep = Platform.OS === 'ios' ? '&' : '?';
-      await Linking.openURL(
-        `sms:${recipientNumber}${sep}body=${encodeURIComponent(`인증코드 ${otpCode}`)}`,
-      );
-    } catch {
-      setError('문자 앱을 열 수 없어요. 다시 시도해주세요.');
-    }
-  };
-
-  const handleVerifyOtp = async () => {
-    if (!isOtpValid || verifyingOtp) return;
-    setVerifyingOtp(true);
-    setError(null);
-    try {
-      await api.verifyOtp(phoneDigits, otpCode, 'signup');
-      setPhoneVerified(true);
-      Keyboard.dismiss();
-      // F59: 문자앱 복귀 자동 검증 완료 피드백
-      showToast('휴대폰 인증이 완료됐어요', { type: 'success' });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '인증을 확인하지 못했어요. 다시 시도해주세요.');
-    } finally {
-      setVerifyingOtp(false);
-    }
-  };
-  verifyOtpRef.current = handleVerifyOtp;
-
-  // F34: 문자 앱에서 복귀하면 자동으로 인증을 확인한다 (수동 “문자를 보냈어요” 버튼 대체).
-  useEffect(() => {
-    if (!otpSent || phoneVerified || verifyingOtp) return;
-    const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && smsOpenedRef.current && otpCode.length === 6) {
-        void verifyOtpRef.current();
-      }
-    });
-    return () => subscription.remove();
-  }, [otpSent, phoneVerified, verifyingOtp, otpCode]);
 
   const handleSubmit = async () => {
     if (!isValid || submitting) return;
@@ -262,14 +205,14 @@ export default function SignupScreen() {
                   inputAccessoryViewID={Platform.OS === 'ios' ? 'done-bar' : undefined}
                 />
                 {/* number-pad 키보드는 iOS에 리턴키가 없어서, 버튼을 화면에 직접 둔다 */}
-                {!otpSent && !phoneVerified && (
+                {!phoneVerification.codeIssued && (
                   <Pressable
                     onPress={handleSendOtp}
-                    disabled={!isPhoneValid || sendingOtp}
+                    disabled={!isPhoneValid || phoneVerification.sending}
                     hitSlop={8}
                     style={styles.nextButton}
                   >
-                    {sendingOtp ? (
+                    {phoneVerification.sending ? (
                       <ActivityIndicator size="small" color={colors.sageDark} />
                     ) : (
                       <Text style={[styles.nextButtonText, !isPhoneValid && styles.nextButtonTextDisabled]}>
@@ -280,17 +223,23 @@ export default function SignupScreen() {
                 )}
               </View>
 
-              {otpSent && !phoneVerified && (
+              {phoneVerification.codeIssued && !phoneVerified && (
                 <View style={styles.field}>
                   <Text style={styles.label}>인증 문자를 보내면 자동으로 확인돼요</Text>
-                  <Pressable onPress={openSms} style={styles.smsButton}>
+                  <Pressable onPress={() => void phoneVerification.openSms()} style={styles.smsButton}>
                     <Text style={styles.smsButtonText}>인증하기</Text>
                   </Pressable>
                   <View style={styles.otpActionRow}>
-                    <Pressable onPress={handleSendOtp} disabled={sendingOtp} hitSlop={8}>
+                    <Pressable
+                      onPress={handleSendOtp}
+                      disabled={phoneVerification.sending}
+                      hitSlop={8}
+                    >
                       <Text style={styles.nextButtonText}>새 코드 받기</Text>
                     </Pressable>
-                    {verifyingOtp && <ActivityIndicator size="small" color={colors.sageDark} />}
+                    {phoneVerification.verifying && (
+                      <ActivityIndicator size="small" color={colors.sageDark} />
+                    )}
                   </View>
                 </View>
               )}

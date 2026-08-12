@@ -37,7 +37,7 @@ export class JobResponseDto {
   @ApiPropertyOptional({ description: 'COMPLETED 시 결과 페이로드' })
   result?: unknown;
 
-  @ApiPropertyOptional({ description: 'FAILED 시 에러 메시지' })
+  @ApiPropertyOptional({ type: String, description: 'FAILED 시 에러 메시지', nullable: true })
   error?: string | null;
 
   @ApiProperty({ description: '최종 실패 후 DLQ 이동 여부' })
@@ -46,9 +46,9 @@ export class JobResponseDto {
   @ApiProperty()
   createdAt!: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ type: String, nullable: true })
   startedAt?: string | null;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ type: String, nullable: true })
   finishedAt?: string | null;
 }

@@ -15,7 +15,7 @@
 | B3 | ✅ 완료 (2026-08-12) | `refactor/r-batch-03-scheduler-worker` | AWS/GitHub 작업(코드 밖): ① 워커 ECS 서비스 생성 + Variable `ECS_SERVICE_WORKER` 설정 → 큐 소비 확인 후 ② backend task definition에 `JOB_ROLE=api` 추가. 순서를 뒤집으면 잡이 처리되지 않는다 |
 | B4 | ✅ 완료 (2026-08-12) | `refactor/r-batch-04-db-migration` | 운영 작업(코드 밖): ① 마이그레이션 배포 후 R11 스윕을 `RETENTION_SWEEP_MODE=dry-run`으로 켜서 삭제 대상 규모 확인 → ② RDS 스냅샷 확보 → ③ `delete`로 전환. 기본값 `off`이므로 배포만으로는 아무 데이터도 지워지지 않는다 |
 | B5 | ✅ 완료 (2026-08-12) | `refactor/r-batch-05-backend-structure` | 운영 작업(코드 밖): R9 캐시 TTL 10분이므로 상품 시드 직후 즉시 반영이 필요하면 `POST /admin/products/cache/invalidate`를 호출한다. R30 타임아웃 조정이 필요하면 `GEMINI_TIMEOUT_MS`로 조절 |
-| B6 | 대기 | — | — |
+| B6 | ✅ 완료 (2026-08-12) | `refactor/r-batch-06-contract-frontend` | 남은 일(코드 밖 없음). 보류 항목 2건: R27 3번(StyleSheet 분리), R28의 수기 타입 → 생성 타입 전면 재export. 백엔드 DTO를 바꾸면 `npm run openapi:export --prefix backend && npm run openapi:types`를 돌려 커밋해야 CI가 통과한다 |
 
 ## 작업 묶음 (Batch)
 
@@ -29,7 +29,7 @@
 | **B3. 스케줄러·워커** ✅ | R3, R13, R31 | `refactor/r-batch-03-scheduler-worker` | 리더 락(R3) → 워커 분리(R13) 순서 |
 | **B4. DB (한 마이그레이션)** ✅ | R33, R10, R11, R21 | `refactor/r-batch-04-db-migration` | 인덱스·컬럼·보존을 한 마이그레이션으로 묶음 |
 | **B5. 백엔드 구조 (동작 보존)** ✅ | R7, R8, R9, R12, R20, R22, R23, R24, R30, R35 | `refactor/r-batch-05-backend-structure` | 순수 구조 개선 — 동작 불변 목표 |
-| **B6. 계약·프론트 구조** | R5, R14, R25, R26, R27, R28 | `refactor/r-batch-06-contract-frontend` | B2 완료 후 권장 (strict·테스트가 회귀를 잡음) |
+| **B6. 계약·프론트 구조** ✅ | R5, R14, R25, R26, R27, R28 | `refactor/r-batch-06-contract-frontend` | B2 완료 후 권장 (strict·테스트가 회귀를 잡음) |
 
 ## 선후관계 (순서가 중요한 것)
 
@@ -214,7 +214,9 @@ text
 
 작업:
 
-- [ ] 프론트의 5개 구간 배열과 등급 재계산을 삭제하고, 서버가 이미 내려주는 `uvStatus` / `pm10Status` / `pm25Status` / `ozoneStatus` / `caiStatus`를 그대로 사용한다. 게이지 바의 위치 계산(`bandPosition`)에 필요한 시각적 눈금만 프론트에 남긴다. 등급 판정의 단일 출처는 `weather-status.policy.ts`로 확정한다.
+- [x] 프론트의 5개 구간 배열과 등급 재계산을 삭제하고, 서버가 이미 내려주는 `uvStatus` / `pm10Status` / `pm25Status` / `ozoneStatus` / `caiStatus`를 그대로 사용한다. 게이지 바의 위치 계산(`bandPosition`)에 필요한 시각적 눈금만 프론트에 남긴다. 등급 판정의 단일 출처는 `weather-status.policy.ts`로 확정한다.
+- [x] UV 6~7은 백엔드의 엄격한 "나쁨"을 유지한다(의도된 표시 변경). 반대로 오존은 백엔드가 틀렸다 — 0.09ppm이 "나쁨"으로 잡혔는데 환경부 기준으로는 "보통"이라, 경계 비교를 `>=`에서 `>`로 고쳤다.
+- [x] `weather-status.policy.spec.ts`로 다섯 지표의 경계값을 고정했다.
 
 변경 범위:
 
@@ -226,7 +228,7 @@ API 변경   없음 (기존 응답 필드를 사용만 시작)
 
 위험: POTENTIAL BEHAVIOR CHANGE.  — **의도된 표시 변경**이다. UV 6~7 구간이 "보통"에서 "나쁨"으로 바뀐다. 이것이 올바른 방향인지(즉 정책 기준값 자체가 맞는지) 먼저 확인이 필요하다. 만약 프론트 쪽 구간이 의도한 정책이라면 반대로 백엔드 정책을 고쳐야 하며, 그 경우 
 
-완료 기준: R5 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다.
+완료 기준: R5 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다. → 완료.
 
 ## R6. 추론 서버가 전역 락으로 직렬화되어 컨테이너당 동시 1건만 처리한다
 
@@ -530,9 +532,10 @@ text
 
 작업:
 
-- [ ] `safeFetch`를 제거하고 모든 호출을 `authFetch`로 통일한다. 토큰이 없을 때는 헤더를 생략하되(현재 동작 유지) 경로 자체는 하나로 만든다. 반환 타입을 판별 가능한 결과 타입으로 바꾼다.
-- [ ] 화면은 `kind`에 따라 재시도 버튼 / 로그인 유도 / 빈 상태를 구분해 보여준다.
-- [ ] 함께, 서버 쪽 세 엔드포인트가 인증을 요구해야 하는지 확인하고 필요하면 가드를 추가한다.
+- [x] `safeFetch`를 제거하고 모든 호출을 `authFetch`로 통일한다. 토큰이 없을 때는 헤더를 생략하되(현재 동작 유지) 경로 자체는 하나로 만든다. 반환 타입을 판별 가능한 결과 타입으로 바꾼다.
+- [x] `FetchResult<T> = { status: 'ok'; data } | { status: 'not_found' } | { status: 'error' }`. `safeFetch`를 쓰던 네 곳(`getWeather`, `getProducts`, `getRecommendations`, `getConsentRegistry`)에만 적용했다 — 나머지는 이미 `authFetch` 경로였다.
+- [x] 화면은 실패에 재시도 버튼을 보여준다(`src/components/RetryButton.tsx`). 홈의 날씨·스코어·추천, 날씨 상세, 추천 상세의 관련 제품, 온보딩·설정의 동의 목록. 로그인 유도는 넣지 않았다 — 이 네 엔드포인트는 미로그인 상태에서도 정상 응답한다.
+- [x] 서버 가드는 추가하지 않기로 했다. 네 엔드포인트 모두 개인화 데이터가 없고, 온보딩(로그인 전) 화면이 `/consents/registry`를 쓴다. 인증을 강제하면 가입 흐름이 막힌다.
 
 변경 범위:
 
@@ -545,7 +548,7 @@ API 변경    가능 — 위 엔드포인트를 인증 필수로 바꾸는 경�
 
 위험: POTENTIAL BEHAVIOR CHANGE. . 반환 타입 변경이 모든 소비 화면에 파급된다(제안 [15]의 strict 모드 활성화 후에 하면 컴파일러가 누락을 잡아준다 — **[15] 이후에 진행할 것을 권장**). 엔드포인트에 인증을 강제하면 미로그인 사용자의 화면 동작이 바뀌므로 별도 승인이 필요하다.
 
-완료 기준: R14 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다.
+완료 기준: R14 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다. → 완료.
 
 ## R15. 프론트엔드가 strict 모드 없이 컴파일되고, 실제 타입 버그가 숨어 있다
 
@@ -838,7 +841,8 @@ text
 
 작업:
 
-- [ ] `src/lib/air-status.ts`에 `AIR_STATUS_LABEL`, `AIR_STATUS_COLOR`(`Record<AirStatus, ...>`)를 두고 다섯 곳이 이를 import한다. `Record<AirStatus, T>`로 선언하면 등급이 추가될 때 컴파일 에러가 난다.
+- [x] `src/lib/air-status.ts`에 `AIR_STATUS_LABEL`, `AIR_STATUS_COLOR`(`Record<AirStatus, ...>`)를 두고 다섯 곳이 이를 import한다. `Record<AirStatus, T>`로 선언하면 등급이 추가될 때 컴파일 에러가 난다.
+- [x] 정본은 `colors.status*` 계열로 잡았다. 배지 배경/텍스트처럼 명도가 다른 변형이 필요해 `AIR_STATUS_TEXT_COLOR`·`AIR_STATUS_BG`를 함께 두고, 테마에 `statusGoodText`/`statusModerateText`/`statusBadText` 토큰을 추가했다.
 
 변경 범위:
 
@@ -850,7 +854,7 @@ text
 
 위험: POTENTIAL BEHAVIOR CHANGE.  — 현재 사본들의 색상이 서로 다르므로 통합하면 일부 화면의 색이 바뀐다. 어느 색을 정본으로 삼을지 디자인 확인이 필요하다. 제안 [5]와 같은 파일들을 건드리므로 함께 진행하는 것이 좋다.
 
-완료 기준: R25 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다.
+완료 기준: R25 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다. → 완료.
 
 ## R26. KST 날짜 헬퍼가 프론트에 중복돼 있다
 
@@ -864,7 +868,8 @@ text
 
 작업:
 
-- [ ] `src/lib/kst-date.ts`로 통합하고, 백엔드 `calendar-date.util.ts`와 동일한 규칙임을 명시한다. 백엔드에는 이미 `calendar-date.util.spec.ts`가 있으므로, 프론트에도 같은 케이스(자정 경계, 월말/월초)의 단위 테스트를 [16]에서 추가한다.
+- [x] `src/lib/kst-date.ts`로 통합하고, 백엔드 `calendar-date.util.ts`와 동일한 규칙임을 명시한다. 백엔드에는 이미 `calendar-date.util.spec.ts`가 있으므로, 프론트에도 같은 케이스(자정 경계, 월말/월초)의 단위 테스트를 [16]에서 추가한다.
+- [x] 두 구현은 실제로 같은 규칙이었다(`sv-SE` 로케일로 `YYYY-MM-DD` 생성). 자정 경계·월말/월초 테스트를 `src/lib/__tests__/kst-date.test.ts`에 붙였다.
 
 변경 범위:
 
@@ -876,7 +881,7 @@ text
 
 위험: SAFE REFACTOR. . 두 구현이 실제로 동일한지 먼저 대조해야 한다 — 다르다면 어느 쪽이 서버와 일치하는지 확인이 필요하다.
 
-완료 기준: R26 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다.
+완료 기준: R26 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다. → 완료.
 
 ## R27. 화면 컴포넌트가 상태 10~15개와 잡 오케스트레이션을 직접 들고 있다
 
@@ -890,11 +895,13 @@ text
 
 작업:
 
-- [ ] 과한 구조를 만들지 말고 **중복된 것만** 뽑는다.
-- [ ] `src/hooks/useAsyncJob.ts` — fast 응답과 잡 오케스트레이션 단일 구현. `index.tsx`와 `products.tsx`가 공유.
-- [ ] 2. 화면별 데이터 훅(`useHomeDashboard`, `useWeatherProducts`) — 서버 상태를 `{ status: 'idle'|'loading'|'success'|'error', data, error }` 형태의 판별 유니온 하나로 묶는다.
-- [ ] 3. `StyleSheet`를 `*.styles.ts`로 분리한다.
-- [ ] React Query 같은 라이브러리 도입은 지금 단계에서 권하지 않는다 — 화면 수가 적고 위 1~2번만으로 중복이 해소된다.
+- [x] 과한 구조를 만들지 말고 **중복된 것만** 뽑는다.
+- [x] `src/hooks/useAsyncJob.ts` — fast 응답과 잡 오케스트레이션 단일 구현. `index.tsx`와 `products.tsx`가 공유. 두 화면의 취소 처리가 서로 달랐고(언마운트 abort 누락) 테스트가 없었다 — 훅으로 합치면서 취소·언마운트·뒤늦은 결과 폐기를 테스트로 고정했다(R16이 미뤄둔 항목).
+- [x] 2. 화면별 데이터 훅(`useHomeDashboard`, `useWeatherProducts`) — 서버 상태를 판별 유니온 하나로 묶는다. `AsyncState`에 `empty`를 뒀다: "아직 촬영 없음"과 "조회 실패"를 화면이 구분해야 촬영 유도와 재시도를 각각 보여줄 수 있다.
+- [x] `settings.tsx`(useState 11개) / `signup.tsx`(15개)도 묶었다 — `usePhoneVerification`(인증 단계), `useNotificationPreferences`(낙관적 토글·롤백), `useConsents`. 로직 중복이 아니라 조합 불가능한 상태를 없애는 작업이라 위험이 있어, 훅마다 테스트를 먼저 붙였다.
+- [ ] 3. `StyleSheet`를 `*.styles.ts`로 분리한다. → **미실행.** 중복 제거가 아니라 파일 분할이라 이번 diff를 키우는 만큼의 이득이 없다고 판단했다.
+- [x] React Query 같은 라이브러리 도입은 지금 단계에서 권하지 않는다 — 화면 수가 적고 위 1~2번만으로 중복이 해소된다.
+- [ ] 남은 일: `login.tsx` / `social-phone.tsx`도 같은 문자 인증 클러스터를 갖고 있어 `usePhoneVerification`을 쓸 수 있다. 이번 범위(설정·가입) 밖이라 남겨둔다.
 
 변경 범위:
 
@@ -906,7 +913,7 @@ text
 
 위험: BEHAVIOR-PRESERVING REFACTOR. 이지만 범위가 넓다. 두 화면의 잡 처리 세부(타임아웃, 재시도 횟수)가 다를 수 있으므로 통합 전 대조가 필요하다. **[15](strict 모드)와 [16](테스트) 이후에 진행할 것을 강력히 권한다** — 그래야 컴파일러와 테스트가 회귀를 잡아준다.
 
-완료 기준: R27 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다.
+완료 기준: R27 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다. → 1·2번 완료(3번 스타일 분리는 보류).
 
 ## R28. 프론트 타입 325줄이 백엔드 DTO를 수기로 미러링한다
 
@@ -920,8 +927,9 @@ text
 
 작업:
 
-- [ ] CI에서 OpenAPI 스펙을 산출하고(`SwaggerModule.createDocument` 결과를 JSON으로 덤프하는 소규모 스크립트) `openapi-typescript`로 `src/types/api.generated.ts`를 생성한다. 생성 결과가 커밋본과 다르면 CI를 실패시켜 드리프트를 차단한다. `src/types/index.ts`는 생성 타입을 재export하는 얇은 파일로 축소하고, 순수 UI 타입만 남긴다.
-- [ ] 한 번에 전부 전환하기 부담스러우면 **CI 검증만 먼저** 도입해도 된다 — 생성 타입과 수기 타입의 불일치를 리포트하는 것만으로 [14], [27] 작업 중의 사고를 막을 수 있다.
+- [x] CI에서 OpenAPI 스펙을 산출하고(`backend/scripts/export-openapi.ts` — preview 모드로 컨트롤러 메타데이터만 읽는다) `openapi-typescript`로 `src/types/api.generated.ts`를 생성한다. 생성 결과가 커밋본과 다르면 CI(`api-contract-drift` 잡)가 실패한다.
+- [x] **CI 검증만 먼저** 도입하는 쪽을 택했다. `src/types/index.ts`의 수기 타입은 그대로 두고, 컴파일 타임 적합성 테스트(`src/types/__tests__/api-contract.test.ts`)로 "수기 타입에 서버에 없는 필드가 없다"를 검사한다. 전면 재export 전환은 diff가 크고 화면 전체를 건드리므로 별도로 판단한다.
+- [x] 스펙 정확도 작업이 함께 필요했다: 커서 페이지네이션 응답에 구체 DTO(`ProductPageDto` 등)를 붙이고, nullable 속성에 `nullable: true`를, 스칼라인데 `object`로 추론되던 속성에 명시적 `type`을 넣었다.
 
 변경 범위:
 
@@ -934,7 +942,7 @@ dependency 변경   openapi-typescript 추가 (devDependency)
 
 위험: SAFE REFACTOR. (도구) + 전환 시 
 
-완료 기준: R28 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다.
+완료 기준: R28 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다. → 완료(수기 타입 전면 재export는 보류).
 
 ## R29. 죽은 코드와 커밋된 에러 로그 파일
 

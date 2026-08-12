@@ -20,7 +20,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed",
     "prisma:studio": "prisma studio",
-    "audit:ci": "npm audit --audit-level=high"
+    "audit:ci": "npm audit --audit-level=high",
+    "openapi:export": "ts-node -r tsconfig-paths/register scripts/export-openapi.ts"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"

@@ -14,6 +14,7 @@ import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { EvidenceBadge } from '../../src/components/EvidenceBadge';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
+import { AIR_STATUS_LABEL, AIR_STATUS_TEXT_COLOR } from '../../src/lib/air-status';
 import { gradeToColor } from '../../src/lib/skinGrade';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type {
@@ -213,19 +214,15 @@ function WeatherMetric({
   value?: number | null;
   status?: AirStatus | null;
 }) {
-  const color = status === 'good' ? colors.sageDark : status === 'moderate' ? '#B5A03C' : status === 'bad' ? '#C0564E' : colors.textTertiary;
+  const color = status ? AIR_STATUS_TEXT_COLOR[status] : colors.textTertiary;
   return (
     <View style={styles.weatherMetric}>
       <Text style={styles.weatherMetricLabel}>{label}</Text>
       <Text style={[styles.weatherMetricValue, { color }]}>
-        {value ?? '-'} {status ? `(${statusLabel2(status)})` : ''}
+        {value ?? '-'} {status ? `(${AIR_STATUS_LABEL[status]})` : ''}
       </Text>
     </View>
   );
-}
-
-function statusLabel2(s: AirStatus): string {
-  return s === 'good' ? '좋음' : s === 'moderate' ? '보통' : '나쁨';
 }
 
 // 이미지 + 랜드마크 오버레이 — 원본 비율 유지, 최대 높이 제한.

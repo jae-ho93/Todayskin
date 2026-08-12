@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,11 +15,14 @@ import {
 } from 'react-native';
 import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
+import { RetryButton } from '../../src/components/RetryButton';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { useToast } from '../../src/components/Toast';
+import { useConsents } from '../../src/features/settings/useConsents';
+import { useNotificationPreferences } from '../../src/features/settings/useNotificationPreferences';
 import { clearSession } from '../../src/lib/session';
 import { colors, radius, spacing, typography } from '../../src/theme';
-import type { ConsentPurpose, ConsentPurposeInfo, ConsentRecord, User } from '../../src/types';
+import type { ConsentPurpose, User } from '../../src/types';
 
 function maskPhone(phone: string | null): string {
   if (!phone) return '전화번호 미연결';
@@ -62,116 +65,46 @@ export default function SettingsScreen() {
   // F44: 버전은 하드코딩 대신 app.json(expo) 값과 동기화
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
 
-  // ── 알림 설정 (서버 NotificationPreference 연동) ──
-  const [weatherAlert, setWeatherAlert] = useState(false);
-  const [recommendAlert, setRecommendAlert] = useState(false);
-  const [prefsLoading, setPrefsLoading] = useState(true);
-  const [prefsError, setPrefsError] = useState<string | null>(null);
-  const [pushDeliveryAvailable, setPushDeliveryAvailable] = useState(false);
   const [user, setUser] = useState<User | null>(null);
-  // 낙관적 갱신 중 연타로 요청이 뒤섞이지 않도록 저장 완료까지 토글을 잠근다.
-  const prefsSavingRef = useRef(false);
+  const { showToast } = useToast();
+
+  // ── 알림 설정 (서버 NotificationPreference 연동) ──
+  const { state: prefsState, toggle: togglePreference } = useNotificationPreferences();
+  const prefs = prefsState.status === 'ready' ? prefsState.prefs : null;
 
   // ── 동의/처리방침 모달 ──
   const [consentModalOpen, setConsentModalOpen] = useState(false);
-  const [registry, setRegistry] = useState<ConsentPurposeInfo[] | null>(null);
-  const [myConsents, setMyConsents] = useState<ConsentRecord[] | null>(null);
-  const [consentsLoading, setConsentsLoading] = useState(false);
-  const [revokingPurpose, setRevokingPurpose] = useState<ConsentPurpose | null>(null);
-
-  const loadPreferences = useCallback(async () => {
-    setPrefsLoading(true);
-    setPrefsError(null);
-    const prefs = await api.getNotificationPreferences();
-    if (prefs) {
-      // 날씨 경보 스위치는 자외선+미세먼지 경보를 함께 제어한다.
-      // 둘 중 하나라도 켜져 있으면 on으로 표시해, 부분 설정이 "꺼짐"으로
-      // 잘못 보였다가 토글이 다른 쪽 설정을 덮어쓰지 않게 한다.
-      setWeatherAlert(prefs.uvAlertEnabled || prefs.dustAlertEnabled);
-      setRecommendAlert(prefs.pushEnabled);
-      setPushDeliveryAvailable(prefs.pushDeliveryAvailable === true);
-    } else {
-      setPrefsError('알림 설정을 불러오지 못했어요');
-    }
-    setPrefsLoading(false);
-  }, []);
+  const {
+    state: consentsState,
+    revokingPurpose,
+    load: loadConsents,
+    setAgreement,
+  } = useConsents();
+  const consents = consentsState.status === 'ready' ? consentsState.data : null;
 
   useEffect(() => {
-  loadPreferences();
-  api.getMe().then(setUser).catch(console.error);
-}, [loadPreferences]);
-
-  const toggleWeatherAlert = async (value: boolean) => {
-    if (prefsSavingRef.current) return;
-    prefsSavingRef.current = true;
-    const prev = weatherAlert;
-    setWeatherAlert(value);
-    try {
-      await api.updateNotificationPreferences({
-        uvAlertEnabled: value,
-        dustAlertEnabled: value,
-      });
-      setPrefsError(null);
-    } catch {
-      setWeatherAlert(prev); // 실패 시 롤백
-      setPrefsError('알림 설정 저장에 실패했어요');
-    } finally {
-      prefsSavingRef.current = false;
-    }
-  };
-
-  const toggleRecommendAlert = async (value: boolean) => {
-    if (prefsSavingRef.current) return;
-    prefsSavingRef.current = true;
-    const prev = recommendAlert;
-    setRecommendAlert(value);
-    try {
-      await api.updateNotificationPreferences({ pushEnabled: value });
-      setPrefsError(null);
-    } catch {
-      setRecommendAlert(prev);
-      setPrefsError('알림 설정 저장에 실패했어요');
-    } finally {
-      prefsSavingRef.current = false;
-    }
-  };
+    api.getMe().then(setUser).catch(console.error);
+  }, []);
 
   const openConsentModal = async () => {
     setConsentModalOpen(true);
-    setConsentsLoading(true);
-    if (!registry) setRegistry(await api.getConsentRegistry());
-    setMyConsents(await api.getMyConsents());
-    setConsentsLoading(false);
+    await loadConsents();
   };
 
-  const { showToast } = useToast();
-
   const revokeConsent = async (purpose: ConsentPurpose) => {
-    if (revokingPurpose) return;
-    setRevokingPurpose(purpose);
-    try {
-      await api.upsertConsent(purpose, false);
-      setMyConsents(await api.getMyConsents());
-      showToast('동의를 철회했어요', { type: 'success' });
-    } catch {
-      showToast('동의 철회에 실패했어요. 잠시 후 다시 시도해주세요.', { type: 'error' });
-    } finally {
-      setRevokingPurpose(null);
-    }
+    const ok = await setAgreement(purpose, false);
+    showToast(
+      ok ? '동의를 철회했어요' : '동의 철회에 실패했어요. 잠시 후 다시 시도해주세요.',
+      { type: ok ? 'success' : 'error' },
+    );
   };
 
   const agreeConsent = async (purpose: ConsentPurpose) => {
-    if (revokingPurpose) return;
-    setRevokingPurpose(purpose);
-    try {
-      await api.upsertConsent(purpose, true);
-      setMyConsents(await api.getMyConsents());
-      showToast('동의했어요', { type: 'success' });
-    } catch {
-      showToast('동의 상태를 저장하지 못했어요. 잠시 후 다시 시도해주세요.', { type: 'error' });
-    } finally {
-      setRevokingPurpose(null);
-    }
+    const ok = await setAgreement(purpose, true);
+    showToast(
+      ok ? '동의했어요' : '동의 상태를 저장하지 못했어요. 잠시 후 다시 시도해주세요.',
+      { type: ok ? 'success' : 'error' },
+    );
   };
 
   const handleWithdraw = () => {
@@ -241,7 +174,7 @@ export default function SettingsScreen() {
       <View>
         <Text style={styles.sectionTitle}>알림 설정</Text>
         <Card style={styles.listCard}>
-          {prefsLoading ? (
+          {prefsState.status === 'loading' ? (
             <View style={styles.prefsLoading}>
               <ActivityIndicator color={colors.sage} size="small" />
             </View>
@@ -252,9 +185,9 @@ export default function SettingsScreen() {
                 label="날씨 경보 알림"
                 right={
                   <Switch
-                    value={weatherAlert}
-                    onValueChange={toggleWeatherAlert}
-                    disabled={!pushDeliveryAvailable}
+                    value={prefs?.weatherAlert ?? false}
+                    onValueChange={(value) => void togglePreference('weatherAlert', value)}
+                    disabled={!prefs?.pushDeliveryAvailable}
                     trackColor={{ true: colors.sage, false: colors.gray200 }}
                   />
                 }
@@ -265,9 +198,9 @@ export default function SettingsScreen() {
                 label="추천 알림"
                 right={
                   <Switch
-                    value={recommendAlert}
-                    onValueChange={toggleRecommendAlert}
-                    disabled={!pushDeliveryAvailable}
+                    value={prefs?.recommendAlert ?? false}
+                    onValueChange={(value) => void togglePreference('recommendAlert', value)}
+                    disabled={!prefs?.pushDeliveryAvailable}
                     trackColor={{ true: colors.sage, false: colors.gray200 }}
                   />
                 }
@@ -275,10 +208,15 @@ export default function SettingsScreen() {
             </>
           )}
         </Card>
-        {!prefsLoading && !pushDeliveryAvailable && (
+        {prefsState.status === 'ready' && !prefs?.pushDeliveryAvailable && (
           <Text style={styles.readyText}>푸시 알림은 준비 중이에요. 현재 설정은 변경할 수 없어요.</Text>
         )}
-        {prefsError && <Text style={styles.errorText}>{prefsError}</Text>}
+        {prefsState.status === 'error' && (
+          <Text style={styles.errorText}>알림 설정을 불러오지 못했어요</Text>
+        )}
+        {prefsState.status === 'ready' && prefsState.saveError && (
+          <Text style={styles.errorText}>{prefsState.saveError}</Text>
+        )}
       </View>
 
       <View>
@@ -361,24 +299,25 @@ export default function SettingsScreen() {
                 <Ionicons name="close" size={24} color={colors.textSecondary} />
               </Pressable>
             </View>
-            {consentsLoading ? (
+            {consentsState.status !== 'ready' ? (
               <View style={styles.modalEmpty}>
                 <ActivityIndicator color={colors.sage} />
               </View>
-            ) : registry === null && myConsents === null ? (
+            ) : consents?.registry === null && consents.records === null ? (
               <View style={styles.modalEmpty}>
                 <Text style={styles.modalEmptyText}>동의 내역을 불러올 수 없어요</Text>
+                <RetryButton onPress={() => void loadConsents()} />
               </View>
-            ) : (registry ?? (myConsents ?? [])).length === 0 ? (
+            ) : (consents?.registry ?? consents?.records ?? []).length === 0 ? (
               <View style={styles.modalEmpty}>
                 <Text style={styles.modalEmptyText}>저장된 동의 내역이 없어요</Text>
               </View>
             ) : (
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md }}>
                 {/* F26: registry 기준으로 전 항목 표시 — 아직 동의한 적 없는 항목도 "미동의"로 노출해 재동의 경로 제공 */}
-                {(registry ?? (myConsents ?? []).map((c) => ({ purpose: c.purpose, title: c.purpose, description: '', required: false, currentVersion: c.version, withdrawalPolicy: 'keep_results' as const }))).map((info) => {
+                {(consents?.registry ?? (consents?.records ?? []).map((c) => ({ purpose: c.purpose, title: c.purpose, description: '', required: false, currentVersion: c.version, withdrawalPolicy: 'keep_results' as const }))).map((info) => {
                   const purpose = info.purpose;
-                  const record = myConsents?.find((c) => c.purpose === purpose);
+                  const record = consents?.records?.find((c) => c.purpose === purpose);
                   const agreed = record?.agreed ?? false;
                   return (
                     <View key={purpose} style={styles.consentItem}>

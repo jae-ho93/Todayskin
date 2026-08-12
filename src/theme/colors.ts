@@ -46,6 +46,10 @@ export const colors = {
   statusGood: '#7A9E7E',
   statusModerate: '#D6A83B',
   statusBad: '#E06A57',
+  // 흰 배경 위 작은 본문 텍스트용 — 위 색은 caption 크기에서 대비가 부족하다.
+  statusGoodText: '#5C7F60',
+  statusModerateText: '#B5A03C',
+  statusBadText: '#C0564E',
 
   // 텍스트
   textPrimary: '#1D1C19',

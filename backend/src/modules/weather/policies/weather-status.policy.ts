@@ -23,11 +23,16 @@ export class WeatherStatusPolicy {
     return AirStatus.GOOD;
   }
 
-  /** 오존(ppm): 0.09 이상 나쁨, 0.03 이상 보통, 미만 좋음 */
+  /**
+   * 오존(ppm): 0.09 초과 나쁨, 0.03 초과 보통, 이하 좋음.
+   *
+   * R5: 환경부 통합대기환경지수 구간(좋음 ~0.030 / 보통 ~0.090 / 나쁨 0.091~)에 맞춘다.
+   * 경계값 0.09는 '보통'이다 — 다른 지표(pm10·pm25·cai)와 같은 초과 비교 규칙.
+   */
   ozoneStatus(ppm: number | null): AirStatus | null {
     if (ppm === null) return null;
-    if (ppm >= 0.09) return AirStatus.BAD;
-    if (ppm >= 0.03) return AirStatus.MODERATE;
+    if (ppm > 0.09) return AirStatus.BAD;
+    if (ppm > 0.03) return AirStatus.MODERATE;
     return AirStatus.GOOD;
   }
 

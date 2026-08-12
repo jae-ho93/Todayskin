@@ -16,6 +16,8 @@ import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { EvidenceBadge } from '../../src/components/EvidenceBadge';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
+import { AIR_STATUS_COLOR } from '../../src/lib/air-status';
+import { formatDateKo, monthBounds, todayKst } from '../../src/lib/kst-date';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type {
   AirStatus,
@@ -25,33 +27,11 @@ import type {
   ScoreSeries,
 } from '../../src/types';
 
-// Asia/Seoul(UTC+9) 기준 오늘부터 count일 전까지의 YYYY-MM-DD 목록.
-function kstDateStrings(count: number): string[] {
-  const days: string[] = [];
-  const base = Date.now() + 9 * 3600 * 1000;
-  for (let i = 0; i < count; i++) {
-    days.push(new Date(base - i * 86400 * 1000).toISOString().slice(0, 10));
-  }
-  return days;
-}
-
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
-
-// '2026-08-01' → '8월 1일' — 날짜 표기 단위를 캘린더·추이에서 일관되게 맞춘다.
-function formatDateKo(iso: string): string {
-  const [, month, day] = iso.split('-').map(Number);
-  return `${month}월 ${day}일`;
-}
-
-function monthBounds(month: string): { from: string; to: string } {
-  const [year, value] = month.split('-').map(Number);
-  const last = new Date(year, value, 0).getDate();
-  return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, '0')}` };
-}
 
 // 화면 8: 마이 히스토리 — N8 날짜별 통합 히스토리(날씨·분석·추천·이미지·랜드마크) + score-series 추이
 export default function HistoryScreen() {
-  const today = useMemo(() => kstDateStrings(1)[0], []);
+  const today = useMemo(() => todayKst(), []);
   const [currentMonth, setCurrentMonth] = useState(today.slice(0, 7));
 
   // 서버 집계 시계열 (N8)
@@ -331,12 +311,6 @@ function DiagnosisCard({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
   );
 }
 // F57: 촬영 당시 날씨 요약 — 자외선·미세먼지·초미세먼지·오존 (2×2 그리드, 상태색)
-const WEATHER_STATUS_COLOR = {
-  good: colors.statusGood,
-  moderate: colors.statusModerate,
-  bad: colors.statusBad,
-};
-
 function WeatherSummaryGrid({ weather }: { weather: CalendarWeather }) {
   const items: {
     icon: keyof typeof Ionicons.glyphMap;
@@ -378,7 +352,7 @@ function WeatherSummaryGrid({ weather }: { weather: CalendarWeather }) {
   return (
     <View style={styles.weatherGrid}>
       {items.map((it) => {
-        const color = it.status ? WEATHER_STATUS_COLOR[it.status] : colors.textTertiary;
+        const color = it.status ? AIR_STATUS_COLOR[it.status] : colors.textTertiary;
         return (
           <View key={it.label} style={styles.weatherCell}>
             <View style={[styles.weatherIconWrap, { backgroundColor: color + '22' }]}>

@@ -1,0 +1,3612 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "HealthController_check",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "서버 상태 확인 (호환 — live와 동일 계약)",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/live": {
+      "get": {
+        "operationId": "HealthController_live",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthLiveResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Liveness probe — process event loop",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "HealthController_ready",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthReadyResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Readiness probe — DB·필수 config·migration (Redis는 선택)",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/dev-storage/{bucket}/{path}": {
+      "get": {
+        "operationId": "DevStorageController_serve",
+        "parameters": [
+          {
+            "name": "bucket",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "DevStorage"
+        ]
+      }
+    },
+    "/admin/users": {
+      "get": {
+        "operationId": "AdminController_listUsers",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "사용자 목록 조회 (ADMIN)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/users/role": {
+      "post": {
+        "operationId": "AdminController_changeRole",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeRoleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "사용자 역할 변경 (ADMIN, 감사 로그 기록)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/users/{userId}/soft-delete": {
+      "post": {
+        "operationId": "AdminController_softDeleteUser",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "사용자 Soft Delete (ADMIN, N6)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/purge": {
+      "post": {
+        "operationId": "AdminController_purge",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Soft Delete 보존 기간 만료 사용자 purge (ADMIN, N6)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/images/retry-deletes": {
+      "post": {
+        "operationId": "AdminController_retryImageDeletes",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "삭제 실패(미완료) 이미지 row 재시도 (ADMIN, N10)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/products/cache/invalidate": {
+      "post": {
+        "operationId": "AdminController_invalidateProductCatalogCache",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "제품 카탈로그 캐시 무효화 (ADMIN, R9 — 시드 직후 즉시 반영용)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/images/reconcile-orphans": {
+      "post": {
+        "operationId": "AdminController_reconcileOrphanImages",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReconcileImagesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "orphan 이미지 객체 탐지/정리 (ADMIN, N10, 기본 dry-run)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/auth/signup": {
+      "post": {
+        "operationId": "AuthController_signup",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "회원가입 (전화번호/이름/생년월일, 비밀번호 없음 — MVP)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "로그인 (전화번호만, 비밀번호 없음 — MVP)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/social": {
+      "post": {
+        "description": "제공자 토큰을 서버에서 검증한다 (kakao: access token REST 검증, google/apple: id_token JWKS RS256 서명 검증). 연결된 계정이 있으면 기존 refresh 세션으로 로그인, 미가입이면 계정을 생성하고 isNewUser=true로 온보딩(동의 + 선택 전화 연결)을 안내한다. 비밀번호 API는 없으며 세션은 기존 /auth/refresh 흐름을 그대로 사용한다.",
+        "operationId": "AuthController_socialLogin",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SocialLoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SocialLoginResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "소셜 로그인 (Kakao·Google·Apple) — N33",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/social/link-phone": {
+      "post": {
+        "description": "OTP(social_link) 본인확인 후 소셜 계정에 전화번호(+선택 생년월일)를 연결한다. 이미 다른 계정이 사용 중인 번호는 409. 연결 전까지 phoneNumber/birthDate는 null이다.",
+        "operationId": "AuthController_linkPhone",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkPhoneDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "소셜 계정 전화번호 연결 (N33 온보딩)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "AuthController_logout",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "로그아웃 (모든 세션 폐기)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "operationId": "AuthController_refresh",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Access Token 갱신 (Refresh Token 회전)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "operationId": "AuthController_me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "현재 사용자 정보",
+        "tags": [
+          "auth"
+        ]
+      },
+      "patch": {
+        "description": "name, gender만 수정 가능. phoneNumber 변경은 OTP 본인확인이 필요해 범위 밖. 소유자 본인(JWT)만 수정할 수 있고 GET /auth/me와 동일한 형태를 반환한다.",
+        "operationId": "AuthController_updateMe",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "내 프로필 수정 (N28)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/withdraw": {
+      "post": {
+        "description": "PII 즉시 스크럽, 원본 이미지 물리 삭제, 진단 결과 익명 보존. purgeAfter 이후 최종 물리 삭제.",
+        "operationId": "AuthController_withdraw",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WithdrawResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "회원 탈퇴 Soft Delete (N6)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/otp/send": {
+      "post": {
+        "operationId": "OtpController_send",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendOtpDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendOtpResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "OTP 챌린지 생성 (회원가입/로그인 본인확인 — MO)",
+        "tags": [
+          "otp"
+        ]
+      }
+    },
+    "/otp/verify": {
+      "post": {
+        "operationId": "OtpController_verify",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyOtpDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "OTP 검증 (MO — 문자 수신 여부 확인)",
+        "tags": [
+          "otp"
+        ]
+      }
+    },
+    "/weather": {
+      "get": {
+        "description": "기상청 자외선 + 에어코리아 대기오염 결합 스냅샷. lat/lon이 있으면 근접 지역, 없으면 기본 지역. 각 지표는 API 실패 시 null(측정 불가)로 응답한다.",
+        "operationId": "WeatherController_getCurrentWeather",
+        "parameters": [
+          {
+            "name": "lat",
+            "required": false,
+            "in": "query",
+            "description": "위도",
+            "schema": {
+              "example": 37.5665,
+              "type": "number"
+            }
+          },
+          {
+            "name": "lon",
+            "required": false,
+            "in": "query",
+            "description": "경도",
+            "schema": {
+              "example": 126.978,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeatherSnapshotDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "현재 날씨 스냅샷 (자외선 + 대기오염)",
+        "tags": [
+          "weather"
+        ]
+      }
+    },
+    "/recommendations": {
+      "get": {
+        "description": "오늘의 추천 카탈로그(전역, 유저 비종속). 근거등급(A/B/C) 필터 가능. A=공인 가이드라인, B=개별 임상/관찰 연구, C=개인 시계열 통계적 관찰.",
+        "operationId": "RecommendationController_list",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "페이지 크기. 지정 시 커서 페이지 응답({items,nextCursor})",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "이전 응답의 nextCursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "grade",
+            "required": false,
+            "in": "query",
+            "description": "근거 등급 필터",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "A",
+                "B",
+                "C"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/RecommendationDto"
+                      }
+                    },
+                    {
+                      "$ref": "#/components/schemas/RecommendationPageDto"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "전역 추천 카탈로그 (user 비종속)",
+        "tags": [
+          "recommendations"
+        ]
+      }
+    },
+    "/recommendations/generate": {
+      "post": {
+        "description": "기존 프론트 계약 유지. Gemini 실패 시 503. 동일 진단 중복 생성 방지. 비동기는 POST /recommendations/generate/async 사용.",
+        "operationId": "RecommendationController_generate",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateRecommendationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RecommendationDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "B등급 추천 생성 (피부 측정값 + 날씨) — sync 호환",
+        "tags": [
+          "recommendations"
+        ]
+      }
+    },
+    "/recommendations/generate/fast": {
+      "post": {
+        "description": "첫 응답에 실제품이 즉시 온다. source: CACHED(Redis SWR) | FALLBACK(규칙 기반 실제품) | LIVE(저장 완료). CACHED/FALLBACK이면 jobId가 함께 반환되고 GET /jobs/:id polling으로 LIVE 결과로 교체한다. Gemini 실패는 503이 아니라 비동기 job FAILED로 처리된다 (빈 화면·긴 동기 대기 금지).",
+        "operationId": "RecommendationController_generateFast",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateRecommendationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendationFastResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "B등급 추천 빠른 경로 (N32/N29) — 즉시 실제품 + LIVE job",
+        "tags": [
+          "recommendations"
+        ]
+      }
+    },
+    "/recommendations/generate/async": {
+      "post": {
+        "description": "즉시 jobId를 반환한다. 결과는 GET /jobs/:id 또는 SSE /jobs/:id/events로 조회한다.",
+        "operationId": "RecommendationController_generateAsync",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateRecommendationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnqueueJobResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "B등급 추천 생성 비동기 enqueue (N4)",
+        "tags": [
+          "recommendations"
+        ]
+      }
+    },
+    "/recommendations/{id}": {
+      "get": {
+        "description": "전역 템플릿 또는 사용자 생성 추천. 생성 추천은 소유권 검사.",
+        "operationId": "RecommendationController_getById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendationDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "추천 상세",
+        "tags": [
+          "recommendations"
+        ]
+      }
+    },
+    "/consents/registry": {
+      "get": {
+        "operationId": "ConsentController_listRegistry",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConsentPurposeDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "동의 목적·version registry 조회 (인증 불필요)",
+        "tags": [
+          "consents"
+        ]
+      }
+    },
+    "/consents": {
+      "get": {
+        "operationId": "ConsentController_listMine",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConsentRecordDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "내 동의 상태 목록",
+        "tags": [
+          "consents"
+        ]
+      },
+      "post": {
+        "operationId": "ConsentController_upsert",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertConsentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentRecordDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "동의/철회 upsert",
+        "tags": [
+          "consents"
+        ]
+      }
+    },
+    "/jobs/{id}": {
+      "get": {
+        "description": "PENDING → COMPLETED/FAILED. COMPLETED면 result, FAILED면 error를 포함한다. 본인 job만 조회 가능.",
+        "operationId": "JobController_getById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Job 상태 조회 (polling)",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/jobs/{id}/events": {
+      "get": {
+        "description": "1초 간격으로 job 상태를 push한다. COMPLETED/FAILED가 되면 스트림을 종료한다.",
+        "operationId": "JobController_streamEvents",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Job 상태 SSE 스트림",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/products": {
+      "get": {
+        "description": "제품 카탈로그. category(moisture/elasticity/brightening/barrier) 필터 가능.",
+        "operationId": "ProductController_list",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "페이지 크기. 지정 시 커서 페이지 응답({items,nextCursor})",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "이전 응답의 nextCursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "required": false,
+            "in": "query",
+            "description": "제품 카테고리 필터",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "moisture",
+                "elasticity",
+                "brightening",
+                "barrier"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ProductDto"
+                      }
+                    },
+                    {
+                      "$ref": "#/components/schemas/ProductPageDto"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "제품 카탈로그 목록",
+        "tags": [
+          "products"
+        ]
+      }
+    },
+    "/products/weather-based": {
+      "post": {
+        "description": "N12: 인증 필요. 좌표만 받아 서버가 오늘 날씨를 직접 조회해 세 상황(세안 후/외출 전/외출 후)별 실제 화장품을 하나씩 즉시 반환(source: CACHED | FALLBACK | LIVE). CACHED/FALLBACK이면 jobId가 함께 반환되고 GET /jobs/:id polling으로 LIVE 결과로 교체한다. 응답 items는 전부 DB 실제품(+purchaseUrl)이며 가상 gemini-product-*가 없다. 날씨 조회 불가 시 503.",
+        "operationId": "ProductController_weatherBased",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WeatherBasedRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeatherProductsResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "날씨 기반 제품 추천 빠른 경로 (피부 측정값 없음, N32/N29)",
+        "tags": [
+          "products"
+        ]
+      }
+    },
+    "/diagnosis/latest": {
+      "get": {
+        "operationId": "DiagnosisController_getLatest",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkinScoreSnapshotDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "가장 최근 진단 조회 (본인)",
+        "tags": [
+          "diagnosis"
+        ]
+      }
+    },
+    "/diagnosis/score-series": {
+      "get": {
+        "operationId": "DiagnosisController_getScoreSeries",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "시작일(YYYY-MM-DD, Asia/Seoul). 미지정 시 90일 전.",
+            "schema": {
+              "example": "2026-07-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "종료일(YYYY-MM-DD, Asia/Seoul). 미지정 시 오늘.",
+            "schema": {
+              "example": "2026-08-06",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreSeriesDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "N8: overallScore 시계열 (기간별 추이, Asia/Seoul)",
+        "tags": [
+          "diagnosis"
+        ]
+      }
+    },
+    "/diagnosis/history": {
+      "get": {
+        "operationId": "DiagnosisController_getHistory",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "페이지 크기. 지정 시 커서 페이지 응답({items,nextCursor})",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "이전 응답의 nextCursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/HistoryEntryDto"
+                      }
+                    },
+                    {
+                      "$ref": "#/components/schemas/HistoryEntryPageDto"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "진단 이력 (본인, 최신순)",
+        "tags": [
+          "diagnosis"
+        ]
+      }
+    },
+    "/diagnosis/history/{date}": {
+      "get": {
+        "operationId": "DiagnosisController_getHistoryByDate",
+        "parameters": [
+          {
+            "name": "date",
+            "required": true,
+            "in": "path",
+            "description": "Asia/Seoul 달력 날짜 YYYY-MM-DD",
+            "schema": {
+              "example": "2026-08-06",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarDayHistoryDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "N8: 특정 날짜 통합 히스토리 (날씨·분석·추천 + 동의 시 이미지/랜드마크)",
+        "tags": [
+          "diagnosis"
+        ]
+      }
+    },
+    "/diagnosis": {
+      "post": {
+        "operationId": "DiagnosisController_submit",
+        "parameters": [
+          {
+            "name": "lat",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 37.57,
+              "type": "number"
+            }
+          },
+          {
+            "name": "lon",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 126.98,
+              "type": "number"
+            }
+          },
+          {
+            "name": "wentOutside",
+            "required": false,
+            "in": "query",
+            "description": "촬영 전 외출 여부. true일 때만 날씨 스냅샷을 진단에 연결한다. 기본값 false.",
+            "schema": {
+              "example": true,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkinScoreSnapshotDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "진단 제출 — 정면 1장 이미지 업로드",
+        "tags": [
+          "diagnosis"
+        ]
+      }
+    },
+    "/diagnosis/pattern": {
+      "get": {
+        "description": "진단+날씨 시계열을 모아 피부 지표와 환경 지표 사이의 상관관계를 분석한다. 데이터가 부족하면 404가 아닌 200 + LOCKED로 반환한다. 비동기는 POST /diagnosis/pattern/async 사용.",
+        "operationId": "PatternController_getPattern",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatternSummaryDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "개인 패턴 분석 (본인 시계열) — sync",
+        "tags": [
+          "diagnosis"
+        ]
+      }
+    },
+    "/diagnosis/pattern/async": {
+      "post": {
+        "description": "즉시 jobId를 반환한다. 결과는 GET /jobs/:id 또는 SSE /jobs/:id/events로 조회한다.",
+        "operationId": "PatternController_analyzeAsync",
+        "parameters": [],
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnqueueJobResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "개인 패턴 분석 비동기 enqueue (N4)",
+        "tags": [
+          "diagnosis"
+        ]
+      }
+    },
+    "/notifications/preferences": {
+      "get": {
+        "description": "본인 알림 설정을 반환한다. DB에 row가 없으면 기본값을 반환한다(404가 아님).",
+        "operationId": "NotificationController_getPreference",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferenceDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "알림 설정 조회",
+        "tags": [
+          "notifications"
+        ]
+      },
+      "put": {
+        "description": "본인 알림 설정을 부분 갱신한다. 전달된 필드만 갱신하고, row가 없으면 기본값에서 생성한다.",
+        "operationId": "NotificationController_updatePreference",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNotificationPreferenceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferenceDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "알림 설정 부분 갱신",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/notifications/send/async": {
+      "post": {
+        "description": "즉시 jobId를 반환한다. 결과는 GET /jobs/:id 또는 SSE /jobs/:id/events로 조회한다.",
+        "operationId": "NotificationController_sendAsync",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendNotificationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnqueueJobResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "알림 발송 비동기 enqueue (N4)",
+        "tags": [
+          "notifications"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "Todayskin API",
+    "description": "날씨 연동 AI 피부 진단 및 맞춤형 화장품 추천 서비스",
+    "version": "0.1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {
+      "HealthResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "ok",
+            "description": "서버 상태"
+          },
+          "timestamp": {
+            "type": "string",
+            "example": "2026-08-04T10:00:00.000Z",
+            "description": "응답 시각"
+          }
+        },
+        "required": [
+          "status",
+          "timestamp"
+        ]
+      },
+      "HealthLiveResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "ok",
+            "description": "서버 상태"
+          },
+          "timestamp": {
+            "type": "string",
+            "example": "2026-08-04T10:00:00.000Z",
+            "description": "응답 시각"
+          },
+          "probe": {
+            "type": "string",
+            "example": "live",
+            "description": "probe 종류"
+          }
+        },
+        "required": [
+          "status",
+          "timestamp",
+          "probe"
+        ]
+      },
+      "HealthDependencyDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "up",
+              "down",
+              "skipped"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "status"
+        ]
+      },
+      "HealthReadyResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded",
+              "error"
+            ]
+          },
+          "timestamp": {
+            "type": "string"
+          },
+          "probe": {
+            "type": "string",
+            "example": "ready"
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HealthDependencyDto"
+            }
+          }
+        },
+        "required": [
+          "status",
+          "timestamp",
+          "probe",
+          "dependencies"
+        ]
+      },
+      "ChangeRoleDto": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "number",
+            "example": 1,
+            "description": "대상 사용자 ID"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "USER",
+              "ADMIN"
+            ],
+            "example": "ADMIN",
+            "description": "새 역할"
+          }
+        },
+        "required": [
+          "userId",
+          "role"
+        ]
+      },
+      "ReconcileImagesDto": {
+        "type": "object",
+        "properties": {
+          "dryRun": {
+            "type": "boolean",
+            "example": true,
+            "description": "true면 dry-run(탐지만), false면 실제 삭제",
+            "default": true
+          },
+          "limit": {
+            "type": "number",
+            "example": 100,
+            "description": "한 번에 처리할 orphan 객체 수 상한(선택)"
+          }
+        },
+        "required": [
+          "dryRun"
+        ]
+      },
+      "SignupDto": {
+        "type": "object",
+        "properties": {
+          "phoneNumber": {
+            "type": "string",
+            "example": "010-1234-5678",
+            "description": "휴대폰 번호"
+          },
+          "name": {
+            "type": "string",
+            "example": "홍길동",
+            "description": "이름 (1~20자)"
+          },
+          "birthDate": {
+            "type": "string",
+            "example": "2000-01-01",
+            "description": "생년월일 (YYYY-MM-DD)"
+          },
+          "gender": {
+            "type": "string",
+            "enum": [
+              "male",
+              "female"
+            ],
+            "example": "male",
+            "description": "선택 입력. 모델 학습 전에는 추천 로직에 임의 사용 안 함"
+          }
+        },
+        "required": [
+          "phoneNumber",
+          "name",
+          "birthDate"
+        ]
+      },
+      "UserResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number",
+            "example": 1
+          },
+          "phoneNumber": {
+            "type": "string",
+            "example": "01012345678",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "example": "홍길동"
+          },
+          "birthDate": {
+            "type": "string",
+            "example": "2000-01-01",
+            "nullable": true
+          },
+          "gender": {
+            "type": "string",
+            "enum": [
+              "male",
+              "female"
+            ],
+            "example": "male",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-08-04T10:00:00.000Z"
+          },
+          "accessToken": {
+            "type": "string",
+            "example": "eyJhbGciOiJIUzI1NiIs...",
+            "description": "JWT Access Token (signup/me 응답에 포함)"
+          },
+          "refreshToken": {
+            "type": "string",
+            "example": "eyJhbGciOiJIUzI1NiIs...",
+            "description": "Refresh Token (login 응답에 포함)"
+          },
+          "expiresIn": {
+            "type": "number",
+            "example": 900,
+            "description": "Access Token 만료(초) (login 응답에 포함)"
+          }
+        },
+        "required": [
+          "id",
+          "phoneNumber",
+          "name",
+          "birthDate",
+          "createdAt"
+        ]
+      },
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "phoneNumber": {
+            "type": "string",
+            "example": "010-1234-5678",
+            "description": "가입된 휴대폰 번호"
+          }
+        },
+        "required": [
+          "phoneNumber"
+        ]
+      },
+      "SocialLoginDto": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "kakao",
+              "google",
+              "apple"
+            ],
+            "example": "kakao"
+          },
+          "accessToken": {
+            "type": "string",
+            "description": "제공자별 토큰 (kakao: access token, google/apple: id token)",
+            "example": "eyJhbGciOiJSUzI1NiIs..."
+          }
+        },
+        "required": [
+          "provider",
+          "accessToken"
+        ]
+      },
+      "SocialLoginResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number",
+            "example": 1
+          },
+          "phoneNumber": {
+            "type": "string",
+            "example": "01012345678",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "example": "홍길동"
+          },
+          "birthDate": {
+            "type": "string",
+            "example": "2000-01-01",
+            "nullable": true
+          },
+          "gender": {
+            "type": "string",
+            "enum": [
+              "male",
+              "female"
+            ],
+            "example": "male",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-08-04T10:00:00.000Z"
+          },
+          "accessToken": {
+            "type": "string",
+            "example": "eyJhbGciOiJIUzI1NiIs...",
+            "description": "JWT Access Token (signup/me 응답에 포함)"
+          },
+          "refreshToken": {
+            "type": "string",
+            "example": "eyJhbGciOiJIUzI1NiIs...",
+            "description": "Refresh Token (login 응답에 포함)"
+          },
+          "expiresIn": {
+            "type": "number",
+            "example": 900,
+            "description": "Access Token 만료(초) (login 응답에 포함)"
+          },
+          "isNewUser": {
+            "type": "boolean",
+            "description": "true면 이번에 생성된 미가입 소셜 계정 (온보딩 필요). false면 기존 계정 로그인.",
+            "example": true
+          }
+        },
+        "required": [
+          "id",
+          "phoneNumber",
+          "name",
+          "birthDate",
+          "createdAt",
+          "isNewUser"
+        ]
+      },
+      "LinkPhoneDto": {
+        "type": "object",
+        "properties": {
+          "phoneNumber": {
+            "type": "string",
+            "example": "010-1234-5678",
+            "description": "연결할 휴대폰 번호 (OTP 본인확인 필요)"
+          },
+          "birthDate": {
+            "type": "string",
+            "example": "2000-01-01",
+            "description": "생년월일 (선택, YYYY-MM-DD)"
+          }
+        },
+        "required": [
+          "phoneNumber"
+        ]
+      },
+      "RefreshDto": {
+        "type": "object",
+        "properties": {
+          "refreshToken": {
+            "type": "string",
+            "example": "eyJhbGciOiJIUzI1NiIs...",
+            "description": "Refresh Token"
+          }
+        },
+        "required": [
+          "refreshToken"
+        ]
+      },
+      "TokenResponseDto": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "example": "eyJhbGciOiJIUzI1NiIs...",
+            "description": "JWT Access Token (Authorization: Bearer ...)"
+          },
+          "refreshToken": {
+            "type": "string",
+            "example": "eyJhbGciOiJIUzI1NiIs...",
+            "description": "Refresh Token (쿠키 또는 본문으로 전달)"
+          },
+          "expiresIn": {
+            "type": "number",
+            "example": 900,
+            "description": "Access Token 만료(초)"
+          }
+        },
+        "required": [
+          "accessToken",
+          "refreshToken",
+          "expiresIn"
+        ]
+      },
+      "UpdateMeDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "홍길동",
+            "description": "이름 (1~20자)"
+          },
+          "gender": {
+            "type": "string",
+            "enum": [
+              "male",
+              "female"
+            ],
+            "example": "female",
+            "description": "성별. null을 보내면 미선택으로 초기화",
+            "nullable": true
+          }
+        }
+      },
+      "WithdrawResponseDto": {
+        "type": "object",
+        "properties": {
+          "deletedAt": {
+            "type": "string",
+            "example": "2026-08-12T12:00:00.000Z"
+          },
+          "purgeAfter": {
+            "type": "string",
+            "example": "2026-11-10T12:00:00.000Z",
+            "description": "이 시각 이후 purge 배치가 물리 삭제한다"
+          }
+        },
+        "required": [
+          "deletedAt",
+          "purgeAfter"
+        ]
+      },
+      "SendOtpDto": {
+        "type": "object",
+        "properties": {
+          "phoneNumber": {
+            "type": "string",
+            "example": "010-1234-5678",
+            "description": "휴대폰 번호"
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "signup",
+              "login",
+              "social_link"
+            ],
+            "example": "login",
+            "description": "OTP 용도"
+          }
+        },
+        "required": [
+          "phoneNumber",
+          "purpose"
+        ]
+      },
+      "SendOtpResponseDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "123456",
+            "description": "화면에 표시할 인증코드 (MO)"
+          },
+          "recipientNumber": {
+            "type": "string",
+            "example": "1666-3538",
+            "description": "인증문자를 보낼 수신 번호 (MO)"
+          },
+          "message": {
+            "type": "string",
+            "example": "OTP가 발송되었습니다"
+          }
+        },
+        "required": [
+          "code",
+          "recipientNumber",
+          "message"
+        ]
+      },
+      "VerifyOtpDto": {
+        "type": "object",
+        "properties": {
+          "phoneNumber": {
+            "type": "string",
+            "example": "010-1234-5678"
+          },
+          "code": {
+            "type": "string",
+            "example": "123456",
+            "description": "6자리 OTP 코드"
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "signup",
+              "login",
+              "social_link"
+            ],
+            "example": "login"
+          }
+        },
+        "required": [
+          "phoneNumber",
+          "code",
+          "purpose"
+        ]
+      },
+      "MessageResponseDto": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "example": "OTP 검증이 완료되었습니다"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "WeatherSnapshotDto": {
+        "type": "object",
+        "properties": {
+          "observedAt": {
+            "type": "string",
+            "example": "2026-08-04T03:00:00.000Z",
+            "description": "관측 시각(ISO8601, UTC)"
+          },
+          "regionName": {
+            "type": "string",
+            "example": "서울특별시",
+            "description": "표시용 지역명(시/도)"
+          },
+          "districtName": {
+            "type": "string",
+            "example": "해운대구",
+            "description": "시/군/구 표시명 (없으면 null)",
+            "nullable": true
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "LIVE",
+              "CACHED",
+              "UNAVAILABLE"
+            ],
+            "example": "LIVE",
+            "description": "데이터 출처"
+          },
+          "uvIndex": {
+            "type": "number",
+            "description": "자외선 지수(현재 시점 예보)",
+            "nullable": true
+          },
+          "uvStatus": {
+            "type": "string",
+            "enum": [
+              "good",
+              "moderate",
+              "bad"
+            ],
+            "description": "자외선 등급",
+            "nullable": true
+          },
+          "uvIndexPeak": {
+            "type": "number",
+            "description": "오늘 남은 시간대 중 예상 자외선 최댓값",
+            "nullable": true
+          },
+          "uvStatusPeak": {
+            "type": "string",
+            "enum": [
+              "good",
+              "moderate",
+              "bad"
+            ],
+            "description": "자외선 피크 등급",
+            "nullable": true
+          },
+          "uvIndexPeakHour": {
+            "type": "number",
+            "description": "피크 자외선이 나오는 시각(0~23시)",
+            "nullable": true
+          },
+          "ozonePpm": {
+            "type": "number",
+            "description": "오존(ppm)",
+            "nullable": true
+          },
+          "ozoneStatus": {
+            "type": "string",
+            "enum": [
+              "good",
+              "moderate",
+              "bad"
+            ],
+            "description": "오존 등급",
+            "nullable": true
+          },
+          "pm25": {
+            "type": "number",
+            "description": "초미세먼지(PM2.5)",
+            "nullable": true
+          },
+          "pm25Status": {
+            "type": "string",
+            "enum": [
+              "good",
+              "moderate",
+              "bad"
+            ],
+            "description": "초미세먼지 등급",
+            "nullable": true
+          },
+          "pm10": {
+            "type": "number",
+            "description": "미세먼지(PM10)",
+            "nullable": true
+          },
+          "pm10Status": {
+            "type": "string",
+            "enum": [
+              "good",
+              "moderate",
+              "bad"
+            ],
+            "description": "미세먼지 등급",
+            "nullable": true
+          },
+          "caiValue": {
+            "type": "number",
+            "description": "통합대기환경지수(CAI)",
+            "nullable": true
+          },
+          "caiStatus": {
+            "type": "string",
+            "enum": [
+              "good",
+              "moderate",
+              "bad"
+            ],
+            "description": "CAI 등급",
+            "nullable": true
+          },
+          "no2Value": {
+            "type": "number",
+            "description": "이산화질소(NO2)",
+            "nullable": true
+          },
+          "so2Value": {
+            "type": "number",
+            "description": "아황산가스(SO2)",
+            "nullable": true
+          },
+          "coValue": {
+            "type": "number",
+            "description": "일산화탄소(CO)",
+            "nullable": true
+          }
+        },
+        "required": [
+          "observedAt",
+          "regionName",
+          "source"
+        ]
+      },
+      "RecommendationDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "gemini-a1b2c3d4"
+          },
+          "title": {
+            "type": "string",
+            "example": "오늘은 이중 세안을 권장해요"
+          },
+          "grade": {
+            "type": "string",
+            "enum": [
+              "A",
+              "B",
+              "C"
+            ],
+            "example": "B"
+          },
+          "sourceLabel": {
+            "type": "string",
+            "example": "AI 종합 분석 · 피부과학 일반 지식 기반"
+          },
+          "explanation": {
+            "type": "string",
+            "example": "초미세먼지 노출은 모공에 침투해 활성산소를 생성할 수 있다는 관찰 연구 결과가 있습니다."
+          },
+          "observationalNote": {
+            "type": "string",
+            "example": "통계적 관찰 - 확정적 인과관계 아님",
+            "nullable": true
+          },
+          "ingredientTags": {
+            "example": [
+              "세라마이드",
+              "판테놀"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "relatedProductIds": {
+            "example": [],
+            "description": "연결된 제품 ID 목록 (호환용 빈 배열)",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "timing": {
+            "type": "string",
+            "enum": [
+              "외출 후",
+              "자기 전",
+              "언제든"
+            ],
+            "description": "언제 적용하면 좋은지",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "grade",
+          "sourceLabel",
+          "explanation",
+          "ingredientTags",
+          "relatedProductIds"
+        ]
+      },
+      "RecommendationPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecommendationDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "다음 페이지 커서. 없으면 null"
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "WeatherInputDto": {
+        "type": "object",
+        "properties": {
+          "observedAt": {
+            "type": "string",
+            "example": "2026-08-04T03:00:00.000Z",
+            "description": "관측 시각(ISO8601, UTC)"
+          },
+          "regionName": {
+            "type": "string",
+            "example": "서울특별시",
+            "description": "표시용 지역명(시/도)"
+          },
+          "districtName": {
+            "type": "string",
+            "example": "해운대구",
+            "description": "시/군/구 표시명 (없으면 null)",
+            "nullable": true
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "LIVE",
+              "CACHED",
+              "UNAVAILABLE"
+            ],
+            "example": "LIVE",
+            "description": "데이터 출처"
+          },
+          "uvIndex": {
+            "type": "number",
+            "description": "자외선 지수(현재 시점 예보)",
+            "nullable": true
+          },
+          "uvStatus": {
+            "type": "string",
+            "enum": [
+              "good",
+              "moderate",
+              "bad"
+            ],
+            "description": "자외선 등급",
+            "nullable": true
+          },
+          "uvIndexPeak": {
+            "type": "number",
+            "description": "오늘 남은 시간대 중 예상 자외선 최댓값",
+            "nullable": true
+          },
+          "uvStatusPeak": {
+            "type": "string",
+            "enum": [
+              "good",
+              "moderate",
+              "bad"
+            ],
+            "description": "자외선 피크 등급",
+            "nullable": true
+          },
+          "uvIndexPeakHour": {
+            "type": "number",
+            "description": "피크 자외선이 나오는 시각(0~23시)",
+            "nullable": true
+          },
+          "ozonePpm": {
+            "type": "number",
+            "description": "오존(ppm)",
+            "nullable": true
+          },
+          "ozoneStatus": {
+            "type": "string",
+            "enum": [
+              "good",
+              "moderate",
+              "bad"
+            ],
+            "description": "오존 등급",
+            "nullable": true
+          },
+          "pm25": {
+            "type": "number",
+            "description": "초미세먼지(PM2.5)",
+            "nullable": true
+          },
+          "pm25Status": {
+            "type": "string",
+            "enum": [
+              "good",
+              "moderate",
+              "bad"
+            ],
+            "description": "초미세먼지 등급",
+            "nullable": true
+          },
+          "pm10": {
+            "type": "number",
+            "description": "미세먼지(PM10)",
+            "nullable": true
+          },
+          "pm10Status": {
+            "type": "string",
+            "enum": [
+              "good",
+              "moderate",
+              "bad"
+            ],
+            "description": "미세먼지 등급",
+            "nullable": true
+          },
+          "caiValue": {
+            "type": "number",
+            "description": "통합대기환경지수(CAI)",
+            "nullable": true
+          },
+          "caiStatus": {
+            "type": "string",
+            "enum": [
+              "good",
+              "moderate",
+              "bad"
+            ],
+            "description": "CAI 등급",
+            "nullable": true
+          },
+          "no2Value": {
+            "type": "number",
+            "description": "이산화질소(NO2)",
+            "nullable": true
+          },
+          "so2Value": {
+            "type": "number",
+            "description": "아황산가스(SO2)",
+            "nullable": true
+          },
+          "coValue": {
+            "type": "number",
+            "description": "일산화탄소(CO)",
+            "nullable": true
+          }
+        }
+      },
+      "GenerateRecommendationDto": {
+        "type": "object",
+        "properties": {
+          "diagnosisId": {
+            "type": "string",
+            "description": "진단 ID (최종 계약 — 서버가 소유권 확인 후 DB에서 조회)"
+          },
+          "skinScore": {
+            "type": "object",
+            "description": "피부 측정값 스냅샷 (기존 프론트 호환 — diagnosisId 있으면 무시)"
+          },
+          "weather": {
+            "description": "날씨 스냅샷 (기존 프론트 호환 — diagnosisId 있으면 서버가 DB에서 조회)",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/WeatherInputDto"
+              }
+            ]
+          }
+        }
+      },
+      "RecommendationFastResponseDto": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "CACHED",
+              "FALLBACK",
+              "LIVE"
+            ],
+            "example": "FALLBACK"
+          },
+          "jobId": {
+            "type": "string",
+            "description": "LIVE 교체용 job id. CACHED/FALLBACK이면 enqueue된 job, LIVE면 완료된 job.",
+            "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+          },
+          "generatedAt": {
+            "type": "string",
+            "description": "이 결과가 만들어진 시각 (CACHED/LIVE). stale 표시용 메타.",
+            "example": "2026-08-16T02:00:00.000Z"
+          },
+          "recommendations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecommendationDto"
+            }
+          }
+        },
+        "required": [
+          "source",
+          "recommendations"
+        ]
+      },
+      "EnqueueJobResponseDto": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "COMPLETED",
+              "FAILED"
+            ],
+            "example": "PENDING"
+          }
+        },
+        "required": [
+          "jobId",
+          "status"
+        ]
+      },
+      "ConsentPurposeDto": {
+        "type": "object",
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "diagnosis_image_processing",
+              "diagnosis_image_storage",
+              "ai_recommendation_data_transfer"
+            ]
+          },
+          "currentVersion": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean",
+            "description": "기능 진입에 필수 여부"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "withdrawalPolicy": {
+            "type": "string",
+            "enum": [
+              "keep_results",
+              "delete_images"
+            ]
+          }
+        },
+        "required": [
+          "purpose",
+          "currentVersion",
+          "required",
+          "title",
+          "description",
+          "withdrawalPolicy"
+        ]
+      },
+      "ConsentRecordDto": {
+        "type": "object",
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "diagnosis_image_processing",
+              "diagnosis_image_storage",
+              "ai_recommendation_data_transfer"
+            ]
+          },
+          "agreed": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "nullable": true
+          },
+          "revokedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean",
+            "description": "현재 registry version과 일치하는 활성 동의인지"
+          }
+        },
+        "required": [
+          "purpose",
+          "agreed",
+          "version",
+          "createdAt",
+          "updatedAt",
+          "active"
+        ]
+      },
+      "UpsertConsentDto": {
+        "type": "object",
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "diagnosis_image_processing",
+              "diagnosis_image_storage",
+              "ai_recommendation_data_transfer"
+            ]
+          },
+          "agreed": {
+            "type": "boolean",
+            "description": "동의 여부. false면 철회로 처리"
+          },
+          "version": {
+            "type": "string",
+            "description": "생략 시 registry currentVersion을 사용"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "app",
+              "web",
+              "admin"
+            ]
+          }
+        },
+        "required": [
+          "purpose",
+          "agreed"
+        ]
+      },
+      "JobResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "RECOMMENDATION_GENERATE",
+              "WEATHER_PRODUCTS_GENERATE",
+              "PATTERN_ANALYZE",
+              "NOTIFICATION_SEND"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "COMPLETED",
+              "FAILED"
+            ]
+          },
+          "priority": {
+            "type": "number",
+            "description": "낮을수록 높은 우선순위"
+          },
+          "attempts": {
+            "type": "number"
+          },
+          "maxAttempts": {
+            "type": "number"
+          },
+          "queueName": {
+            "type": "string"
+          },
+          "result": {
+            "type": "object",
+            "description": "COMPLETED 시 결과 페이로드"
+          },
+          "error": {
+            "type": "string",
+            "description": "FAILED 시 에러 메시지",
+            "nullable": true
+          },
+          "deadLetter": {
+            "type": "boolean",
+            "description": "최종 실패 후 DLQ 이동 여부"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "finishedAt": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "status",
+          "priority",
+          "attempts",
+          "maxAttempts",
+          "queueName",
+          "deadLetter",
+          "createdAt"
+        ]
+      },
+      "ProductDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "prod-1"
+          },
+          "name": {
+            "type": "string",
+            "example": "데일리 UV 디펜스 선크림"
+          },
+          "brand": {
+            "type": "string",
+            "example": "닥터지"
+          },
+          "imageUri": {
+            "type": "string",
+            "example": null,
+            "description": "제품 이미지 URI",
+            "nullable": true
+          },
+          "purchaseUrl": {
+            "type": "string",
+            "example": "https://www.oliveyoung.co.kr/store/search/getSearch.do?query=%EC%84%A0%ED%81%AC%EB%A6%BC",
+            "description": "구매 페이지 URL (Linking.openURL로 직접 열 수 있는 값)",
+            "nullable": true
+          },
+          "matchedGrade": {
+            "type": "string",
+            "enum": [
+              "A",
+              "B",
+              "C"
+            ],
+            "example": "A"
+          },
+          "matchedIngredients": {
+            "example": [
+              "징크옥사이드",
+              "나이아신아마이드"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "moisture",
+              "elasticity",
+              "brightening",
+              "barrier"
+            ],
+            "example": "barrier"
+          },
+          "recommendationId": {
+            "type": "string",
+            "description": "연결된 추천 ID (카탈로그 제품용, 호환)",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "description": "날씨 기반 제품의 근거 설명",
+            "nullable": true
+          },
+          "timing": {
+            "type": "string",
+            "enum": [
+              "세안 후",
+              "외출 전",
+              "외출 후"
+            ],
+            "description": "하루 중 이 제품을 쓰면 좋은 상황",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "brand",
+          "matchedGrade",
+          "matchedIngredients",
+          "category"
+        ]
+      },
+      "ProductPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "다음 페이지 커서. 없으면 null"
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "WeatherBasedRequestDto": {
+        "type": "object",
+        "properties": {
+          "lat": {
+            "type": "number",
+            "description": "위도 (-90 ~ 90)",
+            "example": 37.5665
+          },
+          "lon": {
+            "type": "number",
+            "description": "경도 (-180 ~ 180)",
+            "example": 126.978
+          }
+        }
+      },
+      "WeatherProductsResponseDto": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "CACHED",
+              "FALLBACK",
+              "LIVE"
+            ],
+            "example": "FALLBACK"
+          },
+          "jobId": {
+            "type": "string",
+            "description": "LIVE 교체용 job id. CACHED/FALLBACK이면 enqueue된 job, LIVE면 완료된 job."
+          },
+          "generatedAt": {
+            "type": "string",
+            "description": "이 결과가 만들어진 시각 (CACHED/LIVE). stale 표시용 메타."
+          },
+          "items": {
+            "description": "실제 카탈로그 제품 3개 (세안 후/외출 전/외출 후)",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductDto"
+            }
+          }
+        },
+        "required": [
+          "source",
+          "items"
+        ]
+      },
+      "SkinPartMetricDto": {
+        "type": "object",
+        "properties": {
+          "part": {
+            "type": "string",
+            "enum": [
+              "forehead",
+              "glabella",
+              "eyeArea",
+              "cheek",
+              "lips",
+              "jaw"
+            ],
+            "example": "forehead"
+          },
+          "label": {
+            "type": "string",
+            "example": "이마"
+          },
+          "grade": {
+            "type": "string",
+            "example": "양호"
+          },
+          "moisture": {
+            "type": "number",
+            "example": 72,
+            "nullable": true
+          },
+          "elasticity": {
+            "type": "number",
+            "example": 68,
+            "nullable": true
+          },
+          "note": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "part",
+          "label",
+          "grade"
+        ]
+      },
+      "DiseaseClassificationDto": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "example": "정상"
+          },
+          "confidence": {
+            "type": "number",
+            "example": 0.98
+          }
+        },
+        "required": [
+          "label",
+          "confidence"
+        ]
+      },
+      "SkinScoreSnapshotDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "snap-2026-08-03"
+          },
+          "capturedAt": {
+            "type": "string",
+            "example": "2026-08-03T00:00:00.000Z"
+          },
+          "overallScore": {
+            "type": "number",
+            "example": 78
+          },
+          "thumbnailUri": {
+            "type": "string",
+            "nullable": true
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkinPartMetricDto"
+            }
+          },
+          "acneReport": {
+            "type": "string",
+            "nullable": true,
+            "example": "이마에 비염증성 여드름 1개가 있습니다."
+          },
+          "diseaseClassification": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DiseaseClassificationDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "capturedAt",
+          "overallScore",
+          "parts"
+        ]
+      },
+      "ScoreSeriesPointDto": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "example": "2026-08-06"
+          },
+          "diagnosisId": {
+            "type": "string"
+          },
+          "capturedAt": {
+            "type": "string"
+          },
+          "overallScore": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "date",
+          "diagnosisId",
+          "capturedAt",
+          "overallScore"
+        ]
+      },
+      "ScoreSeriesDto": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "example": "2026-07-01"
+          },
+          "to": {
+            "type": "string",
+            "example": "2026-08-06"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScoreSeriesPointDto"
+            }
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "points"
+        ]
+      },
+      "HistoryEntryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "snap-2026-08-03"
+          },
+          "capturedAt": {
+            "type": "string",
+            "example": "2026-08-03T00:00:00.000Z"
+          },
+          "overallScore": {
+            "type": "number",
+            "example": 78
+          },
+          "thumbnailUri": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "capturedAt",
+          "overallScore"
+        ]
+      },
+      "HistoryEntryPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HistoryEntryDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "description": "다음 페이지 커서. 없으면 null"
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "CalendarWeatherDto": {
+        "type": "object",
+        "properties": {
+          "observedAt": {
+            "type": "string",
+            "example": "2026-08-06T03:00:00.000Z"
+          },
+          "regionName": {
+            "type": "string",
+            "example": "서울특별시"
+          },
+          "districtName": {
+            "type": "string",
+            "example": "해운대구",
+            "nullable": true
+          },
+          "source": {
+            "type": "string",
+            "example": "LIVE"
+          },
+          "uvIndex": {
+            "type": "number",
+            "nullable": true
+          },
+          "uvStatus": {
+            "type": "string",
+            "nullable": true
+          },
+          "uvIndexPeak": {
+            "type": "number",
+            "nullable": true
+          },
+          "uvStatusPeak": {
+            "type": "string",
+            "nullable": true
+          },
+          "uvIndexPeakHour": {
+            "type": "number",
+            "nullable": true
+          },
+          "ozonePpm": {
+            "type": "number",
+            "nullable": true
+          },
+          "ozoneStatus": {
+            "type": "string",
+            "nullable": true
+          },
+          "pm25": {
+            "type": "number",
+            "nullable": true
+          },
+          "pm25Status": {
+            "type": "string",
+            "nullable": true
+          },
+          "pm10": {
+            "type": "number",
+            "nullable": true
+          },
+          "pm10Status": {
+            "type": "string",
+            "nullable": true
+          },
+          "caiValue": {
+            "type": "number",
+            "nullable": true
+          },
+          "caiStatus": {
+            "type": "string",
+            "nullable": true
+          },
+          "no2Value": {
+            "type": "number",
+            "nullable": true
+          },
+          "so2Value": {
+            "type": "number",
+            "nullable": true
+          },
+          "coValue": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "observedAt",
+          "regionName",
+          "source"
+        ]
+      },
+      "CalendarProductDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "brand": {
+            "type": "string"
+          },
+          "imageUri": {
+            "type": "string",
+            "nullable": true
+          },
+          "purchaseUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "구매 페이지 URL (Linking.openURL로 직접 열 수 있는 값)"
+          },
+          "category": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "timing": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "brand",
+          "category"
+        ]
+      },
+      "CalendarRecommendationDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "grade": {
+            "type": "string",
+            "enum": [
+              "A",
+              "B",
+              "C"
+            ]
+          },
+          "sourceLabel": {
+            "type": "string"
+          },
+          "explanation": {
+            "type": "string"
+          },
+          "observationalNote": {
+            "type": "string",
+            "nullable": true
+          },
+          "ingredientTags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "timing": {
+            "type": "string",
+            "nullable": true
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CalendarProductDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "grade",
+          "sourceLabel",
+          "explanation",
+          "ingredientTags",
+          "products"
+        ]
+      },
+      "CalendarImageDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "S3/Memory presigned URL"
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "URL 만료 시각(ISO8601)"
+          }
+        },
+        "required": [
+          "url",
+          "contentType",
+          "expiresAt"
+        ]
+      },
+      "LandmarksDto": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "example": "mediapipe-face-landmarker-v1"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "description": "정규화 캔버스 좌표 [[x,y], ...]"
+          }
+        },
+        "required": [
+          "version",
+          "points"
+        ]
+      },
+      "CalendarDiagnosisDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "capturedAt": {
+            "type": "string"
+          },
+          "overallScore": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string"
+          },
+          "modelVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkinPartMetricDto"
+            }
+          },
+          "weather": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CalendarWeatherDto"
+              }
+            ]
+          },
+          "recommendations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CalendarRecommendationDto"
+            }
+          },
+          "image": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CalendarImageDto"
+              }
+            ]
+          },
+          "landmarks": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LandmarksDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "capturedAt",
+          "overallScore",
+          "status",
+          "parts",
+          "recommendations"
+        ]
+      },
+      "CalendarDayHistoryDto": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "example": "2026-08-06",
+            "description": "조회 날짜(Asia/Seoul)"
+          },
+          "diagnoses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CalendarDiagnosisDto"
+            }
+          }
+        },
+        "required": [
+          "date",
+          "diagnoses"
+        ]
+      },
+      "PatternCorrelationDto": {
+        "type": "object",
+        "properties": {
+          "skinMetric": {
+            "type": "string",
+            "description": "피부 측정 지표. overallScore 또는 부위별 moisture/elasticity.",
+            "example": "overallScore"
+          },
+          "part": {
+            "type": "string",
+            "description": "피부 부위. overallScore인 경우 null.",
+            "enum": [
+              "forehead",
+              "glabella",
+              "eyeArea",
+              "cheek",
+              "lips",
+              "jaw"
+            ],
+            "nullable": true,
+            "example": "cheek"
+          },
+          "envMetric": {
+            "type": "string",
+            "description": "환경 지표. uvIndex/pm25/ozonePpm 등.",
+            "example": "pm25"
+          },
+          "r": {
+            "type": "number",
+            "example": -0.42,
+            "description": "피어슨 상관계수 (-1 ~ 1)"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "positive",
+              "negative",
+              "neutral"
+            ],
+            "example": "negative"
+          },
+          "strength": {
+            "type": "string",
+            "enum": [
+              "strong",
+              "moderate",
+              "weak",
+              "negligible"
+            ],
+            "example": "moderate"
+          },
+          "sampleSize": {
+            "type": "number",
+            "example": 8,
+            "description": "계산에 사용된 샘플 수"
+          },
+          "observationalNote": {
+            "type": "string",
+            "description": "상관관계는 인과관계가 아님을 고정 문구로 명시한다.",
+            "example": "이 관계는 통계적 관찰일 뿐 인과관계를 의미하지 않아요."
+          }
+        },
+        "required": [
+          "skinMetric",
+          "part",
+          "envMetric",
+          "r",
+          "direction",
+          "strength",
+          "sampleSize"
+        ]
+      },
+      "PatternSummaryDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "LOCKED",
+              "READY"
+            ],
+            "example": "LOCKED"
+          },
+          "collectedDays": {
+            "type": "number",
+            "example": 3,
+            "description": "현재까지 수집된 진단 일수 (LOCKED/READY 공통)."
+          },
+          "requiredDays": {
+            "type": "number",
+            "example": 7,
+            "description": "분석에 필요한 최소 진단 일수. LOCKED일 때만 의미."
+          },
+          "lockedMessage": {
+            "type": "string",
+            "description": "LOCKED 상태에서 보여줄 준비 중 문구 (고정).",
+            "example": "패턴 분석에는 최소 5회의 진단 데이터가 필요해요."
+          },
+          "observationalDisclaimer": {
+            "type": "string",
+            "description": "READY일 때 인과관계가 아님을 명시하는 고정 문구.",
+            "example": "이 결과는 통계적 관찰일 뿐 인과관계를 의미하지 않아요."
+          },
+          "correlations": {
+            "description": "상관 분석 결과 (READY일 때만).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PatternCorrelationDto"
+            }
+          },
+          "recommendationIds": {
+            "description": "패턴과 짝을 이루는 C등급 추천 id (READY일 때만).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "status",
+          "collectedDays",
+          "requiredDays",
+          "correlations",
+          "recommendationIds"
+        ]
+      },
+      "NotificationPreferenceDto": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "number",
+            "example": 1,
+            "description": "사용자 ID"
+          },
+          "pushEnabled": {
+            "type": "boolean",
+            "example": false,
+            "description": "푸시 알림 마스터 스위치. 기본 false."
+          },
+          "uvAlertEnabled": {
+            "type": "boolean",
+            "example": true,
+            "description": "자외선 경보 알림. 기본 true."
+          },
+          "dustAlertEnabled": {
+            "type": "boolean",
+            "example": true,
+            "description": "미세먼지 경보 알림. 기본 true."
+          },
+          "morningReminder": {
+            "type": "boolean",
+            "example": false,
+            "description": "아침 리마인더 알림. 기본 false."
+          },
+          "pushDeliveryAvailable": {
+            "type": "boolean",
+            "example": false,
+            "description": "실제 푸시 발송(FCM/APNs) 지원 여부(읽기 전용). false면 알림 토글은 저장만 되고 실제 발송되지 않는다 — FE는 거짓 토글로 노출하지 말 것."
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-08-05T10:00:00.000Z",
+            "description": "최종 수정 시각 (DB에 row가 있을 때만)."
+          }
+        },
+        "required": [
+          "userId",
+          "pushEnabled",
+          "uvAlertEnabled",
+          "dustAlertEnabled",
+          "morningReminder",
+          "pushDeliveryAvailable"
+        ]
+      },
+      "UpdateNotificationPreferenceDto": {
+        "type": "object",
+        "properties": {
+          "pushEnabled": {
+            "type": "boolean",
+            "example": false,
+            "description": "푸시 알림 마스터 스위치"
+          },
+          "uvAlertEnabled": {
+            "type": "boolean",
+            "example": true,
+            "description": "자외선 경보 알림"
+          },
+          "dustAlertEnabled": {
+            "type": "boolean",
+            "example": true,
+            "description": "미세먼지 경보 알림"
+          },
+          "morningReminder": {
+            "type": "boolean",
+            "example": false,
+            "description": "아침 리마인더 알림 (저장 전용). N34: 발송 스케줄이 미구현이라 현재는 실제로 발송되지 않는다 — pushDeliveryAvailable=false와 함께 FE에서 비활성 표시."
+          }
+        }
+      },
+      "SendNotificationDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "알림 종류",
+            "enum": [
+              "uv",
+              "dust",
+              "morning",
+              "generic"
+            ],
+            "example": "uv"
+          },
+          "title": {
+            "type": "string",
+            "description": "알림 제목(선택)"
+          },
+          "body": {
+            "type": "string",
+            "description": "알림 본문(선택)"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      }
+    }
+  }
+}

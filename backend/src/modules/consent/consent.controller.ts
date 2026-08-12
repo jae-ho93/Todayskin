@@ -7,7 +7,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -26,6 +26,7 @@ export class ConsentController {
 
   @Get('registry')
   @ApiOperation({ summary: '동의 목적·version registry 조회 (인증 불필요)' })
+  @ApiOkResponse({ type: [ConsentPurposeDto] })
   listRegistry(): ConsentPurposeDto[] {
     return this.consentService.listRegistry();
   }
@@ -34,6 +35,7 @@ export class ConsentController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: '내 동의 상태 목록' })
+  @ApiOkResponse({ type: [ConsentRecordDto] })
   async listMine(
     @CurrentUser() user: JwtPayload,
   ): Promise<ConsentRecordDto[]> {
@@ -45,6 +47,7 @@ export class ConsentController {
   @UseGuards(JwtAuthGuard)
   @HttpCode(200)
   @ApiOperation({ summary: '동의/철회 upsert' })
+  @ApiOkResponse({ type: ConsentRecordDto })
   async upsert(
     @CurrentUser() user: JwtPayload,
     @Body() dto: UpsertConsentDto,

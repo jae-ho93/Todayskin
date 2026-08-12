@@ -1,6 +1,7 @@
 import { Body, Controller, HttpCode, Post } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { MessageResponseDto } from '../../common/dto/message-response.dto';
 import { OtpService } from './otp.service';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { SendOtpResponseDto } from './dto/send-otp-response.dto';
@@ -29,6 +30,7 @@ export class OtpController {
 
   @Post('send')
   @ApiOperation({ summary: 'OTP 챌린지 생성 (회원가입/로그인 본인확인 — MO)' })
+  @ApiOkResponse({ type: SendOtpResponseDto })
   @HttpCode(200)
   async send(@Body() dto: SendOtpDto): Promise<SendOtpResponseDto> {
     const phoneNumber = dto.phoneNumber.replace(/-/g, '');
@@ -46,8 +48,9 @@ export class OtpController {
 
   @Post('verify')
   @ApiOperation({ summary: 'OTP 검증 (MO — 문자 수신 여부 확인)' })
+  @ApiOkResponse({ type: MessageResponseDto })
   @HttpCode(200)
-  async verify(@Body() dto: VerifyOtpDto): Promise<{ message: string }> {
+  async verify(@Body() dto: VerifyOtpDto): Promise<MessageResponseDto> {
     const phoneNumber = dto.phoneNumber.replace(/-/g, '');
     await this.otpService.verifyOtp(
       phoneNumber,

@@ -41,10 +41,10 @@ export class CalendarWeatherDto {
   regionName!: string;
 
   /** F56: 시/군/구 표시명 (예: '해운대구'). 없으면 null. */
-  @ApiPropertyOptional({ example: '해운대구', nullable: true })
+  @ApiPropertyOptional({ type: String, example: '해운대구', nullable: true })
   districtName?: string | null;
 
-  @ApiProperty({ example: 'LIVE' })
+  @ApiProperty({ type: String, example: 'LIVE' })
   source!: string;
 
   @ApiPropertyOptional({ type: Number, nullable: true })

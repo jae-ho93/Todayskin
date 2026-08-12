@@ -1,12 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import type { AirStatus } from '../types';
+import { AIR_STATUS_BG, AIR_STATUS_COLOR, AIR_STATUS_LABEL } from '../lib/air-status';
 import { colors, radius, spacing, typography } from '../theme';
-
-const STATUS_META: Record<AirStatus, { color: string; bg: string; label: string }> = {
-  good: { color: colors.statusGood, bg: colors.sageLight, label: '좋음' },
-  moderate: { color: colors.statusModerate, bg: colors.ochreLight, label: '보통' },
-  bad: { color: colors.statusBad, bg: colors.coralLight, label: '나쁨' },
-};
 
 interface StatusBadgeProps {
   status?: AirStatus | null; // null/undefined = 해당 항목 조회 실패 — "측정 불가"로 표시
@@ -23,12 +18,12 @@ export function StatusBadge({ status, label }: StatusBadgeProps) {
     );
   }
 
-  const meta = STATUS_META[status];
+  const color = AIR_STATUS_COLOR[status];
   return (
-    <View style={[styles.badge, { backgroundColor: meta.bg }]}>
-      <View style={[styles.dot, { backgroundColor: meta.color }]} />
-      <Text style={[styles.text, { color: meta.color }]}>
-        {label} {meta.label}
+    <View style={[styles.badge, { backgroundColor: AIR_STATUS_BG[status] }]}>
+      <View style={[styles.dot, { backgroundColor: color }]} />
+      <Text style={[styles.text, { color }]}>
+        {label} {AIR_STATUS_LABEL[status]}
       </Text>
     </View>
   );

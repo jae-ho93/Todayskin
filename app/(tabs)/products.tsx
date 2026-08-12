@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
-import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { EvidenceBadge } from '../../src/components/EvidenceBadge';
 import { IngredientChip } from '../../src/components/IngredientChip';
+import { RetryButton } from '../../src/components/RetryButton';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { useToast } from '../../src/components/Toast';
-import { useUserLocation } from '../../src/hooks/useUserLocation';
+import { useWeatherProducts } from '../../src/features/products/useWeatherProducts';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type { Product, ProductTiming } from '../../src/types';
 
@@ -23,72 +23,17 @@ const TIMING_ORDER: ProductTiming[] = ['세안 후', '외출 전', '외출 후']
 
 // 화면 7: 제품/성분 추천 리스트 — 날씨 기반 / 피부 기반 / 날씨+피부 기반 3구역
 export default function ProductsScreen() {
-  const { coords, loading: locationLoading } = useUserLocation();
   const [category, setCategory] = useState<Product['category'] | 'all'>('all');
-  // null = 로딩 중이거나 실패 — weatherProductsLoading으로 둘을 구분한다. 오늘 날씨를 Gemini에게
-  // 보내 하루 중 실제로 화장품을 쓰는 상황(세안 후/외출 전/외출 후)별로 하나씩 추천받는다.
-  // 피부 기반 / 날씨+피부 기반은 아직 이 화면에 연결하지 않아 구역만 둔다.
-  const [weatherProducts, setWeatherProducts] = useState<Product[] | null>(null);
-  const [weatherProductsLoading, setWeatherProductsLoading] = useState(false);
-  const [weatherProductsRefreshing, setWeatherProductsRefreshing] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  // SSE/polling job 대기 취소용 — 재호출·언마운트 시 이전 대기를 중단한다.
-  const jobAbortRef = useRef<AbortController | null>(null);
-
-  const load = useCallback(async () => {
-    jobAbortRef.current?.abort();
-    jobAbortRef.current = null;
-    setWeatherProductsRefreshing(false);
-    // N12: 날씨는 서버가 직접 조회한다. 클라이언트는 좌표만 전달하고 weather 본문을
-    // 보내지 않으므로 조작된 날씨로 추천을 왜곡할 수 없다.
-    const weatherResponse = await api.getWeatherProductsFast(coords ?? undefined);
-
-    const products = weatherResponse?.items ?? null;
-    setWeatherProducts(products);
-
-    if (weatherResponse?.source !== 'LIVE' && weatherResponse?.jobId) {
-      // SSE 우선, 실패 시 폴링 폴백 — waitForJob 내부에서 처리 (F0)
-      setWeatherProductsRefreshing(true);
-      const controller = new AbortController();
-      jobAbortRef.current = controller;
-      void api.waitForJob<Product>(weatherResponse.jobId, { signal: controller.signal }).then((job) => {
-        if (jobAbortRef.current === controller) jobAbortRef.current = null;
-        if (job?.status === 'COMPLETED' && job.result) {
-          // F38: job.result는 { products: [...] } 래핑 객체 — 배열로 언랩
-          const live =
-            (job.result as { products?: Product[] } | null)?.products ?? [];
-          setWeatherProducts(live);
-        }
-        // 실패/timeout/취소: 현재 CACHED/FALLBACK 실제품을 유지한다.
-        setWeatherProductsRefreshing(false);
-      });
-    }
-  }, [coords]);
-
-  useEffect(() => {
-    if (locationLoading) return;
-    let cancelled = false;
-    setWeatherProductsLoading(true);
-    load().then(() => {
-      if (!cancelled) setWeatherProductsLoading(false);
-    });
-    return () => {
-      cancelled = true;
-      jobAbortRef.current?.abort();
-      jobAbortRef.current = null;
-    };
-  }, [locationLoading, load]);
-
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await load();
-    setRefreshing(false);
-  }, [load]);
+  // 오늘 날씨를 Gemini에게 보내 하루 중 실제로 화장품을 쓰는 상황(세안 후/외출 전/외출 후)별로
+  // 하나씩 추천받는다. 피부 기반 / 날씨+피부 기반은 아직 이 화면에 연결하지 않아 구역만 둔다.
+  const { state, refreshing, liveRefreshing, reload } = useWeatherProducts();
 
   const filteredWeatherProducts = useMemo(() => {
-    if (!weatherProducts) return weatherProducts;
-    return category === 'all' ? weatherProducts : weatherProducts.filter((p) => p.category === category);
-  }, [weatherProducts, category]);
+    if (state.status !== 'success') return null;
+    return category === 'all'
+      ? state.data
+      : state.data.filter((p) => p.category === category);
+  }, [state, category]);
 
   const { showToast } = useToast();
 
@@ -105,7 +50,7 @@ export default function ProductsScreen() {
   }, [showToast]);
 
   return (
-    <ScreenContainer refreshing={refreshing} onRefresh={handleRefresh}>
+    <ScreenContainer refreshing={refreshing} onRefresh={reload}>
       <Text style={styles.title}>추천 제품/성분</Text>
 
       <View style={styles.filterRow}>
@@ -127,20 +72,23 @@ export default function ProductsScreen() {
         {/* F51: 갱신 표시는 제목 옆 인라인 스피너 + “갱신 중”만 */}
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>날씨 기반 추천</Text>
-          {weatherProductsRefreshing && (
+          {liveRefreshing && (
             <View style={styles.refreshingRow}>
               <ActivityIndicator size="small" color={colors.sage} />
               <Text style={styles.refreshingLabel}>갱신 중</Text>
             </View>
           )}
         </View>
-        {weatherProductsLoading ? (
+        {state.status === 'loading' ? (
           <View style={styles.loadingRow}>
             <ActivityIndicator color={colors.sage} />
             <Text style={styles.emptyText}>오늘 날씨를 분석해서 제품을 고르고 있어요…</Text>
           </View>
         ) : filteredWeatherProducts === null ? (
-          <Text style={styles.emptyText}>지금은 추천을 불러올 수 없어요</Text>
+          <View style={styles.loadingRow}>
+            <Text style={styles.emptyText}>지금은 추천을 불러올 수 없어요</Text>
+            <RetryButton onPress={() => void reload()} disabled={refreshing} />
+          </View>
         ) : filteredWeatherProducts.length > 0 ? (
           <View style={styles.list}>
             {TIMING_ORDER.map((timing) => {
