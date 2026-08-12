@@ -219,8 +219,8 @@ MOCK_INFERENCE=false
 **테스트 명령** (수정 후 잘못된 게 없는지):
 
 ```bash
-# 앱 타입 오류 확인 (프로젝트 루트)
-npx tsc --noEmit
+# 앱 타입 오류·린트·테스트 확인 (프로젝트 루트, CI와 동일)
+npm run typecheck && npm run lint && npm test
 
 # 백엔드 테스트·검사 (backend 폴더)
 cd backend && npm test && npm run lint

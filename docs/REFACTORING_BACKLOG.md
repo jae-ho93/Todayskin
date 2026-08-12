@@ -10,8 +10,9 @@
 
 | 묶음 | 상태 | PR | 남은 일 |
 |---|---|---|---|
-| B1 | ✅ 완료 (2026-08-12) | `refactor/r-batch-01-security-critical` | AWS 작업 2건(코드 밖): Secrets Manager `todayskin/prod/OCTOMO_API_KEY` 등록, ALB deregistration delay < `stopTimeout`(120s) 설정. R6 2단계(vCPU 증설 + 슬롯 상향)는 부하 테스트 후 판단 — 값은 `INFERENCE_CONCURRENCY`로 이미 환경변수화됨 |
-| B2~B6 | 대기 | — | — |
+| B1 | ✅ 완료 (2026-08-12) | [#130](https://github.com/jae-ho93/Todayskin/pull/130) | AWS 작업 2건(코드 밖): Secrets Manager `todayskin/prod/OCTOMO_API_KEY` 등록, ALB deregistration delay < `stopTimeout`(120s) 설정. R6 2단계(vCPU 증설 + 슬롯 상향)는 부하 테스트 후 판단 — 값은 `INFERENCE_CONCURRENCY`로 이미 환경변수화됨 |
+| B2 | ✅ 완료 (2026-08-12) | `refactor/r-batch-02-safety-net` | 없음. R16의 `useAsyncJob` 테스트는 훅 추출(R27, B6) 후에 추가한다 |
+| B3~B6 | 대기 | — | — |
 
 ## 작업 묶음 (Batch)
 
@@ -21,7 +22,7 @@
 | 묶음 | 포함 R | 브랜치 | 진행 기준 |
 |---|---|---|---|
 | **B1. 즉시 보안·운영** ✅ | R1, R2, R4, R6, R17, R19, R32 | `refactor/r-batch-01-security-critical` | Critical 우선 + 배포 차단(키·root·metrics) 항목 포함 |
-| **B2. 안전망 (타입·테스트·설정)** | R15, R16, R18, R34, R29 | `refactor/r-batch-02-safety-net` | 구조 작업 전 타입·테스트 기반 마련 |
+| **B2. 안전망 (타입·테스트·설정)** ✅ | R15, R16, R18, R34, R29 | `refactor/r-batch-02-safety-net` | 구조 작업 전 타입·테스트 기반 마련 |
 | **B3. 스케줄러·워커** | R3, R13, R31 | `refactor/r-batch-03-scheduler-worker` | 리더 락(R3) → 워커 분리(R13) 순서 |
 | **B4. DB (승인 필요, 한 마이그레이션)** | R33, R10, R11, R21 | `refactor/r-batch-04-db-migration` | 인덱스·컬럼·보존을 한 마이그레이션으로 묶음 |
 | **B5. 백엔드 구조 (동작 보존)** | R7, R8, R9, R12, R20, R22, R23, R24, R30, R35 | `refactor/r-batch-05-backend-structure` | 순수 구조 개선 — 동작 불변 목표 |
@@ -507,11 +508,11 @@ API 변경    가능 — 위 엔드포인트를 인증 필수로 바꾸는 경�
 
 작업:
 
-- [ ] 루트 `tsconfig.json`에 `"strict": true`를 켠다. 한 번에 다 고치기 어려우면 `strictNullChecks`부터 켜고 나머지를 단계적으로 올린다.
-- [ ] 2. 드러나는 에러를 수정한다(위 `setRecommendations(null)` → `setRecommendations([])` 등).
-- [ ] 3. 루트 `package.json`에 `"typecheck": "tsc --noEmit"`, `"lint": "eslint ."`를 추가하고 ESLint(`eslint-config-expo` + `react-hooks` 규칙)를 도입한다.
-- [ ] 4. CI에 `npm run lint`를 추가한다.
-- [ ] 5. `typecheck-report.txt`를 삭제하고 `.gitignore`에 추가한다.
+- [x] 루트 `tsconfig.json`에 `"strict": true`를 켠다. 한 번에 다 고치기 어려우면 `strictNullChecks`부터 켜고 나머지를 단계적으로 올린다.
+- [x] 2. 드러나는 에러를 수정한다. strict 위반은 `app/(tabs)/index.tsx` 1건뿐이었다. `setRecommendations([])`로 바꾸면 "추천을 불러올 수 없어요" 분기가 죽으므로(호출부가 `recommendations === null`을 검사한다) 상태 타입을 `Recommendation[] | null`로 넓혀 런타임 동작을 보존했다.
+- [x] 3. 루트 `package.json`에 `typecheck`/`lint`/`test`를 추가하고 ESLint flat config(`eslint-config-expo/flat`)를 도입한다. ESLint는 9.x로 고정한다 — `eslint-plugin-react` peer가 `^9.7`까지여서 10.x에서는 규칙 로딩이 깨진다.
+- [x] 4. CI에 `npm run lint`를 추가한다.
+- [x] 5. `typecheck-report.txt`를 삭제하고 `.gitignore`에 추가한다.
 
 변경 범위:
 
@@ -540,11 +541,11 @@ dependency 변경   eslint, eslint-config-expo, eslint-plugin-react-hooks 추가
 
 작업:
 
-- [ ] `jest-expo` + `@testing-library/react-native`를 도입하고 다음 세 가지에 집중한다(전면 커버리지가 목표가 아니다).
-- [ ] `client.ts` 단위 테스트 — 401 → 재발급 → 재시도, 동시 401 시 재발급 1회, 재발급 실패 시 세션 정리.
-- [ ] 2. `useAsyncJob`(제안 [27]로 추출 후) 단위 테스트 — PENDING → COMPLETED, 타임아웃, 언마운트 시 abort.
-- [ ] 3. 백엔드 e2e에 존재하는 `api-contract.e2e-spec.ts`와 짝을 이루는 프론트 계약 테스트 — 응답 타입이 맞는지.
-- [ ] CI `frontend-typecheck` 잡에 `npm test`를 추가한다.
+- [x] `jest-expo` + `@testing-library/react-native`를 도입하고 다음 세 가지에 집중한다(전면 커버리지가 목표가 아니다).
+- [x] `client.ts` 단위 테스트 — 401 → 재발급 → 재시도, 동시 401 시 재발급 1회, 재발급 실패 시 세션 정리. **이 테스트가 실제 버그를 잡았다**: `refreshInFlight` 해제가 refresh 토큰 부재 경로에서 누락돼, 한 번 실패하면 프로세스 수명 동안 재발급이 영구히 막혔다. `finally`로 항상 해제하도록 고쳤다. `src/lib/session.ts`(R1 SecureStore 이관)도 함께 덮었다.
+- [ ] 2. `useAsyncJob`(제안 [27]로 추출 후) 단위 테스트 — PENDING → COMPLETED, 타임아웃, 언마운트 시 abort. **B6(R27)에서 훅을 추출한 뒤 추가한다.**
+- [x] 3. 백엔드 e2e에 존재하는 `api-contract.e2e-spec.ts`와 짝을 이루는 프론트 계약 테스트 — 응답 타입이 맞는지.
+- [x] CI `frontend-typecheck` 잡에 `npm test`를 추가한다.
 
 변경 범위:
 
@@ -599,7 +600,7 @@ AWS 변경    Secrets Manager 시크릿 생성
 
 작업:
 
-- [ ] 레지스트리를 단일 출처로 삼는다. `EnvVarDefinition`에 `schema: Joi.Schema` 필드를 추가하고, `envValidationSchema`를 `Joi.object(Object.fromEntries(ENV_REGISTRY.map(d => [d.key, d.schema])))`로 생성한다. 이 리팩토링이 부담스럽다면 **최소한** 두 키 집합이 정확히 일치하는지 검증하는 테스트를 추가한다 — 그것만으로도 드리프트는 즉시 막힌다. 누락된 9개 키의 Joi 규칙과 `TEST_DATABASE_URL` 등록도 함께 처리한다.
+- [x] 레지스트리를 단일 출처로 삼는다. `EnvVarDefinition`에 `schema: Joi.Schema` 필드를 추가하고, `envValidationSchema`를 `Joi.object(Object.fromEntries(ENV_REGISTRY.map(d => [d.key, d.schema])))`로 생성한다. 이 리팩토링이 부담스럽다면 **최소한** 두 키 집합이 정확히 일치하는지 검증하는 테스트를 추가한다 — 그것만으로도 드리프트는 즉시 막힌다. 누락된 9개 키의 Joi 규칙과 `TEST_DATABASE_URL` 등록도 함께 처리한다.
 
 변경 범위:
 
@@ -894,7 +895,7 @@ dependency 변경   openapi-typescript 추가 (devDependency)
 
 작업:
 
-- [ ] 5개 함수를 삭제하고, 대응하는 백엔드 엔드포인트가 다른 소비자 없이 남아 있는지 확인해 함께 정리한다. `typecheck-report.txt`를 삭제하고 `.gitignore`에 `*-report.txt`를 추가한다.
+- [x] 실제 미사용은 3개였다(`getHistory`, `generateRecommendations`, `generateWeatherProducts`). `getProducts`는 `app/recommendation/[id].tsx`, `getSkinScore`는 홈·진단결과 화면에서 쓰이므로 남겼다. 백엔드 엔드포인트 제거는 구버전 앱 영향이 있어 R14(B6)에서 함께 판단한다. 이 밖에 도달 불가였던 설정 화면의 "안면 이미지 처리방침" 모달(진입점 없음 — 동의 관리 모달이 같은 registry 문구를 이미 보여준다)도 제거했다. 삭제 대상: 대응하는 백엔드 엔드포인트가 다른 소비자 없이 남아 있는지 확인해 함께 정리한다. `typecheck-report.txt`를 삭제하고 `.gitignore`에 `*-report.txt`를 추가한다.
 
 변경 범위:
 
@@ -1028,7 +1029,7 @@ migration 필요   예
 
 작업:
 
-- [ ] 두 서비스에 경계 조건 중심의 단위 테스트를 추가한다. 시간 의존 로직은 `Date`를 주입하거나 `jest.useFakeTimers`로 제어한다.
+- [x] 두 서비스에 경계 조건 중심의 단위 테스트를 추가한다(OTP 25건 + JWT 키 15건). 시간 의존 로직은 `Date`를 주입하거나 `jest.useFakeTimers`로 제어한다.
 
 변경 범위:
 

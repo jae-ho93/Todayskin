@@ -1,11 +1,17 @@
 /**
  * 환경변수 registry (N6).
- * owner · description · requiredEnv · safeDefault · secret 여부를 한곳에서 관리한다.
+ * owner · description · requiredEnv · safeDefault · secret 여부 · Joi 규칙을 한곳에서 관리한다.
+ *
+ * R18: 이 파일이 환경변수 정의의 단일 출처다. `envValidationSchema`는 여기 `schema`
+ * 필드로부터 생성되므로(env.validation.ts), 키를 추가하면서 검증 규칙을 빠뜨리거나
+ * 두 목록이 어긋나는 일이 구조적으로 불가능하다.
  *
  * 규칙:
  * - mock flag는 test/dev 전용. owner/expiry 없는 mock flag는 production merge 거부.
  * - production에서 registry에 없는 unknown key는 엄격 처리(경고 후 거부 옵션).
  */
+
+import * as Joi from 'joi';
 
 export type EnvOwner =
   | 'platform'
@@ -27,92 +33,603 @@ export interface EnvVarDefinition {
   requiredIn: Array<'development' | 'test' | 'production' | '*'> | 'never';
   safeDefault?: string | number | boolean | null;
   secret: boolean;
+  /** 부팅 시 적용되는 Joi 규칙. envValidationSchema가 이 값들로 조립된다. */
+  schema: Joi.Schema;
   /** mock/feature flag — production에서는 false 강제 또는 금지 */
   mockFlag?: boolean;
   /** mock flag 만료일(ISO). owner+expiry 없으면 production merge 거부. */
   expiry?: string;
 }
 
+/** mock/feature flag 공통 규칙 — 'true'|'false' 문자열만 허용한다. */
+const booleanFlag = Joi.string().valid('true', 'false').allow('').optional();
+
 export const ENV_REGISTRY: EnvVarDefinition[] = [
-  { key: 'NODE_ENV', owner: 'platform', description: 'runtime environment', requiredIn: ['*'], safeDefault: 'development', secret: false },
-  { key: 'PORT', owner: 'platform', description: 'HTTP listen port', requiredIn: 'never', safeDefault: 3000, secret: false },
-  { key: 'ALLOWED_ORIGINS', owner: 'security', description: 'CORS allowlist (comma-separated)', requiredIn: 'never', safeDefault: '', secret: false },
+  {
+    key: 'NODE_ENV',
+    owner: 'platform',
+    description: 'runtime environment',
+    requiredIn: ['*'],
+    safeDefault: 'development',
+    secret: false,
+    schema: Joi.string().valid('development', 'test', 'production').default('development'),
+  },
+  {
+    key: 'PORT',
+    owner: 'platform',
+    description: 'HTTP listen port',
+    requiredIn: 'never',
+    safeDefault: 3000,
+    secret: false,
+    schema: Joi.number().port().default(3000),
+  },
+  {
+    key: 'ALLOWED_ORIGINS',
+    owner: 'security',
+    description: 'CORS allowlist (comma-separated)',
+    requiredIn: 'never',
+    safeDefault: '',
+    secret: false,
+    // 예: http://localhost:8081,https://app.todayskin.kr
+    schema: Joi.string().allow('').default(''),
+  },
 
-  { key: 'DATABASE_URL', owner: 'platform', description: 'PostgreSQL connection string', requiredIn: ['development', 'production'], secret: true },
-  { key: 'SHADOW_DATABASE_URL', owner: 'platform', description: 'Prisma migrate diff shadow DB', requiredIn: 'never', secret: true },
-  { key: 'REDIS_URL', owner: 'platform', description: 'Redis connection URL (optional cache/jobs)', requiredIn: 'never', safeDefault: '', secret: true },
-  { key: 'WEATHER_CACHE_TTL_SECONDS', owner: 'weather', description: 'Weather cache TTL seconds', requiredIn: 'never', safeDefault: 300, secret: false },
-  { key: 'JOB_DISPATCHER', owner: 'jobs', description: 'Job dispatcher mode auto|inline|bullmq', requiredIn: 'never', safeDefault: 'auto', secret: false },
+  {
+    key: 'DATABASE_URL',
+    owner: 'platform',
+    description: 'PostgreSQL connection string',
+    requiredIn: ['development', 'production'],
+    secret: true,
+    // T2: test 환경만 예외 — PrismaModule이 인스턴스화되지 않을 수 있다.
+    schema: Joi.when('NODE_ENV', {
+      is: 'test',
+      then: Joi.string().uri().allow('').optional(),
+      otherwise: Joi.string().uri().required(),
+    }),
+  },
+  {
+    key: 'TEST_DATABASE_URL',
+    owner: 'platform',
+    description: 'DB 통합 테스트용 연결 문자열 (미설정 시 해당 spec은 skip)',
+    requiredIn: 'never',
+    secret: true,
+    schema: Joi.string().uri().allow('').optional(),
+  },
+  {
+    key: 'SHADOW_DATABASE_URL',
+    owner: 'platform',
+    description: 'Prisma migrate diff shadow DB',
+    requiredIn: 'never',
+    secret: true,
+    schema: Joi.string().uri().allow('').optional(),
+  },
+  {
+    key: 'REDIS_URL',
+    owner: 'platform',
+    description: 'Redis connection URL (optional cache/jobs)',
+    requiredIn: 'never',
+    safeDefault: '',
+    secret: true,
+    // 캐시 장애 시에도 앱이 동작해야 하므로 선택 사항. BullMQ 모드에서만 필수.
+    schema: Joi.when('JOB_DISPATCHER', {
+      is: 'bullmq',
+      then: Joi.string().uri().required(),
+      otherwise: Joi.string().uri().allow('').optional(),
+    }),
+  },
+  {
+    key: 'WEATHER_CACHE_TTL_SECONDS',
+    owner: 'weather',
+    description: 'Weather cache TTL seconds',
+    requiredIn: 'never',
+    safeDefault: 300,
+    secret: false,
+    // T12: 기본 300초(5분) — 정부 API 분 단위 갱신 기준.
+    schema: Joi.number().integer().min(0).default(300),
+  },
+  {
+    key: 'JOB_DISPATCHER',
+    owner: 'jobs',
+    description: 'Job dispatcher mode auto|inline|bullmq',
+    requiredIn: 'never',
+    safeDefault: 'auto',
+    secret: false,
+    // N4: auto=REDIS_URL 있으면 BullMQ, 없으면 Inline. inline은 Redis 없이
+    // 동일한 PENDING→COMPLETED 계약을 유지한다.
+    schema: Joi.string().valid('auto', 'inline', 'bullmq').default('auto'),
+  },
 
-  { key: 'JWT_ACCESS_SECRET', owner: 'auth', description: 'Access JWT HMAC secret', requiredIn: ['development', 'production'], secret: true },
-  { key: 'JWT_REFRESH_SECRET', owner: 'auth', description: 'Refresh JWT HMAC secret', requiredIn: ['development', 'production'], secret: true },
-  { key: 'ACCESS_TOKEN_EXPIRES_IN', owner: 'auth', description: 'Access token lifetime', requiredIn: 'never', safeDefault: '15m', secret: false },
-  { key: 'REFRESH_TOKEN_EXPIRES_IN', owner: 'auth', description: 'Refresh token lifetime', requiredIn: 'never', safeDefault: '14d', secret: false },
+  {
+    key: 'JWT_ACCESS_SECRET',
+    owner: 'auth',
+    description: 'Access JWT HMAC secret',
+    requiredIn: ['development', 'production'],
+    secret: true,
+    // T3: test 환경을 제외하고 required. 최소 32자.
+    schema: Joi.when('NODE_ENV', {
+      is: 'test',
+      then: Joi.string().allow('').optional(),
+      otherwise: Joi.string().min(32).required(),
+    }),
+  },
+  {
+    key: 'JWT_REFRESH_SECRET',
+    owner: 'auth',
+    description: 'Refresh JWT HMAC secret',
+    requiredIn: ['development', 'production'],
+    secret: true,
+    schema: Joi.when('NODE_ENV', {
+      is: 'test',
+      then: Joi.string().allow('').optional(),
+      otherwise: Joi.string().min(32).required(),
+    }),
+  },
+  {
+    key: 'ACCESS_TOKEN_EXPIRES_IN',
+    owner: 'auth',
+    description: 'Access token lifetime',
+    requiredIn: 'never',
+    safeDefault: '15m',
+    secret: false,
+    schema: Joi.string().default('15m'),
+  },
+  {
+    key: 'REFRESH_TOKEN_EXPIRES_IN',
+    owner: 'auth',
+    description: 'Refresh token lifetime',
+    requiredIn: 'never',
+    safeDefault: '14d',
+    secret: false,
+    schema: Joi.string().default('14d'),
+  },
 
-  { key: 'OTP_TTL_SECONDS', owner: 'auth', description: 'OTP code TTL seconds', requiredIn: 'never', safeDefault: 180, secret: false },
-  { key: 'OTP_MAX_ATTEMPTS', owner: 'auth', description: 'OTP max verify attempts', requiredIn: 'never', safeDefault: 5, secret: false },
-  { key: 'OTP_RESEND_COOLDOWN_SECONDS', owner: 'auth', description: 'OTP resend cooldown', requiredIn: 'never', safeDefault: 60, secret: false },
-  { key: 'OTP_MAX_PENDING_PER_PHONE', owner: 'auth', description: 'Max pending OTP per phone', requiredIn: 'never', safeDefault: 3, secret: false },
-  { key: 'OTP_DAILY_LIMIT_PER_PHONE', owner: 'auth', description: 'Max OTP sends per phone per KST day (0=unlimited, allowlisted phones exempt)', requiredIn: 'never', safeDefault: 10, secret: false },
-  { key: 'OTP_ALLOWLIST_PHONES', owner: 'auth', description: 'Dev allowlisted phones for mock OTP', requiredIn: 'never', safeDefault: '', secret: false, mockFlag: true, expiry: '2027-01-01' },
+  // N2: OTP 인증 — 가입·새 디바이스 로그인에 OTP 필수 (운영 공개 전)
+  {
+    key: 'OTP_TTL_SECONDS',
+    owner: 'auth',
+    description: 'OTP code TTL seconds',
+    requiredIn: 'never',
+    safeDefault: 180,
+    secret: false,
+    schema: Joi.number().integer().min(10).default(180),
+  },
+  {
+    key: 'OTP_MAX_ATTEMPTS',
+    owner: 'auth',
+    description: 'OTP max verify attempts',
+    requiredIn: 'never',
+    safeDefault: 5,
+    secret: false,
+    schema: Joi.number().integer().min(1).default(5),
+  },
+  {
+    key: 'OTP_RESEND_COOLDOWN_SECONDS',
+    owner: 'auth',
+    description: 'OTP resend cooldown',
+    requiredIn: 'never',
+    safeDefault: 60,
+    secret: false,
+    schema: Joi.number().integer().min(0).default(60),
+  },
+  {
+    key: 'OTP_MAX_PENDING_PER_PHONE',
+    owner: 'auth',
+    description: 'Max pending OTP per phone',
+    requiredIn: 'never',
+    safeDefault: 3,
+    secret: false,
+    schema: Joi.number().integer().min(1).default(3),
+  },
+  {
+    key: 'OTP_DAILY_LIMIT_PER_PHONE',
+    owner: 'auth',
+    description:
+      'Max OTP sends per phone per KST day (0=unlimited, allowlisted phones exempt)',
+    requiredIn: 'never',
+    safeDefault: 10,
+    secret: false,
+    schema: Joi.number().integer().min(0).default(10),
+  },
+  {
+    key: 'OTP_ALLOWLIST_PHONES',
+    owner: 'auth',
+    description: 'Dev allowlisted phones for mock OTP',
+    requiredIn: 'never',
+    safeDefault: '',
+    secret: false,
+    mockFlag: true,
+    expiry: '2027-01-01',
+    // 쉼표 구분, 하이픈 제거. 예: 01012345678,01099999999
+    schema: Joi.string().allow('').default(''),
+  },
 
   // N9: 운영 OTP 게이트웨이 — OCTOMO MO 인증. production에서 누락 시 readiness 실패.
-  { key: 'OCTOMO_API_KEY', owner: 'auth', description: 'OCTOMO API key (Authorization: Octomo {key})', requiredIn: ['production'], secret: true },
-  { key: 'OCTOMO_ENDPOINT', owner: 'auth', description: 'OCTOMO exists API endpoint', requiredIn: 'never', secret: false },
-  { key: 'OCTOMO_RECIPIENT_NUMBER', owner: 'auth', description: 'MO 수신 번호 (사용자가 인증문자를 보낼 번호)', requiredIn: 'never', safeDefault: '1666-3538', secret: false },
-  { key: 'OCTOMO_TIMEOUT_MS', owner: 'auth', description: 'OCTOMO request timeout ms', requiredIn: 'never', safeDefault: 10_000, secret: false },
-  { key: 'OCTOMO_MAX_RETRIES', owner: 'auth', description: 'OCTOMO network retry count (max 2)', requiredIn: 'never', safeDefault: 1, secret: false },
+  {
+    key: 'OCTOMO_API_KEY',
+    owner: 'auth',
+    description: 'OCTOMO API key (Authorization: Octomo {key})',
+    requiredIn: ['production'],
+    secret: true,
+    schema: Joi.string().allow('').optional(),
+  },
+  {
+    key: 'OCTOMO_ENDPOINT',
+    owner: 'auth',
+    description: 'OCTOMO exists API endpoint',
+    requiredIn: 'never',
+    secret: false,
+    schema: Joi.string().uri().allow('').optional(),
+  },
+  {
+    key: 'OCTOMO_RECIPIENT_NUMBER',
+    owner: 'auth',
+    description: 'MO 수신 번호 (사용자가 인증문자를 보낼 번호)',
+    requiredIn: 'never',
+    safeDefault: '1666-3538',
+    secret: false,
+    schema: Joi.string().allow('').optional(),
+  },
+  {
+    key: 'OCTOMO_TIMEOUT_MS',
+    owner: 'auth',
+    description: 'OCTOMO request timeout ms',
+    requiredIn: 'never',
+    safeDefault: 10_000,
+    secret: false,
+    schema: Joi.number().integer().min(100).default(10_000),
+  },
+  {
+    key: 'OCTOMO_MAX_RETRIES',
+    owner: 'auth',
+    description: 'OCTOMO network retry count (max 2)',
+    requiredIn: 'never',
+    safeDefault: 1,
+    secret: false,
+    schema: Joi.number().integer().min(0).max(2).default(1),
+  },
 
-  { key: 'KMA_API_KEY', owner: 'weather', description: 'KMA API key', requiredIn: 'never', secret: true },
-  { key: 'AIRKOREA_API_KEY', owner: 'weather', description: 'AirKorea API key', requiredIn: 'never', secret: true },
-  { key: 'KMA_AREA_NO', owner: 'weather', description: 'Default KMA area number fallback', requiredIn: 'never', secret: false },
-  { key: 'AIRKOREA_STATION_NAME', owner: 'weather', description: 'Default AirKorea station fallback', requiredIn: 'never', secret: false },
+  {
+    key: 'KMA_API_KEY',
+    owner: 'weather',
+    description: 'KMA API key',
+    requiredIn: 'never',
+    secret: true,
+    schema: Joi.string().allow('').optional(),
+  },
+  {
+    key: 'AIRKOREA_API_KEY',
+    owner: 'weather',
+    description: 'AirKorea API key',
+    requiredIn: 'never',
+    secret: true,
+    schema: Joi.string().allow('').optional(),
+  },
+  {
+    key: 'KMA_AREA_NO',
+    owner: 'weather',
+    description: 'Default KMA area number fallback',
+    requiredIn: 'never',
+    secret: false,
+    // T5: 비워두면 REGIONS 기본값(서울 종로구)을 사용한다.
+    schema: Joi.string().allow('').optional(),
+  },
+  {
+    key: 'AIRKOREA_STATION_NAME',
+    owner: 'weather',
+    description: 'Default AirKorea station fallback',
+    requiredIn: 'never',
+    secret: false,
+    schema: Joi.string().allow('').optional(),
+  },
 
-  { key: 'GEMINI_API_KEY', owner: 'ai', description: 'Gemini API key', requiredIn: 'never', secret: true },
-  { key: 'GEMINI_MODEL', owner: 'ai', description: 'Gemini model id', requiredIn: 'never', safeDefault: 'gemini-flash-latest', secret: false },
-  { key: 'MOCK_GEMINI', owner: 'ai', description: 'Use Gemini mock responses (dev/test only)', requiredIn: 'never', safeDefault: 'false', secret: false, mockFlag: true, expiry: '2027-01-01' },
+  {
+    key: 'GEMINI_API_KEY',
+    owner: 'ai',
+    description: 'Gemini API key',
+    requiredIn: 'never',
+    secret: true,
+    schema: Joi.string().allow('').optional(),
+  },
+  {
+    key: 'GEMINI_MODEL',
+    owner: 'ai',
+    description: 'Gemini model id',
+    requiredIn: 'never',
+    safeDefault: 'gemini-flash-latest',
+    secret: false,
+    schema: Joi.string().default('gemini-flash-latest'),
+  },
+  {
+    key: 'MOCK_GEMINI',
+    owner: 'ai',
+    description: 'Use Gemini mock responses (dev/test only)',
+    requiredIn: 'never',
+    safeDefault: 'false',
+    secret: false,
+    mockFlag: true,
+    expiry: '2027-01-01',
+    // default를 두면 process.env 값을 덮어쓰는 경우가 있어 기본값을 생략한다.
+    schema: booleanFlag,
+  },
 
   // N33: 소셜 로그인 — 제공자 검증용 설정. 미설정 시 해당 제공자 요청만 401(명시적 실패).
-  { key: 'GOOGLE_CLIENT_ID', owner: 'auth', description: 'Google OAuth client id (id_token aud 검증)', requiredIn: 'never', safeDefault: '', secret: false },
-  { key: 'APPLE_BUNDLE_ID', owner: 'auth', description: 'Apple 번들 id (identity token aud 검증)', requiredIn: 'never', safeDefault: '', secret: false },
-  { key: 'MOCK_SOCIAL', owner: 'auth', description: '소셜 토큰 검증 mock (dev/test only)', requiredIn: 'never', safeDefault: 'false', secret: false, mockFlag: true, expiry: '2027-01-01' },
-  { key: 'MOCK_INFERENCE', owner: 'diagnosis', description: 'Use mock diagnosis inference (dev/test only)', requiredIn: 'never', safeDefault: 'false', secret: false, mockFlag: true, expiry: '2027-01-01' },
-  { key: 'INFERENCE_SERVICE_URL', owner: 'diagnosis', description: 'Python inference service base URL', requiredIn: 'never', secret: false },
-  // N13: NestJS↔inference-service 내부망 인증 shared secret (INFERENCE_SERVICE_URL과 함께 설정).
-  { key: 'INFERENCE_SHARED_SECRET', owner: 'diagnosis', description: 'Shared secret for NestJS↔inference-service internal auth', requiredIn: 'never', secret: true },
+  {
+    key: 'GOOGLE_CLIENT_ID',
+    owner: 'auth',
+    description: 'Google OAuth client id (id_token aud 검증)',
+    requiredIn: 'never',
+    safeDefault: '',
+    secret: false,
+    schema: Joi.string().allow('').default(''),
+  },
+  {
+    key: 'APPLE_BUNDLE_ID',
+    owner: 'auth',
+    description: 'Apple 번들 id (identity token aud 검증)',
+    requiredIn: 'never',
+    safeDefault: '',
+    secret: false,
+    schema: Joi.string().allow('').default(''),
+  },
+  {
+    key: 'MOCK_SOCIAL',
+    owner: 'auth',
+    description: '소셜 토큰 검증 mock (dev/test only)',
+    requiredIn: 'never',
+    safeDefault: 'false',
+    secret: false,
+    mockFlag: true,
+    expiry: '2027-01-01',
+    schema: booleanFlag,
+  },
+  {
+    key: 'MOCK_INFERENCE',
+    owner: 'diagnosis',
+    description: 'Use mock diagnosis inference (dev/test only)',
+    requiredIn: 'never',
+    safeDefault: 'false',
+    secret: false,
+    mockFlag: true,
+    expiry: '2027-01-01',
+    schema: booleanFlag,
+  },
+  {
+    key: 'INFERENCE_SERVICE_URL',
+    owner: 'diagnosis',
+    description: 'Python inference service base URL',
+    requiredIn: 'never',
+    secret: false,
+    schema: Joi.string().uri({ scheme: ['http', 'https'] }).allow('').optional(),
+  },
+  {
+    key: 'INFERENCE_SHARED_SECRET',
+    owner: 'diagnosis',
+    description: 'Shared secret for NestJS↔inference-service internal auth',
+    requiredIn: 'never',
+    secret: true,
+    // N13: 내부망 인증. INFERENCE_SERVICE_URL과 함께 설정한다.
+    schema: Joi.string().allow('').optional(),
+  },
 
-  { key: 'THROTTLE_LIMIT', owner: 'security', description: 'Rate limit max requests per window', requiredIn: 'never', safeDefault: 60, secret: false },
-  { key: 'THROTTLE_TTL_MS', owner: 'security', description: 'Rate limit window ms', requiredIn: 'never', safeDefault: 60_000, secret: false },
-  // N11: 분산 rate limit 저장소. auto=REDIS_URL 설정 시 Redis, 아니면 memory.
-  { key: 'THROTTLE_STORAGE', owner: 'security', description: 'Rate limit storage: auto|memory|redis', requiredIn: 'never', safeDefault: 'auto', secret: false },
-  { key: 'JOB_METRICS_INTERVAL_MS', owner: 'jobs', description: 'BullMQ queue/DLQ metrics collection interval ms (0=disabled)', requiredIn: 'never', safeDefault: 60_000, secret: false },
+  {
+    key: 'THROTTLE_LIMIT',
+    owner: 'security',
+    description: 'Rate limit max requests per window',
+    requiredIn: 'never',
+    safeDefault: 60,
+    secret: false,
+    schema: Joi.number().integer().min(1).default(60),
+  },
+  {
+    key: 'THROTTLE_TTL_MS',
+    owner: 'security',
+    description: 'Rate limit window ms',
+    requiredIn: 'never',
+    safeDefault: 60_000,
+    secret: false,
+    schema: Joi.number().integer().min(100).default(60_000),
+  },
+  {
+    key: 'THROTTLE_STORAGE',
+    owner: 'security',
+    description: 'Rate limit storage: auto|memory|redis',
+    requiredIn: 'never',
+    safeDefault: 'auto',
+    secret: false,
+    // N11: auto=REDIS_URL 설정 시 Redis, 아니면 memory. 강제도 가능.
+    schema: Joi.string().valid('auto', 'memory', 'redis').default('auto'),
+  },
+  {
+    key: 'JOB_METRICS_INTERVAL_MS',
+    owner: 'jobs',
+    description: 'BullMQ queue/DLQ metrics collection interval ms (0=disabled)',
+    requiredIn: 'never',
+    safeDefault: 60_000,
+    secret: false,
+    schema: Joi.number().integer().min(0).default(60_000),
+  },
 
-  // N34: 푸시 실제 발송(FCM/APNs) 지원 여부. false면 FE는 알림 토글을
-  // "되는 것처럼 보이는" 토글이 아닌 비활성/준비 중으로 표시해야 한다.
-  // 게이트웨이 연동 시 배포에서 true로 flip한다 (코드 재배포 불필요).
-  { key: 'PUSH_DELIVERY_AVAILABLE', owner: 'platform', description: '실제 푸시 발송(FCM/APNs) 지원 여부 — false면 FE가 거짓 토글 노출 금지', requiredIn: 'never', safeDefault: 'false', secret: false },
+  {
+    key: 'PUSH_DELIVERY_AVAILABLE',
+    owner: 'platform',
+    description: '실제 푸시 발송(FCM/APNs) 지원 여부 — false면 FE가 거짓 토글 노출 금지',
+    requiredIn: 'never',
+    safeDefault: 'false',
+    secret: false,
+    // N34: 게이트웨이 연동 시 배포에서 true로 flip한다 (코드 재배포 불필요).
+    schema: Joi.string().valid('true', 'false').allow('').default('false'),
+  },
 
-  { key: 'LOG_LEVEL', owner: 'observability', description: 'Pino log level', requiredIn: 'never', safeDefault: 'info', secret: false },
-  { key: 'SENTRY_DSN', owner: 'observability', description: 'Sentry DSN', requiredIn: 'never', secret: true },
-  { key: 'SENTRY_TRACES_SAMPLE_RATE', owner: 'observability', description: 'Sentry traces sample rate', requiredIn: 'never', safeDefault: 0.1, secret: false },
+  {
+    key: 'LOG_LEVEL',
+    owner: 'observability',
+    description: 'Pino log level',
+    requiredIn: 'never',
+    safeDefault: 'info',
+    secret: false,
+    schema: Joi.string()
+      .valid('trace', 'debug', 'info', 'warn', 'error', 'fatal')
+      .default('info'),
+  },
+  {
+    key: 'SENTRY_DSN',
+    owner: 'observability',
+    description: 'Sentry DSN',
+    requiredIn: 'never',
+    secret: true,
+    // 비워두면 Sentry 비활성화. 운영에서만 설정 권장.
+    schema: Joi.string().uri().allow('').optional(),
+  },
+  {
+    key: 'SENTRY_TRACES_SAMPLE_RATE',
+    owner: 'observability',
+    description: 'Sentry traces sample rate',
+    requiredIn: 'never',
+    safeDefault: 0.1,
+    secret: false,
+    schema: Joi.number().min(0).max(1).default(0.1),
+  },
 
-  { key: 'S3_BUCKET', owner: 'storage', description: 'Diagnosis image S3 bucket', requiredIn: ['production'], secret: false },
-  { key: 'AWS_REGION', owner: 'storage', description: 'AWS region', requiredIn: 'never', safeDefault: 'ap-northeast-2', secret: false },
-  { key: 'S3_KMS_KEY_ID', owner: 'storage', description: 'Optional SSE-KMS key id', requiredIn: 'never', secret: true },
-  { key: 'AWS_ACCESS_KEY_ID', owner: 'storage', description: 'AWS access key (local only; prefer IAM role)', requiredIn: 'never', secret: true },
-  { key: 'AWS_SECRET_ACCESS_KEY', owner: 'storage', description: 'AWS secret key (local only; prefer IAM role)', requiredIn: 'never', secret: true },
+  {
+    key: 'S3_BUCKET',
+    owner: 'storage',
+    description: 'Diagnosis image S3 bucket',
+    requiredIn: ['production'],
+    secret: false,
+    // N3: 개발/테스트만 빈 값(Memory store) 허용.
+    schema: Joi.when('NODE_ENV', {
+      is: 'production',
+      then: Joi.string().trim().min(1).required(),
+      otherwise: Joi.string().allow('').optional(),
+    }),
+  },
+  {
+    key: 'AWS_REGION',
+    owner: 'storage',
+    description: 'AWS region',
+    requiredIn: 'never',
+    safeDefault: 'ap-northeast-2',
+    secret: false,
+    schema: Joi.string().default('ap-northeast-2'),
+  },
+  {
+    key: 'S3_KMS_KEY_ID',
+    owner: 'storage',
+    description: 'Optional SSE-KMS key id',
+    requiredIn: 'never',
+    secret: true,
+    // 비우면 SSE-S3 AES256.
+    schema: Joi.string().allow('').optional(),
+  },
+  {
+    key: 'AWS_ACCESS_KEY_ID',
+    owner: 'storage',
+    description: 'AWS access key (local only; prefer IAM role)',
+    requiredIn: 'never',
+    secret: true,
+    schema: Joi.string().allow('').optional(),
+  },
+  {
+    key: 'AWS_SECRET_ACCESS_KEY',
+    owner: 'storage',
+    description: 'AWS secret key (local only; prefer IAM role)',
+    requiredIn: 'never',
+    secret: true,
+    schema: Joi.string().allow('').optional(),
+  },
+  {
+    key: 'DEV_STORAGE_BASE_URL',
+    owner: 'storage',
+    description: '개발용 Memory store 이미지 서빙 origin (미설정 시 127.0.0.1:PORT)',
+    requiredIn: 'never',
+    secret: false,
+    // 실기기 테스트 시 Mac LAN IP로 설정한다.
+    schema: Joi.string().uri({ scheme: ['http', 'https'] }).optional(),
+  },
 
   // N10: 이미지 저장소 reconciliation
-  { key: 'IMAGE_RECONCILE_INTERVAL_MS', owner: 'storage', description: 'Image delete retry / orphan scan scheduler interval ms (0=disabled)', requiredIn: 'never', safeDefault: 3_600_000, secret: false },
-  { key: 'IMAGE_DELETE_MAX_ATTEMPTS', owner: 'storage', description: 'Max delete retry attempts before permanent-failure alert', requiredIn: 'never', safeDefault: 10, secret: false },
+  {
+    key: 'IMAGE_RECONCILE_INTERVAL_MS',
+    owner: 'storage',
+    description: 'Image delete retry / orphan scan scheduler interval ms (0=disabled)',
+    requiredIn: 'never',
+    safeDefault: 3_600_000,
+    secret: false,
+    schema: Joi.number().integer().min(0).default(3_600_000),
+  },
+  {
+    key: 'IMAGE_DELETE_MAX_ATTEMPTS',
+    owner: 'storage',
+    description: 'Max delete retry attempts before permanent-failure alert',
+    requiredIn: 'never',
+    safeDefault: 10,
+    secret: false,
+    // 초과 시 permanent failure 감사 로그(알림 채널).
+    schema: Joi.number().integer().min(1).default(10),
+  },
 
-  { key: 'RUN_MIGRATIONS_ON_START', owner: 'deploy', description: 'Run prisma migrate on container start (local only)', requiredIn: 'never', safeDefault: 'false', secret: false, mockFlag: true, expiry: '2027-01-01' },
+  {
+    key: 'RUN_MIGRATIONS_ON_START',
+    owner: 'deploy',
+    description: 'Run prisma migrate on container start (local only)',
+    requiredIn: 'never',
+    safeDefault: 'false',
+    secret: false,
+    mockFlag: true,
+    expiry: '2027-01-01',
+    schema: booleanFlag,
+  },
 
-  { key: 'SOFT_DELETE_RETENTION_DAYS', owner: 'platform', description: 'Soft-delete retention days before purge', requiredIn: 'never', safeDefault: 30, secret: false },
-  { key: 'SOFT_DELETE_PURGE_INTERVAL_MS', owner: 'platform', description: 'Purge scheduler interval ms (0=disabled)', requiredIn: 'never', safeDefault: 3_600_000, secret: false },
+  {
+    key: 'SOFT_DELETE_RETENTION_DAYS',
+    owner: 'platform',
+    description: 'Soft-delete retention days before purge',
+    requiredIn: 'never',
+    safeDefault: 30,
+    secret: false,
+    schema: Joi.number().integer().min(1).default(30),
+  },
+  {
+    key: 'SOFT_DELETE_PURGE_INTERVAL_MS',
+    owner: 'platform',
+    description: 'Purge scheduler interval ms (0=disabled)',
+    requiredIn: 'never',
+    safeDefault: 3_600_000,
+    secret: false,
+    schema: Joi.number().integer().min(0).default(3_600_000),
+  },
 
-  { key: 'WEATHER_COLLECTION_INTERVAL_MS', owner: 'platform', description: 'Background weather collection scheduler interval ms (0=disabled)', requiredIn: 'never', safeDefault: 3_600_000, secret: false },
-  { key: 'WEATHER_COLLECTOR_ENABLED', owner: 'platform', description: 'Enable background weather collection scheduler (keep true on exactly one ECS task)', requiredIn: 'never', safeDefault: 'true', secret: false },
+  {
+    key: 'WEATHER_COLLECTION_INTERVAL_MS',
+    owner: 'platform',
+    description: 'Background weather collection scheduler interval ms (0=disabled)',
+    requiredIn: 'never',
+    safeDefault: 3_600_000,
+    secret: false,
+    // 개인 패턴 분석(T10)이 그날의 실제 최고 UV/오존/미세먼지에 가깝게 집계되도록,
+    // 사용자가 앱을 안 켜도 등록된 전체 지역(REGIONS)을 주기적으로 수집해둔다.
+    schema: Joi.number().integer().min(0).default(3_600_000),
+  },
+  {
+    key: 'WEATHER_COLLECTOR_ENABLED',
+    owner: 'platform',
+    description:
+      'Enable background weather collection scheduler (keep true on exactly one ECS task)',
+    requiredIn: 'never',
+    safeDefault: 'true',
+    secret: false,
+    // N21: ECS 다중 task에서 스케줄러 중복 실행 방지 — 정확히 1개 task만 true 유지.
+    schema: Joi.string().valid('true', 'false').default('true'),
+  },
+
+  {
+    key: 'APP_ENV_KEYS',
+    owner: 'platform',
+    description: 'N6: production unknown key 검사에 사용하는 선언 목록(선택)',
+    requiredIn: 'never',
+    secret: false,
+    schema: Joi.string().allow('').optional(),
+  },
 ];
 
 const REGISTRY_BY_KEY = new Map(ENV_REGISTRY.map((d) => [d.key, d]));
@@ -130,6 +647,16 @@ export function getRequiredEnvKeys(nodeEnv: string): string[] {
 
 export function listKnownEnvKeys(): Set<string> {
   return new Set(ENV_REGISTRY.map((d) => d.key));
+}
+
+/**
+ * R18: registry를 단일 출처로 삼아 부팅 검증 스키마를 조립한다.
+ * 키를 registry에 추가하는 것만으로 검증 규칙이 함께 적용된다.
+ */
+export function buildEnvValidationSchema(): Joi.ObjectSchema {
+  return Joi.object(
+    Object.fromEntries(ENV_REGISTRY.map((d) => [d.key, d.schema])),
+  );
 }
 
 /**

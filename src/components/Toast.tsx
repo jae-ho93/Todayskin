@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { ReactNode, createContext, useCallback, useContext, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Animated, StyleSheet, Text } from 'react-native';
 import { colors, radius, spacing, typography } from '../theme';
 
 // F43: 전역 토스트 — Alert 대신 성공/오류/정보 피드백을 흐름을 끊지 않고 표시한다.
