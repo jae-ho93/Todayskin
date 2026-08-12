@@ -6,6 +6,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { RecommendationService } from './recommendation.service';
+import { RecommendationRepository } from './recommendation.repository';
 import { GeminiClient, GeminiUnavailable } from '../gemini/gemini.client';
 import { ConsentService } from '../consent/consent.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -93,6 +94,9 @@ describe('RecommendationService', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         RecommendationService,
+        // R7: 리포지토리는 목이 아니라 실제 구현을 쓴다 — 쿼리 모양(정렬·where)까지
+        // 계속 검증 대상으로 남기려면 prisma 목 위에서 돌려야 한다.
+        RecommendationRepository,
         { provide: GeminiClient, useValue: geminiClient },
         { provide: ConsentService, useValue: consentService },
         { provide: IdempotencyService, useValue: idempotency },

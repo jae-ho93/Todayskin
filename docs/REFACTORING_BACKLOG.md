@@ -270,24 +270,31 @@ API 변경   429 응답 코드 추가 (NestJS provider의 재시도/fallback 처
 
 작업:
 
-- [ ] 클래스를 넷으로 쪼갠다. 새 추상화를 만드는 게 아니라 **이미 존재하는 경계선을 파일로 드러내는** 작업이다.
-- [ ] `RecommendationService` — 유스케이스 오케스트레이션만 (동의 → 예약 → 생성 → 저장 → 매핑 호출)
-- [ ] `RecommendationRepository` — 4중 중복된 조회/영속화 쿼리 + advisory lock 트랜잭션
-- [ ] `RecommendationMapper` — 엔티티 → DTO 변환 (순수 함수, 목킹 없이 테스트 가능)
-- [ ] `RecommendationFallbackPolicy` — fallback 슬롯 정의와 한국어 문구 (제안 [24]와 연결)
-- [ ] Gemini 호출과 캐시/잡은 각각 기존 `GeminiClient`와 신설 `FastPathCoordinator`(제안 [8])로 나간다.
+- [x] 클래스를 넷으로 쪼갰다. 새 추상화가 아니라 **이미 있던 경계선을 파일로 드러낸** 것이다(781줄 → 서비스 460줄).
+- [x] `RecommendationService` — 유스케이스 순서만 (동의 → 예약 → Gemini → 링크 구성 → 저장 → 매핑).
+- [x] `RecommendationRepository` — 4중 복붙이던 "이 진단의 추천 조회"를 `findByDiagnosis()` 하나로 모으고,
+      advisory lock 트랜잭션을 `createGenerated()` 한 곳에만 뒀다. 락 키 문자열도 여기 하나뿐이다.
+- [x] `recommendation.mapper.ts` — 엔티티 → DTO 변환. Prisma string → 계약 유니온 캐스팅을 이 경계로 모았다.
+- [x] `recommendation.fallback.ts` — 슬롯 정의·제품 선택 규칙(순수 함수). 목킹 없는 spec 11개를 새로 붙였다.
+- [x] 캐시/잡은 R8의 `FastPathCoordinator`로 이미 나갔다.
+
+**트랜잭션 경계는 그대로다.** 락 획득 → 재확인 → `createMany` → 링크 저장 순서와 범위를 바꾸지 않았다.
+링크 계산만 트랜잭션 밖으로 옮겼는데, 원래도 트랜잭션 전에 읽은 카탈로그만 쓰는 순수 계산이라 DB 상태에
+의존하지 않는다(재확인에서 기존 추천을 찾으면 계산 결과를 버릴 뿐이다).
+
+검증: `recommendation.service.spec.ts`의 기존 29개 테스트를 **한 줄도 고치지 않고** 통과시켰다
+(리포지토리는 목이 아니라 prisma 목 위의 실제 구현을 주입해 쿼리 모양까지 계속 검증한다).
 
 변경 범위:
 
 ```text
-text
-파일 추가   recommendation.repository.ts, recommendation.mapper.ts, recommendation.fallback.ts
+파일 추가   recommendation.repository.ts, recommendation.mapper.ts, recommendation.fallback.ts(+spec)
 파일 수정   recommendation.service.ts, recommendation.module.ts, recommendation.service.spec.ts
 ```
 
-위험: SAFE REFACTOR.  — 외부 동작 불변이 목표다. 다만 918줄을 옮기는 작업이므로 트랜잭션 경계(advisory lock 범위)를 잘못 옮기면 동시성 버그가 생긴다. 리포지토리 메서드가 
+위험: SAFE REFACTOR — 외부 동작 불변. 트랜잭션 경계를 옮기지 않았고 유닛 436개·관련 e2e가 통과한다.
 
-완료 기준: R7 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다.
+완료 기준: R7 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다. → 완료.
 
 ## R8. fast-path SWR 알고리즘이 두 서비스에 통째로 중복돼 있다
 
@@ -788,19 +795,20 @@ text
 
 작업:
 
-- [ ] `recommendations/content/fallback-content.ts`(혹은 [7]의 `RecommendationFallbackPolicy`)로 문구를 분리한다. 지금 단계에서 i18n 프레임워크까지 도입할 필요는 없다 — **상수 파일 하나로 충분하다.**
+- [x] `recommendations/content/fallback-content.ts`로 문구를 분리했다(R7과 함께 진행). i18n 프레임워크는 도입하지 않았다 — **상수 파일 하나로 충분하다.**
+- [x] 옮긴 것: `B_GRADE_SOURCE_LABEL`, `FALLBACK_SOURCE_LABEL`, 슬롯 3개의 `title`/`body`, 설명문 조립(`fallbackExplanation`), 점수·날씨 문구, 측정 불가 표기.
+- [x] 슬롯의 **카테고리 우선순위는 문구가 아니라 선택 규칙**이라 `recommendation.fallback.ts`에 남겼다. content 파일은 문자열만 가진다.
 
 변경 범위:
 
 ```text
-text
 파일 추가   backend/src/modules/recommendations/content/fallback-content.ts
-파일 수정   recommendation.service.ts
+파일 수정   recommendation.service.ts → recommendation.fallback.ts로 이동
 ```
 
-위험: SAFE REFACTOR. . 문자열을 옮기기만 하므로 위험 없음. [7]과 함께 진행하는 것이 효율적이다.
+위험: SAFE REFACTOR — 문자열을 옮기기만 했다. 문구가 바뀌지 않았음은 기존 spec(문자열 리터럴 단언)과 e2e가 확인한다.
 
-완료 기준: R24 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다.
+완료 기준: R24 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다. → 완료.
 
 ## R25. AirStatus 라벨/색상 매핑이 프론트 5곳에 중복돼 있다
 

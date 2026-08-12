@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { RecommendationController } from './recommendation.controller';
 import { RecommendationService } from './recommendation.service';
+import { RecommendationRepository } from './recommendation.repository';
 import { RecommendationJobHandler } from './recommendation.job-handler';
 import { GeminiModule } from '../gemini/gemini.module';
 import { ConsentModule } from '../consent/consent.module';
@@ -14,7 +15,11 @@ import { IdempotencyModule } from '../idempotency/idempotency.module';
 @Module({
   imports: [GeminiModule, ConsentModule, JobsModule, IdempotencyModule],
   controllers: [RecommendationController],
-  providers: [RecommendationService, RecommendationJobHandler],
+  providers: [
+    RecommendationService,
+    RecommendationRepository,
+    RecommendationJobHandler,
+  ],
   exports: [RecommendationService],
 })
 export class RecommendationModule {}
