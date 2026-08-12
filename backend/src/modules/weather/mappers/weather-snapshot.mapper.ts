@@ -1,5 +1,6 @@
 import type { WeatherSnapshot as PrismaWeatherSnapshot } from '@prisma/client';
 import { AirStatus } from '../../../common/enums/air-status.enum';
+import { UvLevel } from '../../../common/enums/uv-level.enum';
 import { WeatherSource } from '../../../common/enums/weather-source.enum';
 import { WeatherSnapshotDto } from '../dto/weather-snapshot.dto';
 import { WeatherStatusPolicy } from '../policies/weather-status.policy';
@@ -39,9 +40,9 @@ export type WeatherMetricKey = (typeof WEATHER_METRIC_KEYS)[number];
 /** 지표 값 묶음. Prisma `WeatherSnapshot`과 DTO가 공유하는 부분집합이다. */
 export type WeatherMetrics = {
   uvIndex: number | null;
-  uvStatus: AirStatus | null;
+  uvStatus: UvLevel | null;
   uvIndexPeak: number | null;
-  uvStatusPeak: AirStatus | null;
+  uvStatusPeak: UvLevel | null;
   uvIndexPeakHour: number | null;
   ozonePpm: number | null;
   ozoneStatus: AirStatus | null;

@@ -334,10 +334,22 @@ enum WeatherSource {
   UNAVAILABLE
 }
 
+/// 대기질 등급 — 에어코리아 4단계 (좋음·보통·나쁨·매우나쁨).
 enum AirStatus {
   good
   moderate
   bad
+  veryBad
+}
+
+/// 자외선지수 등급 — 기상청 5단계 (낮음·보통·높음·매우높음·위험).
+/// 자외선은 "좋음/나쁨"이 아니라 "낮음/높음"이라 AirStatus와 분리한다 (N40).
+enum UvLevel {
+  low
+  moderate
+  high
+  veryHigh
+  danger
 }
 
 model WeatherSnapshot {
@@ -354,9 +366,9 @@ model WeatherSnapshot {
   airkoreaStation String?  @map("airkorea_station_name")
 
   uvIndex        Float?      @map("uv_index")
-  uvStatus       AirStatus?  @map("uv_status")
+  uvStatus       UvLevel?    @map("uv_status")
   uvIndexPeak    Float?      @map("uv_index_peak")
-  uvStatusPeak   AirStatus?  @map("uv_status_peak")
+  uvStatusPeak   UvLevel?    @map("uv_status_peak")
   uvIndexPeakHour Int?       @map("uv_index_peak_hour")
   ozonePpm       Float?      @map("ozone_ppm")
   ozoneStatus    AirStatus?  @map("ozone_status")

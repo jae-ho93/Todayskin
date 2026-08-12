@@ -4,10 +4,29 @@
 // `npm run openapi:export --prefix backend && npm run openapi:types`를 돌리고,
 // 여기 수기 타입도 함께 맞춘다. 신규 타입은 가급적 생성 타입에서 가져다 쓴다.
 
+import type { components } from './api.generated';
+
 // 서비스 제안서 7.1 근거 등급 체계와 1:1 대응
 export type EvidenceGrade = 'A' | 'B' | 'C';
 
-export type AirStatus = 'good' | 'moderate' | 'bad';
+/**
+ * 지표별 등급 — 서버 정책(`weather-status.policy.ts`)이 판정한 값.
+ *
+ * N40/F64: 자외선과 대기질은 등급 체계가 다르다. 하나로 합쳐 쓰던 때는 자외선지수 9가
+ * "나쁨"으로 표기됐다(기상청 기준으로는 "매우높음"). 타입을 갈라 두면 라벨 맵이
+ * `Record<...>`로 선언돼 있어 등급이 늘 때 컴파일이 실패한다.
+ *
+ * 리터럴을 손으로 적지 않고 생성 타입에서 뽑는다. 손으로 적은 유니온은 서버가 등급을
+ * 늘려도 조용히 어긋나며, 실제로 이번에 그렇게 어긋났다(드리프트 검사도 못 잡았다).
+ */
+type WeatherSnapshotSchema =
+  NonNullable<components['schemas']['WeatherSnapshotDto']>;
+
+/** 대기질 4단계 — 좋음 · 보통 · 나쁨 · 매우나쁨 */
+export type AirStatus = NonNullable<WeatherSnapshotSchema['ozoneStatus']>;
+
+/** 자외선 5단계 — 낮음 · 보통 · 높음 · 매우높음 · 위험 */
+export type UvLevel = NonNullable<WeatherSnapshotSchema['uvStatus']>;
 
 export interface WeatherSnapshot {
   observedAt: string; // ISO timestamp
@@ -19,9 +38,9 @@ export interface WeatherSnapshot {
   // 각 지표는 실제 정부 API(기상청/에어코리아) 호출이 실패하면 null이다 — 목업으로 채우지 않고
   // 화면에서 "측정 불가"로 명시적으로 보여준다. 오래된 응답/캐시와의 호환을 위해 undefined도 허용한다.
   uvIndex?: number | null; // 자외선지수
-  uvStatus?: AirStatus | null;
+  uvStatus?: UvLevel | null;
   uvIndexPeak?: number | null; // 오늘 남은 시간대 중 예상 최댓값
-  uvStatusPeak?: AirStatus | null;
+  uvStatusPeak?: UvLevel | null;
   uvIndexPeakHour?: number | null; // 그 최댓값이 나오는 시각(0~23시)
   ozonePpm?: number | null; // 오존 농도
   ozoneStatus?: AirStatus | null;
@@ -197,9 +216,9 @@ export interface CalendarWeather {
   districtName?: string | null;
   source: string; // LIVE | CACHED | UNAVAILABLE
   uvIndex?: number | null;
-  uvStatus?: AirStatus | null;
+  uvStatus?: UvLevel | null;
   uvIndexPeak?: number | null;
-  uvStatusPeak?: AirStatus | null;
+  uvStatusPeak?: UvLevel | null;
   uvIndexPeakHour?: number | null;
   ozonePpm?: number | null;
   ozoneStatus?: AirStatus | null;

@@ -16,7 +16,7 @@ import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { EvidenceBadge } from '../../src/components/EvidenceBadge';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
-import { AIR_STATUS_COLOR } from '../../src/lib/air-status';
+import { AIR_STATUS_COLOR, UV_LEVEL_COLOR } from '../../src/lib/air-status';
 import { formatDateKo, monthBounds, todayKst } from '../../src/lib/kst-date';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type {
@@ -312,11 +312,17 @@ function DiagnosisCard({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
 }
 // F57: 촬영 당시 날씨 요약 — 자외선·미세먼지·초미세먼지·오존 (2×2 그리드, 상태색)
 function WeatherSummaryGrid({ weather }: { weather: CalendarWeather }) {
+  // F64: 자외선과 대기질은 등급 체계가 달라 색상 맵도 다르다. 셀마다 지표에 맞는
+  // 맵으로 색을 미리 정해 담는다 — 한 배열에 두 체계의 등급을 섞어 담으면 표기가 어긋난다.
+  const uvLevel = weather.uvStatusPeak ?? weather.uvStatus ?? null;
+  const airColor = (status: AirStatus | null | undefined): string =>
+    status ? AIR_STATUS_COLOR[status] : colors.textTertiary;
+
   const items: {
     icon: keyof typeof Ionicons.glyphMap;
     label: string;
     value: string | null;
-    status: AirStatus | null;
+    color: string;
   }[] = [
     {
       icon: 'sunny-outline',
@@ -327,36 +333,35 @@ function WeatherSummaryGrid({ weather }: { weather: CalendarWeather }) {
           : weather.uvIndex != null
             ? String(weather.uvIndex)
             : null,
-      status: weather.uvStatusPeak ?? weather.uvStatus ?? null,
+      color: uvLevel ? UV_LEVEL_COLOR[uvLevel] : colors.textTertiary,
     },
     {
       icon: 'ellipse-outline',
       label: '미세먼지',
       value: weather.pm10 != null ? String(Math.round(weather.pm10)) : null,
-      status: weather.pm10Status ?? null,
+      color: airColor(weather.pm10Status),
     },
     {
       icon: 'layers-outline',
       label: '초미세먼지',
       value: weather.pm25 != null ? String(Math.round(weather.pm25)) : null,
-      status: weather.pm25Status ?? null,
+      color: airColor(weather.pm25Status),
     },
     {
       icon: 'cloud-outline',
       label: '오존',
       value: weather.ozonePpm != null ? String(weather.ozonePpm) : null,
-      status: weather.ozoneStatus ?? null,
+      color: airColor(weather.ozoneStatus),
     },
   ];
 
   return (
     <View style={styles.weatherGrid}>
       {items.map((it) => {
-        const color = it.status ? AIR_STATUS_COLOR[it.status] : colors.textTertiary;
         return (
           <View key={it.label} style={styles.weatherCell}>
-            <View style={[styles.weatherIconWrap, { backgroundColor: color + '22' }]}>
-              <Ionicons name={it.icon} size={14} color={color} />
+            <View style={[styles.weatherIconWrap, { backgroundColor: it.color + '22' }]}>
+              <Ionicons name={it.icon} size={14} color={it.color} />
             </View>
             <View style={styles.weatherCellText}>
               <Text style={styles.weatherValue} numberOfLines={1}>

@@ -10,6 +10,7 @@ import {
   Min,
 } from 'class-validator';
 import { AirStatus } from '../../../common/enums/air-status.enum';
+import { UvLevel } from '../../../common/enums/uv-level.enum';
 import { WeatherSource } from '../../../common/enums/weather-source.enum';
 
 /**
@@ -56,13 +57,13 @@ export class WeatherSnapshotDto {
   uvIndex?: number | null;
 
   @ApiPropertyOptional({
-    enum: AirStatus,
-    description: '자외선 등급',
+    enum: UvLevel,
+    description: '자외선 등급 (기상청 5단계: 낮음·보통·높음·매우높음·위험)',
     nullable: true,
   })
   @IsOptional()
-  @IsEnum(AirStatus)
-  uvStatus?: AirStatus | null;
+  @IsEnum(UvLevel)
+  uvStatus?: UvLevel | null;
 
   @ApiPropertyOptional({
     type: Number,
@@ -74,13 +75,13 @@ export class WeatherSnapshotDto {
   uvIndexPeak?: number | null;
 
   @ApiPropertyOptional({
-    enum: AirStatus,
-    description: '자외선 피크 등급',
+    enum: UvLevel,
+    description: '자외선 피크 등급 (기상청 5단계)',
     nullable: true,
   })
   @IsOptional()
-  @IsEnum(AirStatus)
-  uvStatusPeak?: AirStatus | null;
+  @IsEnum(UvLevel)
+  uvStatusPeak?: UvLevel | null;
 
   @ApiPropertyOptional({
     type: Number,

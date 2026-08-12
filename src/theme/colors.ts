@@ -42,14 +42,27 @@ export const colors = {
     text: '#6B6A62',
   },
 
-  // 날씨/대기질 상태 (좋음/보통/나쁨)
+  // 날씨/대기질 상태 (좋음/보통/나쁨/매우나쁨)
   statusGood: '#7A9E7E',
   statusModerate: '#D6A83B',
   statusBad: '#E06A57',
+  statusVeryBad: '#A6362F', // '나쁨'보다 한 단계 더 진한 적색
   // 흰 배경 위 작은 본문 텍스트용 — 위 색은 caption 크기에서 대비가 부족하다.
   statusGoodText: '#5C7F60',
   statusModerateText: '#B5A03C',
   statusBadText: '#C0564E',
+  statusVeryBadText: '#8E2F29',
+  statusVeryBadLight: '#F5D5D1',
+
+  // 자외선 전용 단계 (F64) — 기상청 색상 관례: 낮음 녹 · 보통 황 · 높음 주황 ·
+  // 매우높음 적 · 위험 보라. 녹/황/적은 위 대기질 색을 공유하고, 관례상 필요한
+  // 주황·보라만 여기서 더한다.
+  statusHigh: '#E08A3C',
+  statusHighText: '#C4712B',
+  statusHighLight: '#FBE6CD',
+  statusDanger: '#7B4FA8',
+  statusDangerText: '#6A3F97',
+  statusDangerLight: '#E7DDF3',
 
   // 텍스트
   textPrimary: '#1D1C19',

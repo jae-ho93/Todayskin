@@ -8,9 +8,17 @@ import { RetryButton } from '../src/components/RetryButton';
 import { ScreenContainer } from '../src/components/ScreenContainer';
 import { useToast } from '../src/components/Toast';
 import { useUserLocation } from '../src/hooks/useUserLocation';
-import { AIR_STATUS_COLOR, AIR_STATUS_LABEL } from '../src/lib/air-status';
+import {
+  AIR_STATUS_COLOR,
+  AIR_STATUS_LABEL,
+  AIR_STATUS_ORDER,
+  isAirConcerning,
+  UV_LEVEL_COLOR,
+  UV_LEVEL_LABEL,
+  UV_LEVEL_ORDER,
+} from '../src/lib/air-status';
 import { colors, radius, spacing, typography } from '../src/theme';
-import type { AirStatus, WeatherSnapshot } from '../src/types';
+import type { AirStatus, UvLevel, WeatherSnapshot } from '../src/types';
 
 // R5: 등급 판정의 단일 출처는 서버(weather-status.policy.ts)다. 프론트는 서버가 내려준
 // uvStatus/pm10Status/... 를 그대로 쓰고, 여기서는 게이지 눈금(maxCap)만 갖는다.
@@ -21,25 +29,35 @@ const PM25_MAX = 75;
 const OZONE_MAX = 0.15;
 const CAI_MAX = 250;
 
-function StatusBar({
-  value,
-  status,
-  maxCap,
-}: {
-  value: number;
-  status: AirStatus | null | undefined;
-  maxCap: number;
-}) {
+/**
+ * F64: 게이지 눈금은 지표마다 다르다. 자외선은 5단계(낮음~위험), 대기질은
+ * 4단계(좋음~매우나쁨)라 눈금 라벨을 하드코딩할 수 없다. 판별 유니온으로 받아
+ * `status`가 스케일에 맞는 타입인지 컴파일러가 검사하게 한다.
+ */
+type GaugeScale =
+  | { scale: 'air'; status: AirStatus | null | undefined }
+  | { scale: 'uv'; status: UvLevel | null | undefined };
+
+function StatusBar(props: { value: number; maxCap: number } & GaugeScale) {
+  const { value, maxCap } = props;
   const clamped = Math.max(0, Math.min(value, maxCap));
   const pos = (maxCap > 0 ? clamped / maxCap : 0) * 100;
-  const color = status ? AIR_STATUS_COLOR[status] : colors.gray400;
+  const color = props.status
+    ? props.scale === 'uv'
+      ? UV_LEVEL_COLOR[props.status]
+      : AIR_STATUS_COLOR[props.status]
+    : colors.gray400;
+  const legend =
+    props.scale === 'uv'
+      ? UV_LEVEL_ORDER.map((level) => UV_LEVEL_LABEL[level])
+      : AIR_STATUS_ORDER.map((status) => AIR_STATUS_LABEL[status]);
   return (
     <View style={styles.barTrack}>
       <View style={styles.barFill} />
       {/* 현재 값 마커 */}
       <View style={[styles.barMarker, { left: `${pos}%`, backgroundColor: color }]} />
       <View style={styles.barLegend}>
-        {['좋음', '보통', '나쁨'].map((label, i) => (
+        {legend.map((label) => (
           <Text key={label} style={styles.barLegendText}>
             {label}
           </Text>
@@ -95,7 +113,9 @@ function MetricCard({
             <Text style={styles.metricUnit}>{unit}</Text>
           </View>
           {extra && <Text style={[styles.metricExtra, { color: colors.sageDark }]}>{extra}</Text>}
-          {maxCap ? <StatusBar value={value} status={status} maxCap={maxCap} /> : null}
+          {maxCap ? (
+            <StatusBar scale="air" value={value} status={status} maxCap={maxCap} />
+          ) : null}
           <Text style={styles.metricDescription}>{description}</Text>
         </>
       ) : (
@@ -110,7 +130,7 @@ function UvHeroCard({ weather }: { weather: WeatherSnapshot }) {
   const peak = weather.uvIndexPeak ?? weather.uvIndex;
   const peakStatus = weather.uvStatusPeak ?? weather.uvStatus;
   const peakHour = weather.uvIndexPeakHour;
-  const color = peakStatus ? AIR_STATUS_COLOR[peakStatus] : colors.gray400;
+  const color = peakStatus ? UV_LEVEL_COLOR[peakStatus] : colors.gray400;
   return (
     <Card style={styles.heroCard}>
       <View style={styles.heroTop}>
@@ -126,7 +146,7 @@ function UvHeroCard({ weather }: { weather: WeatherSnapshot }) {
         {peakStatus && (
           <View style={[styles.statusPill, { backgroundColor: color + '22' }]}>
             <Text style={[styles.statusPillText, { color }]}>
-              {AIR_STATUS_LABEL[peakStatus]}
+              {UV_LEVEL_LABEL[peakStatus]}
             </Text>
           </View>
         )}
@@ -137,7 +157,7 @@ function UvHeroCard({ weather }: { weather: WeatherSnapshot }) {
             <Text style={[styles.heroValue, { color }]}>{peak}</Text>
             <Text style={styles.heroUnit}>지수</Text>
           </View>
-          <StatusBar value={peak} status={peakStatus} maxCap={UV_MAX} />
+          <StatusBar scale="uv" value={peak} status={peakStatus} maxCap={UV_MAX} />
         </>
       ) : (
         <Text style={styles.metricUnavailableText}>지금 값을 불러올 수 없어요</Text>
@@ -157,11 +177,12 @@ function SkinTip({ weather }: { weather: WeatherSnapshot }) {
       tips.push('자외선이 보통 수준이에요 — 외출 전 차단제를 발라주세요');
     }
   }
+  // '매우나쁨'이 생기면서 `=== 'bad'` 비교가 최악 구간을 놓치게 됐다 — F64.
   const pm = weather.pm25Status ?? weather.pm10Status;
-  if (pm === 'bad') {
+  if (isAirConcerning(pm)) {
     tips.push('미세먼지가 나빠요 — 외출 후 순한 세안으로 피부를 정돈해주세요');
   }
-  if (weather.ozoneStatus === 'bad') {
+  if (isAirConcerning(weather.ozoneStatus)) {
     tips.push('오존 농도가 높아요 — 외출 후 진정 세안을 신경 써주세요');
   }
   if (tips.length === 0) {

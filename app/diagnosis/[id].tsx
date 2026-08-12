@@ -14,13 +14,19 @@ import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { EvidenceBadge } from '../../src/components/EvidenceBadge';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
-import { AIR_STATUS_LABEL, AIR_STATUS_TEXT_COLOR } from '../../src/lib/air-status';
+import {
+  AIR_STATUS_LABEL,
+  AIR_STATUS_TEXT_COLOR,
+  UV_LEVEL_LABEL,
+  UV_LEVEL_TEXT_COLOR,
+} from '../../src/lib/air-status';
 import { gradeToColor } from '../../src/lib/skinGrade';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type {
   AirStatus,
   CalendarDiagnosis,
   CalendarWeather,
+  UvLevel,
 } from '../../src/types';
 
 // 화면: 진단 상세 — 기록 탭의 랜드마크 카드에서 진입 (F39).
@@ -197,29 +203,40 @@ function WeatherCard({ weather: w, capturedAt }: { weather: CalendarWeather; cap
       </View>
       <Text style={styles.weatherTime}>{formatCapturedAt(capturedAt)} 촬영</Text>
       <View style={styles.weatherMetrics}>
-        <WeatherMetric label="자외선" value={w.uvIndex} status={w.uvStatus} />
-        <WeatherMetric label="초미세먼지" value={w.pm25} status={w.pm25Status} />
-        <WeatherMetric label="미세먼지" value={w.pm10} status={w.pm10Status} />
+        <WeatherMetric scale="uv" label="자외선" value={w.uvIndex} status={w.uvStatus} />
+        <WeatherMetric scale="air" label="초미세먼지" value={w.pm25} status={w.pm25Status} />
+        <WeatherMetric scale="air" label="미세먼지" value={w.pm10} status={w.pm10Status} />
       </View>
     </Card>
   );
 }
 
-function WeatherMetric({
-  label,
-  value,
-  status,
-}: {
-  label: string;
-  value?: number | null;
-  status?: AirStatus | null;
-}) {
-  const color = status ? AIR_STATUS_TEXT_COLOR[status] : colors.textTertiary;
+// F64: 자외선은 낮음~위험, 대기질은 좋음~매우나쁨. 스케일을 판별 유니온으로 받아
+// 지표에 맞지 않는 등급을 넘기면 컴파일이 실패하게 한다.
+function WeatherMetric(
+  props: { label: string; value?: number | null } & (
+    | { scale: 'air'; status?: AirStatus | null }
+    | { scale: 'uv'; status?: UvLevel | null }
+  ),
+) {
+  const { label, value } = props;
+  const isUv = props.scale === 'uv';
+  const color = props.status
+    ? isUv
+      ? UV_LEVEL_TEXT_COLOR[props.status]
+      : AIR_STATUS_TEXT_COLOR[props.status]
+    : colors.textTertiary;
+  const statusLabel = props.status
+    ? isUv
+      ? UV_LEVEL_LABEL[props.status]
+      : AIR_STATUS_LABEL[props.status]
+    : null;
+
   return (
     <View style={styles.weatherMetric}>
       <Text style={styles.weatherMetricLabel}>{label}</Text>
       <Text style={[styles.weatherMetricValue, { color }]}>
-        {value ?? '-'} {status ? `(${AIR_STATUS_LABEL[status]})` : ''}
+        {value ?? '-'} {statusLabel ? `(${statusLabel})` : ''}
       </Text>
     </View>
   );
