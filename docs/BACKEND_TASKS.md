@@ -17,7 +17,8 @@ idempotency 모듈로 책임을 분리하고 모든 비즈니스 로직을 담�
 BullMQ(추천·패턴·알림 비동기)를 사용한다. Refresh Token은 PostgreSQL에 해시로 저장하고,
 HTTP Rate Limit은 Redis 분산 저장소(`THROTTLE_STORAGE=auto|redis`, N11)를 사용한다. 이미지는 동의한 경우만 암호화해 S3에 저장하고
 미동의 시 추론 후 즉시 삭제한다. 운영은 GitHub Actions → ECR → ECS Fargate 배포,
-RDS·S3·CloudWatch 연동, Pino·Sentry·Helmet·JWT·Swagger·Jest를 적용한다.
+RDS·S3·CloudWatch 연동, Pino·Helmet·JWT·Swagger·Jest를 적용한다.
+(크래시 리포팅/Sentry는 2026-08-13 해커톤 결정으로 도입하지 않는다.)
 
 > 현재 구현된 기능을 실제 서비스에서도 사용할 수 있는 구조로 개선하는 것이 목표다.
 
@@ -27,12 +28,13 @@ RDS·S3·CloudWatch 연동, Pino·Sentry·Helmet·JWT·Swagger·Jest를 적용�
 > 스토어 배포는 범위 밖이며, N52(API /v1 버저닝)는 이 결정으로 **제외**했다.
 > 목표는 제출일까지 데모 품질 최상화 — 코드 태스크(N46~N49, N53)를 우선한다.
 
-실기기 테스트에서 나온 버그·정책 변경(N39~N45)은 2026-08-13에 모두 반영했다
-([`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md) 참고). 배포 작업은
-**N16 → N35 → N36 → N37** 순서를 지킨다(N35~N37은 배포 파이프라인이 살아 있어야 검증할 수 있다).
-여기에 프로젝트 리뷰([`Fable5_ProjectReview.md`](Fable5_ProjectReview.md), 2026-08-13)에서 나온
-프로덕션 개선 N46~N51을 추가했다. N46은 보안 항목이라 배포보다 먼저 처리해도 된다.
-N50·N51은 AWS 리소스가 선행이라 N16 이후에만 가능하다.
+실기기 테스트에서 나온 버그·정책 변경(N39~N45)과 프로젝트 리뷰
+([`Fable5_ProjectReview.md`](Fable5_ProjectReview.md))에서 나온 **코드 태스크 N46~N49·N53은
+2026-08-13에 모두 반영했다** (PR #158~#162, 기록은 [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md)).
+남은 Open은 전부 AWS 배포 계열이다 — **N16 → N35 → N36 → N37** 순서를 지키고
+(N35~N37은 배포 파이프라인이 살아 있어야 검증 가능), 리뷰에서 나온 N50·N51도 N16 이후에만
+가능하다. **해커톤 데모에 AWS 배포가 꼭 필요한지 먼저 판단**하고 착수한다(로컬/터널 데모로
+충분하면 보류).
 
 각 Task는 브랜치 하나 = PR 하나이며, 코드 변경이 없는 인프라 설정 작업은
 설정 근거와 확인 결과를 PR 본문 또는 이 문서에 남긴다.
@@ -106,62 +108,6 @@ R11에서 append-only 테이블에 보존 정책을 넣었다. 기본값이 `off
 
 완료 기준: dry-run 예측 건수와 실제 삭제 건수가 일치하고, 스냅샷이 확보돼 있다.
 
-### N46. 소셜 로그인 토큰 검증 강화 — Kakao 앱 바인딩 + Apple nonce (Fable5 리뷰 S-1·S-2)
-
-브랜치: `fix/social-token-binding` · 선행 없음 (배포 전 처리 권장)
-
-카카오 provider가 access token으로 `/v2/user/me`만 호출해 **어느 앱에 발급된 토큰인지 검증하지
-않는다**(코드 주석에 MVP 갭으로 명시돼 있음). 다른 카카오 연동 앱이 수집한 토큰으로 해당
-사용자의 Todayskin 계정에 로그인할 수 있다. Apple은 aud·서명은 검증하지만 nonce가 없어
-id_token 리플레이 여지가 있다.
-
-- [ ] Kakao: 토큰 정보 조회 API(`/v1/user/access_token_info`)로 `app_id`가 우리 앱과 일치하는지 검증, 불일치 시 401
-- [ ] Apple: 클라이언트가 nonce 생성 → id_token의 `nonce` 클레임 검증 (FE `expo-apple-authentication` nonce 전달 포함)
-- [ ] 성공·실패(타 앱 토큰, nonce 불일치) 테스트 추가
-
-완료 기준: 타 앱에서 발급된 카카오 토큰과 nonce 불일치 Apple 토큰이 401로 거부되고, 기존 소셜 로그인 e2e가 통과한다.
-
-### N47. 인증·OTP 라우트 rate limit fail-closed 전환 (Fable5 리뷰 S-4)
-
-브랜치: `fix/auth-throttle-fail-closed`
-
-`RedisThrottlerStorage`가 Redis 장애 시 요청을 통과시킨다(fail-open). 가용성 트레이드오프로
-의도된 설계지만, **로그인·OTP는 브루트포스 표적**이라 이 두 경로만은 Redis 장애 중에도
-막혀야 한다.
-
-- [ ] auth·otp 컨트롤러 한정 fail-closed 옵션 (Redis 오류 시 429/503) — 나머지 라우트는 fail-open 유지
-- [ ] Redis 단절 상황 테스트 (기존 fail-open 테스트와 분리)
-
-완료 기준: Redis를 내린 상태에서 OTP 발송·로그인 시도가 제한되고, 일반 조회 API는 계속 동작한다.
-
-### N48. AuditLog metadata 마스킹 강제 (Fable5 리뷰 S-5)
-
-브랜치: `fix/audit-metadata-masking`
-
-`AuditLogService` 주석은 "metadata에 민감정보 저장 금지"를 선언하지만 강제 장치가 없어,
-호출자가 전화번호 등을 넣으면 감사 테이블에 평문으로 남는다. Pino 로그는 경로 마스킹이
-있는데 감사 로그만 예외다.
-
-- [ ] `AuditLogService.record()`에서 metadata를 재귀 마스킹(전화·생일·토큰 패턴) 후 저장
-- [ ] 민감 키가 들어와도 마스킹되는 단위 테스트
-
-완료 기준: 감사 로그에 전화번호·토큰이 평문으로 저장될 수 없다.
-
-### N49. 추론 이미지 품질 게이트 — blur·휘도·최소 해상도 (Fable5 리뷰 P1)
-
-브랜치: `feature/inference-quality-gate` · 아키텍처상 FastAPI(inference-service) 전처리 담당
-
-현재 클라이언트·NestJS·FastAPI 어디에도 사진 품질 검사가 없다(MIME·10MB·얼굴 존재만 검사).
-어둡거나 흔들린 사진도 점수가 나와 **첫 결과의 신뢰를 운에 맡긴다.** 품질 검증은 추론
-전처리의 일부로 FastAPI에 두고, `ARCHITECTURE.md`에 전처리 검증 범위를 명시한다.
-
-- [ ] FastAPI: Laplacian 분산(blur)·평균 휘도·최소 해상도 검사 → 실패 시 422 + 사유 코드(`BLURRY`/`TOO_DARK`/`TOO_SMALL`)
-- [ ] NestJS: 422 사유를 표준 오류 포맷으로 매핑해 FE에 전달 (OpenAPI 반영)
-- [ ] 임계값은 환경변수로 (기본값은 실측 샘플로 보정)
-- [ ] FE 후속: 사유별 재촬영 안내 화면 연결 (FRONTEND_TASKS 후속 태스크로 등록)
-
-완료 기준: 어두운/흔들린/저해상도 샘플이 422와 사유 코드로 거부되고, 정상 샘플은 기존과 동일하게 통과한다.
-
 ### N50. CloudWatch 알람 + 장애 런북 (Fable5 리뷰 P1)
 
 선행: N16 · 코드 변경 없음 (인프라 설정 + 문서)
@@ -185,22 +131,6 @@ id_token 리플레이 여지가 있다.
 - [ ] 회전 절차가 기존 `JWT_SECRET` fallback과 호환되는지 테스트
 
 완료 기준: 프로덕션 DB 덤프만으로는 유효한 토큰을 만들 수 없다.
-
-### N53. WeatherSnapshot 기온·습도 수집 확장 (2026-08-13 해커톤 결정으로 보류 → 착수)
-
-브랜치: `feature/weather-temp-humidity`
-
-현재 스냅샷은 자외선·대기질만 수집하고 **피부 건조와 가장 직접 연관된 기온·습도가 없다**
-(리뷰 16장). 기상청 초단기실황(기온 `T1H`·습도 `REH`)을 수집해 스냅샷에 저장하고
-앱(날씨 상세·기록)에 노출한다. 실패 시 가짜값 금지·`UNAVAILABLE` 정책은 기존과 동일.
-
-- [ ] Prisma: `WeatherSnapshot`에 `temperature`·`humidity` nullable 컬럼 추가 (expand 마이그레이션)
-- [ ] KMA 초단기실황 연동 (기존 KMA 클라이언트·캐시·격자 변환 재사용)
-- [ ] 날씨 응답 DTO·OpenAPI 반영 + FE 생성 타입 재생성
-- [ ] FE: 날씨 상세 지표 카드 + 기록 그리드에 기온·습도 표시 (수집실패 구분 유지)
-- [ ] 성공·실패(외부 API 다운) 테스트
-
-완료 기준: 새 진단의 날씨 스냅샷에 기온·습도가 저장되고, 상세 화면에서 값 또는 "측정 불가"로 표시된다.
 
 ## 보류 (조건 충족 후 착수)
 
@@ -233,6 +163,7 @@ R6 1단계로 전역 락을 풀고 슬롯 수를 `INFERENCE_CONCURRENCY`(기본 
 | 우선순위 P0~P2 | ✅ | [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md) |
 | 운영 개선 N0~N14, N17~N34 | ✅ | [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md) |
 | 실기기 테스트 대응 N39~N45 | ✅ | [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md) |
+| Fable5 리뷰 대응 N46~N49·N53 (PR #158~#162) | ✅ | [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md) |
 | OTP MO 전환 — OCTOMO | ✅ | [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md) |
 | 개발 스토리지 `memory://` → http 정규화 | ✅ | [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md) |
 | 프론트 범위 완료 기록 (N15/N18/N19) | ✅ | [`FRONTEND_TASKS.md`](FRONTEND_TASKS.md) |
