@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as AuthSession from 'expo-auth-session';
 import * as Google from 'expo-auth-session/providers/google';
+import * as Crypto from 'expo-crypto';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -18,7 +19,12 @@ const kakaoDiscovery: AuthSession.DiscoveryDocument = {
 
 type Props = {
   busyProvider: SocialProvider | null;
-  onToken: (provider: SocialProvider, token: string) => Promise<void>;
+  /** N46: apple은 리플레이 방지 nonce를 extra로 함께 넘긴다. */
+  onToken: (
+    provider: SocialProvider,
+    token: string,
+    extra?: { nonce?: string },
+  ) => Promise<void>;
   onError: (message: string | null) => void;
   /** true면 풀폭 텍스트 버튼 대신 아이콘 원형 48px 3개 (토스/배민 스타일) */
   compact?: boolean;
@@ -99,14 +105,18 @@ export function SocialLoginButtons({ busyProvider, onToken, onError, compact = f
       return;
     }
     try {
+      // N46: 요청마다 임의 nonce를 만들어 리플레이를 막는다.
+      // id_token의 nonce 클레임과 서버에 보내는 원문이 대조된다.
+      const nonce = Crypto.randomUUID();
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
+        nonce,
       });
       if (!credential.identityToken) throw new Error('missing identity token');
-      await onToken('apple', credential.identityToken);
+      await onToken('apple', credential.identityToken, { nonce });
     } catch (error) {
       if ((error as { code?: string }).code === 'ERR_REQUEST_CANCELED') {
         onError('Apple 로그인이 취소되었습니다.');

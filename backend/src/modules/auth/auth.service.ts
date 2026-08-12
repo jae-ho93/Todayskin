@@ -176,7 +176,9 @@ export class AuthService {
    *    보장하고, 동시 요청 P2002는 재조회로 수렴시킨다.
    */
   async socialLogin(dto: SocialLoginDto): Promise<SocialLoginResponseDto> {
-    const profile = await this.socialAuth.verify(dto.provider, dto.accessToken);
+    const profile = await this.socialAuth.verify(dto.provider, dto.accessToken, {
+      nonce: dto.nonce,
+    });
 
     const account = await this.prisma.socialAccount.findUnique({
       where: {

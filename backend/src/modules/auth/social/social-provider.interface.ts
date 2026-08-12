@@ -17,9 +17,20 @@ export interface SocialProfile {
   email: string | null;
 }
 
+/**
+ * N46: 제공자 검증에 필요한 요청 부가 정보.
+ * apple은 리플레이 방지를 위해 클라이언트가 생성한 nonce가 필수다.
+ */
+export interface SocialVerifyContext {
+  nonce?: string;
+}
+
 export interface SocialProvider {
   readonly name: SocialProviderName;
-  verify(accessToken: string): Promise<SocialProfile>;
+  verify(
+    accessToken: string,
+    context?: SocialVerifyContext,
+  ): Promise<SocialProfile>;
 }
 
 /** 제공자 토큰 검증 실패 — 클라이언트가 보낸 토큰 문제(401). */

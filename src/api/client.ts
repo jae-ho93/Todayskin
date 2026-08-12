@@ -456,8 +456,13 @@ export const api = {
   signup: (payload: SignupRequest) => postJson<User>('/auth/signup', payload),
   login: (phoneNumber: string) => postJson<User>('/auth/login', { phoneNumber }),
 
-  socialLogin: (provider: SocialProvider, accessToken: string) =>
-    postJson<SocialLoginResponse>('/auth/social', { provider, accessToken }),
+  // N46: apple은 리플레이 방지 nonce를 함께 보낸다 (서버가 id_token 클레임과 대조).
+  socialLogin: (provider: SocialProvider, accessToken: string, nonce?: string) =>
+    postJson<SocialLoginResponse>('/auth/social', {
+      provider,
+      accessToken,
+      ...(nonce ? { nonce } : {}),
+    }),
   socialLinkPhone: (phoneNumber: string, birthDate?: string) =>
     authPostJson<User>('/auth/social/link-phone', { phoneNumber, birthDate }),
 
