@@ -1,5 +1,6 @@
 import { Prisma, WeatherSnapshot } from '@prisma/client';
 import { AirStatus } from '../../../common/enums/air-status.enum';
+import { UvLevel } from '../../../common/enums/uv-level.enum';
 import { WeatherSource } from '../../../common/enums/weather-source.enum';
 import { WeatherStatusPolicy } from '../policies/weather-status.policy';
 import {
@@ -38,9 +39,9 @@ const snapshotRow = (over: Partial<WeatherSnapshot> = {}): WeatherSnapshot =>
     kmaAreaNo: '1111000000',
     airkoreaStation: '종로구',
     uvIndex: 7,
-    uvStatus: 'bad',
+    uvStatus: 'high',
     uvIndexPeak: 9,
-    uvStatusPeak: 'bad',
+    uvStatusPeak: 'veryHigh',
     uvIndexPeakHour: 13,
     ozonePpm: 0.05,
     ozoneStatus: 'moderate',
@@ -75,7 +76,7 @@ describe('weather-snapshot.mapper (R22)', () => {
 
     expect(Object.keys(metrics).sort()).toEqual([...WEATHER_METRIC_KEYS].sort());
     expect(metrics.uvIndex).toBe(7);
-    expect(metrics.uvStatusPeak).toBe(AirStatus.BAD);
+    expect(metrics.uvStatusPeak).toBe(UvLevel.VERY_HIGH);
     expect(metrics.coValue).toBe(0.4);
   });
 
@@ -107,7 +108,8 @@ describe('weather-snapshot.mapper (R22)', () => {
       new WeatherStatusPolicy(),
     );
 
-    expect(metrics.uvStatus).toBe(AirStatus.BAD);
+    // 자외선 8 = 8 이상 10 이하 → 매우높음
+    expect(metrics.uvStatus).toBe(UvLevel.VERY_HIGH);
     // PM2.5 20 = 15 초과 35 이하 → 보통
     expect(metrics.pm25Status).toBe(AirStatus.MODERATE);
     expect(metrics.pm10Status).toBe(AirStatus.MODERATE);

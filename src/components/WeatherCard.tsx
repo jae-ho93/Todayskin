@@ -22,10 +22,14 @@ export function WeatherCard({ weather }: { weather: WeatherSnapshot }) {
           </Text>
         )}
         <View style={styles.badgeRow}>
-          <StatusBadge status={weather.uvStatusPeak ?? weather.uvStatus} label="자외선" />
-          <StatusBadge status={weather.ozoneStatus} label="오존" />
-          <StatusBadge status={weather.pm10Status} label="미세먼지" />
-          <StatusBadge status={weather.pm25Status} label="초미세먼지" />
+          <StatusBadge
+            scale="uv"
+            status={weather.uvStatusPeak ?? weather.uvStatus}
+            label="자외선"
+          />
+          <StatusBadge scale="air" status={weather.ozoneStatus} label="오존" />
+          <StatusBadge scale="air" status={weather.pm10Status} label="미세먼지" />
+          <StatusBadge scale="air" status={weather.pm25Status} label="초미세먼지" />
         </View>
       </Card>
     </Pressable>

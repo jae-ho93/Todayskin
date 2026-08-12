@@ -1090,17 +1090,17 @@ export interface components {
             /** @description 자외선 지수(현재 시점 예보) */
             uvIndex?: number | null;
             /**
-             * @description 자외선 등급
+             * @description 자외선 등급 (기상청 5단계: 낮음·보통·높음·매우높음·위험)
              * @enum {string|null}
              */
-            uvStatus?: "good" | "moderate" | "bad" | null;
+            uvStatus?: "low" | "moderate" | "high" | "veryHigh" | "danger" | null;
             /** @description 오늘 남은 시간대 중 예상 자외선 최댓값 */
             uvIndexPeak?: number | null;
             /**
-             * @description 자외선 피크 등급
+             * @description 자외선 피크 등급 (기상청 5단계)
              * @enum {string|null}
              */
-            uvStatusPeak?: "good" | "moderate" | "bad" | null;
+            uvStatusPeak?: "low" | "moderate" | "high" | "veryHigh" | "danger" | null;
             /** @description 피크 자외선이 나오는 시각(0~23시) */
             uvIndexPeakHour?: number | null;
             /** @description 오존(ppm) */
@@ -1109,28 +1109,28 @@ export interface components {
              * @description 오존 등급
              * @enum {string|null}
              */
-            ozoneStatus?: "good" | "moderate" | "bad" | null;
+            ozoneStatus?: "good" | "moderate" | "bad" | "veryBad" | null;
             /** @description 초미세먼지(PM2.5) */
             pm25?: number | null;
             /**
              * @description 초미세먼지 등급
              * @enum {string|null}
              */
-            pm25Status?: "good" | "moderate" | "bad" | null;
+            pm25Status?: "good" | "moderate" | "bad" | "veryBad" | null;
             /** @description 미세먼지(PM10) */
             pm10?: number | null;
             /**
              * @description 미세먼지 등급
              * @enum {string|null}
              */
-            pm10Status?: "good" | "moderate" | "bad" | null;
+            pm10Status?: "good" | "moderate" | "bad" | "veryBad" | null;
             /** @description 통합대기환경지수(CAI) */
             caiValue?: number | null;
             /**
              * @description CAI 등급
              * @enum {string|null}
              */
-            caiStatus?: "good" | "moderate" | "bad" | null;
+            caiStatus?: "good" | "moderate" | "bad" | "veryBad" | null;
             /** @description 이산화질소(NO2) */
             no2Value?: number | null;
             /** @description 아황산가스(SO2) */
@@ -1202,17 +1202,17 @@ export interface components {
             /** @description 자외선 지수(현재 시점 예보) */
             uvIndex?: number | null;
             /**
-             * @description 자외선 등급
+             * @description 자외선 등급 (기상청 5단계: 낮음·보통·높음·매우높음·위험)
              * @enum {string|null}
              */
-            uvStatus?: "good" | "moderate" | "bad" | null;
+            uvStatus?: "low" | "moderate" | "high" | "veryHigh" | "danger" | null;
             /** @description 오늘 남은 시간대 중 예상 자외선 최댓값 */
             uvIndexPeak?: number | null;
             /**
-             * @description 자외선 피크 등급
+             * @description 자외선 피크 등급 (기상청 5단계)
              * @enum {string|null}
              */
-            uvStatusPeak?: "good" | "moderate" | "bad" | null;
+            uvStatusPeak?: "low" | "moderate" | "high" | "veryHigh" | "danger" | null;
             /** @description 피크 자외선이 나오는 시각(0~23시) */
             uvIndexPeakHour?: number | null;
             /** @description 오존(ppm) */
@@ -1221,28 +1221,28 @@ export interface components {
              * @description 오존 등급
              * @enum {string|null}
              */
-            ozoneStatus?: "good" | "moderate" | "bad" | null;
+            ozoneStatus?: "good" | "moderate" | "bad" | "veryBad" | null;
             /** @description 초미세먼지(PM2.5) */
             pm25?: number | null;
             /**
              * @description 초미세먼지 등급
              * @enum {string|null}
              */
-            pm25Status?: "good" | "moderate" | "bad" | null;
+            pm25Status?: "good" | "moderate" | "bad" | "veryBad" | null;
             /** @description 미세먼지(PM10) */
             pm10?: number | null;
             /**
              * @description 미세먼지 등급
              * @enum {string|null}
              */
-            pm10Status?: "good" | "moderate" | "bad" | null;
+            pm10Status?: "good" | "moderate" | "bad" | "veryBad" | null;
             /** @description 통합대기환경지수(CAI) */
             caiValue?: number | null;
             /**
              * @description CAI 등급
              * @enum {string|null}
              */
-            caiStatus?: "good" | "moderate" | "bad" | null;
+            caiStatus?: "good" | "moderate" | "bad" | "veryBad" | null;
             /** @description 이산화질소(NO2) */
             no2Value?: number | null;
             /** @description 아황산가스(SO2) */

@@ -11,6 +11,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { RedisService } from '../../redis/redis.service';
 import { WeatherSource } from '../../common/enums/weather-source.enum';
 import { AirStatus } from '../../common/enums/air-status.enum';
+import { UvLevel } from '../../common/enums/uv-level.enum';
 
 describe('WeatherService', () => {
   let service: WeatherService;
@@ -164,19 +165,24 @@ describe('WeatherService', () => {
     expect(result.observedAt).toBe('2026-08-04T06:30:00.000Z');
   });
 
-  it('UV 등급 정책: 6 이상 bad, 3 이상 moderate, 미만 good', async () => {
+  // N40: 자외선은 기상청 5단계(낮음·보통·높음·매우높음·위험)를 쓴다.
+  it('UV 등급 정책: 기상청 5단계로 판정한다', async () => {
     kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 7 }));
     airKoreaClient.fetchAirQuality.mockResolvedValue(air());
     const result = await service.getCurrentWeather();
-    expect(result.uvStatus).toBe(AirStatus.BAD);
+    expect(result.uvStatus).toBe(UvLevel.HIGH);
+
+    kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 9 }));
+    const result2 = await service.getCurrentWeather();
+    expect(result2.uvStatus).toBe(UvLevel.VERY_HIGH);
 
     kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 4 }));
-    const result2 = await service.getCurrentWeather();
-    expect(result2.uvStatus).toBe(AirStatus.MODERATE);
+    const result3 = await service.getCurrentWeather();
+    expect(result3.uvStatus).toBe(UvLevel.MODERATE);
 
     kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 2 }));
-    const result3 = await service.getCurrentWeather();
-    expect(result3.uvStatus).toBe(AirStatus.GOOD);
+    const result4 = await service.getCurrentWeather();
+    expect(result4.uvStatus).toBe(UvLevel.LOW);
   });
 
   it('PM2.5 등급 정책: 35 초과 bad, 15 초과 moderate, 이하 good', async () => {
@@ -261,7 +267,7 @@ describe('WeatherService', () => {
     expect(arg.data.latitude).toBe(37.5665);
     expect(arg.data.longitude).toBe(126.978);
     expect(arg.data.uvIndex).toBe(7);
-    expect(arg.data.uvStatus).toBe(AirStatus.BAD);
+    expect(arg.data.uvStatus).toBe(UvLevel.HIGH);
     expect(arg.data.uvIndexPeak).toBe(9);
     expect(arg.data.uvIndexPeakHour).toBe(13);
     expect(arg.data.ozonePpm).toBe(0.05);
@@ -275,7 +281,7 @@ describe('WeatherService', () => {
     expect(arg.data.so2Value).toBe(0.005);
     expect(arg.data.coValue).toBe(0.4);
    expect(arg.data.source).toBe(WeatherSource.LIVE);
-    expect(arg.data.uvStatusPeak).toBe(AirStatus.BAD); // peak=9 → bad
+    expect(arg.data.uvStatusPeak).toBe(UvLevel.VERY_HIGH); // peak=9 → 매우높음
   });
 
   it('좌표 없을 때 저장 row에 lat/lon은 null이다', async () => {
