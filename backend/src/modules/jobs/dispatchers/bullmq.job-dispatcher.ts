@@ -7,6 +7,7 @@ import type {
   JobDispatcher,
   QueueMetrics,
 } from './job-dispatcher.interface';
+import { processesJobs, resolveJobRole } from '../../../config/job-role';
 import { JobHandlerRegistry } from '../handlers/job-handler.registry';
 import { JobStateService } from '../job-state.service';
 import {
@@ -66,6 +67,11 @@ export class BullMqJobDispatcher
     // BullMQ는 maxRetriesPerRequest: null 을 요구한다.
     this.connection = { url, maxRetriesPerRequest: null };
 
+    // R13: api 역할은 enqueue만 한다. Queue는 항상 만들고 Worker만 조건부로 만든다
+    // — Queue 없이는 dispatch()가 실패하기 때문이다.
+    const role = resolveJobRole(this.configService);
+    const withWorkers = processesJobs(role);
+
     const workQueues: AppQueueName[] = [
       QUEUE_RECOMMENDATION,
       QUEUE_PATTERN,
@@ -88,10 +94,12 @@ export class BullMqJobDispatcher
       });
       this.queues.set(name, queue);
 
+      if (!withWorkers) continue;
+
       const worker = new Worker<BullJobData>(
         name,
         async (job) => this.processWorkJob(job),
-        { connection: this.connection, concurrency: 2 },
+        { connection: this.connection, concurrency: this.workerConcurrency() },
       );
       worker.on('failed', (job, err) => {
         void this.onWorkFailed(job, err);
@@ -105,18 +113,33 @@ export class BullMqJobDispatcher
     });
     this.queues.set(QUEUE_DLQ, dlq);
 
-    const dlqWorker = new Worker<BullJobData>(
-      QUEUE_DLQ,
-      async (job) => {
-        this.logger.warn(
-          `DLQ received jobId=${job.data.jobId} type=${job.data.type} userId=${job.data.userId}`,
-        );
-      },
-      { connection: this.connection, concurrency: 1 },
-    );
-    this.workers.push(dlqWorker);
+    if (withWorkers) {
+      const dlqWorker = new Worker<BullJobData>(
+        QUEUE_DLQ,
+        async (job) => {
+          this.logger.warn(
+            `DLQ received jobId=${job.data.jobId} type=${job.data.type} userId=${job.data.userId}`,
+          );
+        },
+        { connection: this.connection, concurrency: 1 },
+      );
+      this.workers.push(dlqWorker);
+    }
 
-    this.logger.log('BullMQ queues and workers started');
+    this.logger.log(
+      withWorkers
+        ? `BullMQ queues and workers started (JOB_ROLE=${role}, concurrency=${this.workerConcurrency()})`
+        : `BullMQ queues started without workers (JOB_ROLE=${role})`,
+    );
+  }
+
+  /**
+   * R13: 워커 전용 프로세스는 API 지연을 걱정할 필요가 없으므로 동시성을 올릴 수 있다.
+   * 기본값은 기존 동작(2)을 유지하고 JOB_WORKER_CONCURRENCY로 조정한다.
+   */
+  private workerConcurrency(): number {
+    const raw = Number(this.configService.get<number>('JOB_WORKER_CONCURRENCY') ?? 2);
+    return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 2;
   }
 
   /**

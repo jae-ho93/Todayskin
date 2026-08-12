@@ -1,5 +1,7 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { LeaderElectedScheduler } from '../../common/scheduler/leader-elected.scheduler';
+import { SchedulerLeaderService } from '../../common/scheduler/scheduler-leader.service';
 import { WeatherService } from './weather.service';
 import { REGIONS } from './regions/region.registry';
 
@@ -26,89 +28,56 @@ const REGION_STAGGER_MS = 3_000;
 const INITIAL_TICK_DELAY_MS = 2_000;
 
 @Injectable()
-export class WeatherCollectionScheduler implements OnModuleInit, OnModuleDestroy {
-  private readonly logger = new Logger(WeatherCollectionScheduler.name);
-  private timer: NodeJS.Timeout | null = null;
-  private running = false;
+export class WeatherCollectionScheduler extends LeaderElectedScheduler {
+  protected readonly logger = new Logger(WeatherCollectionScheduler.name);
+  protected readonly schedulerName = 'weather-collection';
+  protected readonly intervalEnvKey = 'WEATHER_COLLECTION_INTERVAL_MS';
+  protected readonly defaultIntervalMs = 3_600_000;
+  protected readonly initialDelayMs = INITIAL_TICK_DELAY_MS;
 
   constructor(
     private readonly weatherService: WeatherService,
-    private readonly config: ConfigService,
-  ) {}
+    config: ConfigService,
+    leader: SchedulerLeaderService,
+  ) {
+    super(config, leader);
+  }
 
-  onModuleInit(): void {
-    if (this.config.get<string>('NODE_ENV') === 'test') {
-      return;
-    }
-    // N21: ECS에서 task가 여러 개 뜨면 각 task마다 스케줄러가 실행돼 정부 API를
-    // 중복 호출한다. WEATHER_COLLECTOR_ENABLED=false로 설정한 task는 스케줄러를 끈다
-    // (배포 시 정확히 1개 task만 true로 유지 — DEPLOYMENT.md 참고).
+  /**
+   * N21의 수동 스위치. R3의 리더 락이 중복 호출을 막으므로 더는 "정확히 한 task만 true"를
+   * 유지할 필요가 없지만, 정부 API 호출을 즉시 끊는 킬 스위치로서 남겨 둔다.
+   */
+  protected isEnabled(): boolean {
     if (this.config.get<string>('WEATHER_COLLECTOR_ENABLED', 'true') === 'false') {
       this.logger.log('Weather collection scheduler disabled (WEATHER_COLLECTOR_ENABLED=false)');
-      return;
+      return false;
     }
-    const interval = Number(
-      this.config.get<number>('WEATHER_COLLECTION_INTERVAL_MS') ?? 3_600_000,
-    );
-    if (!interval || interval <= 0) {
-      this.logger.log('Weather collection scheduler disabled');
-      return;
-    }
-    this.timer = setInterval(() => {
-      void this.collectAllRegions();
-    }, interval);
-    this.timer.unref?.();
-    // N25: 콜드 스타트 워밍 — 첫 주기를 기다리지 않고 부팅 직후 한 번 수집을 시작한다.
-    // 실행은 비동기(fire-and-forget)라 부팅 경로를 막지 않는다.
-    const initialTick = setTimeout(() => {
-      void this.collectAllRegions();
-    }, INITIAL_TICK_DELAY_MS);
-    initialTick.unref?.();
-    this.logger.log(
-      `Weather collection scheduler started intervalMs=${interval} regions=${REGIONS.length} warmup=${INITIAL_TICK_DELAY_MS}ms`,
-    );
+    return true;
   }
 
-  onModuleDestroy(): void {
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
-  }
-
-  private async collectAllRegions(): Promise<void> {
-    // 이전 실행이 아직 안 끝났으면(외부 API가 느릴 때) 겹쳐 돌지 않는다.
-    if (this.running) {
-      this.logger.warn('Previous collection still running, skipping this tick');
-      return;
-    }
-    this.running = true;
+  protected async tick(): Promise<void> {
     let ok = 0;
     let failed = 0;
-    try {
-      for (const region of REGIONS) {
-        try {
-          // N25: 근사표 메타를 넘겨 근접측정소 조회를 생략하고 UV+대기질을 병렬 호출한다
-          // (지역별 왕복 1회 단축 + 측정소 조회 API 호출 절약).
-          await this.weatherService.getOrCreateSnapshot(region.lat, region.lon, {
-            areaNo: region.kmaAreaNo,
-            stationName: region.airkoreaStationName,
-            regionName: region.cityName,
-            cityName: region.cityName,
-          });
-          ok++;
-        } catch (e) {
-          failed++;
-          this.logger.warn(
-            `Collection failed for ${region.name}: ${e instanceof Error ? e.name : String(e)}`,
-          );
-        }
-        await sleep(REGION_STAGGER_MS);
+    for (const region of REGIONS) {
+      try {
+        // N25: 근사표 메타를 넘겨 근접측정소 조회를 생략하고 UV+대기질을 병렬 호출한다
+        // (지역별 왕복 1회 단축 + 측정소 조회 API 호출 절약).
+        await this.weatherService.getOrCreateSnapshot(region.lat, region.lon, {
+          areaNo: region.kmaAreaNo,
+          stationName: region.airkoreaStationName,
+          regionName: region.cityName,
+          cityName: region.cityName,
+        });
+        ok++;
+      } catch (e) {
+        failed++;
+        this.logger.warn(
+          `Collection failed for ${region.name}: ${e instanceof Error ? e.name : String(e)}`,
+        );
       }
-      this.logger.log(`Weather collection tick done: ok=${ok} failed=${failed}`);
-    } finally {
-      this.running = false;
+      await sleep(REGION_STAGGER_MS);
     }
+    this.logger.log(`Weather collection tick done: ok=${ok} failed=${failed}`);
   }
 }
 

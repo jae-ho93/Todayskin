@@ -12,7 +12,8 @@
 |---|---|---|---|
 | B1 | ✅ 완료 (2026-08-12) | [#130](https://github.com/jae-ho93/Todayskin/pull/130) | AWS 작업 2건(코드 밖): Secrets Manager `todayskin/prod/OCTOMO_API_KEY` 등록, ALB deregistration delay < `stopTimeout`(120s) 설정. R6 2단계(vCPU 증설 + 슬롯 상향)는 부하 테스트 후 판단 — 값은 `INFERENCE_CONCURRENCY`로 이미 환경변수화됨 |
 | B2 | ✅ 완료 (2026-08-12) | `refactor/r-batch-02-safety-net` | 없음. R16의 `useAsyncJob` 테스트는 훅 추출(R27, B6) 후에 추가한다 |
-| B3~B6 | 대기 | — | — |
+| B3 | ✅ 완료 (2026-08-12) | `refactor/r-batch-03-scheduler-worker` | AWS/GitHub 작업(코드 밖): ① 워커 ECS 서비스 생성 + Variable `ECS_SERVICE_WORKER` 설정 → 큐 소비 확인 후 ② backend task definition에 `JOB_ROLE=api` 추가. 순서를 뒤집으면 잡이 처리되지 않는다 |
+| B4~B6 | 대기 | — | — |
 
 ## 작업 묶음 (Batch)
 
@@ -23,7 +24,7 @@
 |---|---|---|---|
 | **B1. 즉시 보안·운영** ✅ | R1, R2, R4, R6, R17, R19, R32 | `refactor/r-batch-01-security-critical` | Critical 우선 + 배포 차단(키·root·metrics) 항목 포함 |
 | **B2. 안전망 (타입·테스트·설정)** ✅ | R15, R16, R18, R34, R29 | `refactor/r-batch-02-safety-net` | 구조 작업 전 타입·테스트 기반 마련 |
-| **B3. 스케줄러·워커** | R3, R13, R31 | `refactor/r-batch-03-scheduler-worker` | 리더 락(R3) → 워커 분리(R13) 순서 |
+| **B3. 스케줄러·워커** ✅ | R3, R13, R31 | `refactor/r-batch-03-scheduler-worker` | 리더 락(R3) → 워커 분리(R13) 순서 |
 | **B4. DB (승인 필요, 한 마이그레이션)** | R33, R10, R11, R21 | `refactor/r-batch-04-db-migration` | 인덱스·컬럼·보존을 한 마이그레이션으로 묶음 |
 | **B5. 백엔드 구조 (동작 보존)** | R7, R8, R9, R12, R20, R22, R23, R24, R30, R35 | `refactor/r-batch-05-backend-structure` | 순수 구조 개선 — 동작 불변 목표 |
 | **B6. 계약·프론트 구조** | R5, R14, R25, R26, R27, R28 | `refactor/r-batch-06-contract-frontend` | B2 완료 후 권장 (strict·테스트가 회귀를 잡음) |
@@ -155,8 +156,10 @@ text
 
 작업:
 
-- [ ] Redis 기반 리더 락을 도입한다. 각 tick 진입 시 `SET scheduler:{name}:leader {instanceId} NX PX {interval*1.5}`로 락을 잡고 성공한 인스턴스만 실행한다. 이미 `RedisService`에 `incrementCounter` 등 원자 연산이 있으므로 `acquireLock(key, ttlMs)` 하나만 추가하면 된다. 세 스케줄러는 공통 `LeaderElectedScheduler` 베이스 또는 `@LeaderOnly()` 데코레이터로 감싼다. Redis 미가용 시(로컬)에는 락을 획득한 것으로 간주해 현재 동작을 유지한다.
-- [ ] 중장기적으로는 제안 [13]과 묶어 워커 프로세스로 스케줄러를 옮기는 것이 정답이지만, 그 전에도 이 락은 필요하다.
+- [x] Redis 기반 리더 락을 도입한다. `RedisService.acquireLock(key, ttlMs, owner)` + `SchedulerLeaderService` + `LeaderElectedScheduler` 베이스. **락은 해제하지 않고 TTL로 만료시킨다** — 작업 종료 시 해제하면 같은 주기에 다른 인스턴스가 이어서 실행하므로 중복 방지가 무의미해진다. Redis 미가용 시에는 락 없이 실행(현재 동작 유지).
+- [x] 데코레이터 대신 베이스 클래스를 택했다. 세 스케줄러가 테스트 환경 skip·인터벌 파싱·unref 타이머·겹침 방지를 각자 복제하고 있었고, 데코레이터로는 그 중복이 남는다. 베이스로 옮기면 새 스케줄러가 리더 선출을 빠뜨릴 수 없다.
+- [x] `JobMetricsScheduler`도 함께 옮겼다(백로그가 지목한 3개 + 1개). 지표는 Redis의 큐 상태를 읽으므로 모든 인스턴스가 같은 값을 기록해 로그만 인스턴스 수만큼 불어난다.
+- [x] 스케줄러는 R13의 `JOB_ROLE`로 워커 프로세스로 옮겼다. `api`는 스케줄러를 띄우지 않는다.
 
 변경 범위:
 
@@ -452,7 +455,11 @@ text
 
 작업:
 
-- [ ] `JOB_ROLE=api|worker|both` 환경변수를 도입한다. `api`면 큐에 enqueue만 하고 `Worker`를 만들지 않고, `worker`면 HTTP 리스너 없이 워커만 띄운다. 로컬/테스트 기본값은 `both`로 두어 현재 개발 경험을 유지한다. ECS에는 동일 이미지로 `todayskin-worker` 서비스를 추가하고, 리더 선출이 필요한 스케줄러([3])도 이 서비스로 옮긴다.
+- [x] `JOB_ROLE=api|worker|both`를 도입했다(`src/config/job-role.ts`). 기본값 `both` = 현재 동작. `api`는 `Queue`만 만들고 `Worker`를 만들지 않는다 — Queue까지 빼면 `dispatch()`가 실패한다.
+- [x] `worker`도 HTTP를 계속 띄운다. ECS 컨테이너 헬스체크가 `/health`를 호출하기 때문이며, ALB 타깃 그룹에 등록하지 않는 것으로 트래픽을 분리한다. HTTP 리스너 자체를 없애면 컨테이너가 unhealthy로 계속 재시작된다.
+- [x] `worker-task-definition.json` 추가(`JOB_ROLE=worker`, `JOB_DISPATCHER=bullmq` 강제 — Redis 누락 시 조용히 inline으로 떨어지면 워커가 큐를 소비하지 않는다). `JOB_WORKER_CONCURRENCY`로 동시성 분리(API 2 / 워커 4).
+- [x] deploy 워크플로에 워커 rollout을 API보다 **먼저** 넣었다. Variable `ECS_SERVICE_WORKER`가 비어 있으면 스킵되므로 서비스 생성 전에도 안전하다.
+- [x] `backend-task-definition.json`은 아직 `both`로 둔다. `api`로 내리는 것은 워커 서비스 가동 확인 후 별도 변경이며, 순서를 뒤집지 못하도록 `task-definition-env.spec.ts`가 `JOB_ROLE=api`를 거부한다.
 
 변경 범위:
 
@@ -948,8 +955,10 @@ text
 
 작업:
 
-- [ ] `deploy-ecs.yml`을 `on: workflow_run: workflows: [CI], types: [completed], branches: [main]`으로 바꾸고 `if: github.event.workflow_run.conclusion == 'success'`를 건다. 또는 배포 잡 앞에 CI 결과를 확인하는 단계를 둔다.
-- [ ] job `env:`에 `ECS_ASSIGN_PUBLIC_IP: ${{ vars.ECS_ASSIGN_PUBLIC_IP }}`를 추가한다.
+- [x] `on: workflow_run`(CI 완료) + `if: conclusion == 'success'`로 바꿨다.
+- [x] `workflow_run`은 `paths` 필터를 지원하지 않으므로 `guard` job에서 `git diff HEAD^ HEAD`로 `backend/**` 변경을 확인한다. 이게 없으면 프론트 전용 커밋마다 배포가 돈다.
+- [x] `workflow_run`의 `GITHUB_SHA`는 기본 브랜치 최신 커밋이라 CI가 검증한 커밋과 다를 수 있다. 모든 job이 `workflow_run.head_sha`를 checkout하고 이미지 태그로 쓴다.
+- [x] job `env:`에 `ECS_ASSIGN_PUBLIC_IP: ${{ vars.ECS_ASSIGN_PUBLIC_IP }}`를 추가했다(값이 없으면 셸에서 `ENABLED`로 기본).
 
 변경 범위:
 

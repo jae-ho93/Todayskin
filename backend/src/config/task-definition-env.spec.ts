@@ -13,6 +13,14 @@ import { getRequiredEnvKeys, listKnownEnvKeys } from './env.registry';
 
 const ECS_DIR = join(__dirname, '..', '..', 'docker', 'ecs');
 
+/** 새 task definition을 추가하면 여기에 등록해 unknown key·비-root 검사를 함께 받는다. */
+const TASK_DEFINITION_FILES = [
+  'backend-task-definition.json',
+  'worker-task-definition.json',
+  'inference-task-definition.json',
+  'migrate-task-definition.json',
+];
+
 interface ContainerDefinition {
   name: string;
   environment?: Array<{ name: string; value: string }>;
@@ -67,6 +75,37 @@ describe('ECS task definition ↔ env registry (R17)', () => {
     expect(environment.has('OCTOMO_RECIPIENT_NUMBER')).toBe(true);
   });
 
+  describe('worker task definition (R13)', () => {
+    const worker = readTaskDefinition('worker-task-definition.json');
+    const workerContainer = worker.containerDefinitions.find((c) => c.name === 'worker');
+
+    it('worker 컨테이너 정의가 존재한다', () => {
+      expect(workerContainer).toBeDefined();
+    });
+
+    it('production 필수 env가 모두 있다 — 워커도 같은 코드베이스를 부팅한다', () => {
+      const provided = providedKeys(workerContainer!);
+      const missing = getRequiredEnvKeys('production').filter((key) => !provided.has(key));
+      expect(missing).toEqual([]);
+    });
+
+    it('JOB_ROLE=worker이고 BullMQ를 강제한다 (Redis 누락 시 조용히 inline으로 떨어지지 않게)', () => {
+      const env = new Map(
+        (workerContainer!.environment ?? []).map((e) => [e.name, e.value]),
+      );
+      expect(env.get('JOB_ROLE')).toBe('worker');
+      expect(env.get('JOB_DISPATCHER')).toBe('bullmq');
+    });
+
+    it('API task definition은 워커 전환 전까지 both를 유지한다 (잡 유실 방지)', () => {
+      const env = new Map(
+        (backendContainer!.environment ?? []).map((e) => [e.name, e.value]),
+      );
+      // JOB_ROLE 미지정 = both. api로 내리는 것은 worker 서비스 가동 확인 후 별도 변경.
+      expect(env.get('JOB_ROLE') ?? 'both').not.toBe('api');
+    });
+  });
+
   it('registry에 없는 unknown env key를 쓰지 않는다', () => {
     // inference-service(FastAPI)는 NestJS env registry를 공유하지 않으므로
     // 그 쪽 전용 키만 예외로 둔다.
@@ -76,11 +115,7 @@ describe('ECS task definition ↔ env registry (R17)', () => {
       'INFERENCE_QUEUE_TIMEOUT_SECONDS',
     ]);
 
-    for (const file of [
-      'backend-task-definition.json',
-      'inference-task-definition.json',
-      'migrate-task-definition.json',
-    ]) {
+    for (const file of TASK_DEFINITION_FILES) {
       for (const container of readTaskDefinition(file).containerDefinitions) {
         for (const key of providedKeys(container)) {
           expect(known.has(key)).toBe(true);
@@ -90,11 +125,7 @@ describe('ECS task definition ↔ env registry (R17)', () => {
   });
 
   it('R19: 모든 컨테이너가 비-root(uid 10001)로 실행된다', () => {
-    for (const file of [
-      'backend-task-definition.json',
-      'inference-task-definition.json',
-      'migrate-task-definition.json',
-    ]) {
+    for (const file of TASK_DEFINITION_FILES) {
       for (const container of readTaskDefinition(file).containerDefinitions) {
         expect(container.user).toBe('10001');
       }

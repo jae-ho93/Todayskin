@@ -1,5 +1,7 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { LeaderElectedScheduler } from '../../common/scheduler/leader-elected.scheduler';
+import { SchedulerLeaderService } from '../../common/scheduler/scheduler-leader.service';
 import { ImageStorageService } from './image-storage.service';
 
 /**
@@ -9,46 +11,24 @@ import { ImageStorageService } from './image-storage.service';
  * - orphan 객체 탐지(dry-run — 로그/감사만, 실제 삭제는 ADMIN API로만)
  *
  * 기본 1시간 간격. IMAGE_RECONCILE_INTERVAL_MS=0 이면 비활성(테스트용).
+ * R3: S3 삭제 재시도가 인스턴스마다 중복 실행되지 않게 리더만 실행한다.
  */
 @Injectable()
-export class ImageReconciliationScheduler implements OnModuleInit, OnModuleDestroy {
-  private readonly logger = new Logger(ImageReconciliationScheduler.name);
-  private timer: NodeJS.Timeout | null = null;
+export class ImageReconciliationScheduler extends LeaderElectedScheduler {
+  protected readonly logger = new Logger(ImageReconciliationScheduler.name);
+  protected readonly schedulerName = 'image-reconciliation';
+  protected readonly intervalEnvKey = 'IMAGE_RECONCILE_INTERVAL_MS';
+  protected readonly defaultIntervalMs = 3_600_000;
 
   constructor(
     private readonly imageStorage: ImageStorageService,
-    private readonly config: ConfigService,
-  ) {}
-
-  onModuleInit(): void {
-    if (this.config.get<string>('NODE_ENV') === 'test') {
-      return;
-    }
-    const interval = Number(
-      this.config.get<number>('IMAGE_RECONCILE_INTERVAL_MS') ?? 3_600_000,
-    );
-    if (!interval || interval <= 0) {
-      this.logger.log('Image reconciliation scheduler disabled');
-      return;
-    }
-    this.timer = setInterval(() => {
-      void this.run().catch((e) => {
-        this.logger.error(`image reconciliation failed: ${(e as Error).message}`);
-      });
-    }, interval);
-    // unref so it does not keep process alive alone
-    this.timer.unref?.();
-    this.logger.log(`Image reconciliation scheduler started intervalMs=${interval}`);
+    config: ConfigService,
+    leader: SchedulerLeaderService,
+  ) {
+    super(config, leader);
   }
 
-  onModuleDestroy(): void {
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
-  }
-
-  private async run(): Promise<void> {
+  protected async tick(): Promise<void> {
     const retry = await this.imageStorage.retryPendingDeletes();
     // orphan은 안전 기본 dry-run만 수행. 실제 cleanup은 ADMIN 재처리 경로로만.
     const orphans = await this.imageStorage.detectOrphans({ dryRun: true });
