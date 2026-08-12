@@ -2255,6 +2255,38 @@
           "source"
         ]
       },
+      "EvidenceSourceDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "who-uv-index-2002"
+          },
+          "title": {
+            "type": "string",
+            "example": "Global Solar UV Index: A Practical Guide"
+          },
+          "publisher": {
+            "type": "string",
+            "example": "World Health Organization"
+          },
+          "year": {
+            "type": "number",
+            "example": 2002
+          },
+          "url": {
+            "type": "string",
+            "example": "https://www.who.int/publications/i/item/9241590076"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "publisher",
+          "year",
+          "url"
+        ]
+      },
       "RecommendationDto": {
         "type": "object",
         "properties": {
@@ -2277,7 +2309,15 @@
           },
           "sourceLabel": {
             "type": "string",
-            "example": "AI 종합 분석 · 피부과학 일반 지식 기반"
+            "example": "AI 생성 · 내 진단 결과 기반",
+            "description": "sources가 비었을 때 쓰는 등급 표기. 인용이 아니라 \"무엇으로 만들었는지\"를 밝힌다."
+          },
+          "sources": {
+            "description": "N45: 검증된 참조 문서. 빈 배열이면 인용한 문헌이 없다(AI 생성 또는 개인 데이터 관찰).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EvidenceSourceDto"
+            }
           },
           "explanation": {
             "type": "string",
@@ -2322,6 +2362,7 @@
           "title",
           "grade",
           "sourceLabel",
+          "sources",
           "explanation",
           "ingredientTags",
           "relatedProductIds"

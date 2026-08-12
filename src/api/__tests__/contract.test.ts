@@ -102,7 +102,16 @@ describe('추천·제품 응답 스키마 계약', () => {
     id: 'rec-1',
     title: '오늘은 이중 세안을 권장해요',
     grade: 'A',
-    sourceLabel: '국내 종단연구, 2019',
+    sourceLabel: '기상청·WHO 자외선 권고',
+    sources: [
+      {
+        id: 'who-uv-index-2002',
+        title: 'Global Solar UV Index: A Practical Guide',
+        publisher: 'World Health Organization',
+        year: 2002,
+        url: 'https://www.who.int/publications/i/item/9241590076',
+      },
+    ],
     explanation: '미세먼지 농도가 높아 잔여물 제거가 필요해요',
     ingredientTags: ['판테놀'],
     relatedProductIds: ['prod-1'],

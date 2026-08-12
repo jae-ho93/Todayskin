@@ -1159,6 +1159,18 @@ export interface components {
             /** @description 일산화탄소(CO) */
             coValue?: number | null;
         };
+        EvidenceSourceDto: {
+            /** @example who-uv-index-2002 */
+            id: string;
+            /** @example Global Solar UV Index: A Practical Guide */
+            title: string;
+            /** @example World Health Organization */
+            publisher: string;
+            /** @example 2002 */
+            year: number;
+            /** @example https://www.who.int/publications/i/item/9241590076 */
+            url: string;
+        };
         RecommendationDto: {
             /** @example gemini-a1b2c3d4 */
             id: string;
@@ -1169,8 +1181,13 @@ export interface components {
              * @enum {string}
              */
             grade: "A" | "B" | "C";
-            /** @example AI 종합 분석 · 피부과학 일반 지식 기반 */
+            /**
+             * @description sources가 비었을 때 쓰는 등급 표기. 인용이 아니라 "무엇으로 만들었는지"를 밝힌다.
+             * @example AI 생성 · 내 진단 결과 기반
+             */
             sourceLabel: string;
+            /** @description N45: 검증된 참조 문서. 빈 배열이면 인용한 문헌이 없다(AI 생성 또는 개인 데이터 관찰). */
+            sources: components["schemas"]["EvidenceSourceDto"][];
             /** @example 초미세먼지 노출은 모공에 침투해 활성산소를 생성할 수 있다는 관찰 연구 결과가 있습니다. */
             explanation: string;
             /** @example 통계적 관찰 - 확정적 인과관계 아님 */

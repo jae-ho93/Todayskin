@@ -411,6 +411,9 @@ model RecommendationTemplate {
   title            String
   grade            EvidenceGrade
   sourceLabel      String        @map("source_label")
+  // N45: content/evidence-sources.ts 레지스트리의 id. 확인된 출처만 화면에 뜬다.
+  // A등급은 최소 1개가 있어야 한다(evidence-sources.spec.ts가 강제).
+  sourceIds        String[]      @default([]) @map("source_ids")
   explanation      String
   observationalNote String?       @map("observational_note")
   ingredientTags   String[]      @default([]) @map("ingredient_tags")

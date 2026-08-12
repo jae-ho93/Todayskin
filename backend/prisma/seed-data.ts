@@ -18,6 +18,8 @@ export type TemplateSeed = {
   title: string;
   grade: EvidenceGrade;
   sourceLabel: string;
+  /** N45: evidence-sources.ts 레지스트리 id. A등급은 최소 1개가 있어야 한다. */
+  sourceIds: string[];
   explanation: string;
   observationalNote: string | null;
   ingredientTags: string[];
@@ -53,11 +55,15 @@ export function oliveYoungSearchUrl(query: string): string {
 export const TEMPLATES: TemplateSeed[] = [
   {
     id: 'rec-1',
-    title: '오늘은 자외선 차단제를 2~3시간마다 재도포해 주세요',
+    // N45: 원문에 없는 주장을 뺐다. 기존 문구는 "2~3시간마다"라는 간격과
+    // "오늘 자외선지수는 8"이라는 측정값을 전역 템플릿에 박아뒀는데, 인용한 두
+    // 문서 어디에도 그 간격은 없고 측정값은 사용자마다 다르다.
+    title: '자외선 차단제를 정기적으로 덧발라 주세요',
     grade: 'A',
-    sourceLabel: '대한피부과학회 자외선 가이드라인',
+    sourceLabel: '기상청·WHO 자외선 권고',
+    sourceIds: ['kma-uv-index-grade', 'who-uv-index-2002'],
     explanation:
-      '오늘 자외선지수는 8(매우 높음)로 측정되었습니다. 자외선은 피부 세포 신호전달체계에 영향을 주어 광노화와 색소침착을 유발할 수 있다는 것이 공인된 피부과학 정설입니다.',
+      '기상청은 자외선지수가 보통(3) 이상이면 차단제를 바르고, 높음(6) 이상에서는 정기적으로 덧바르도록 권고합니다. WHO도 SPF 15+ 광범위 차단제를 충분히 바르고 덧바를 것을 권고하며, 자외선 노출이 피부 노화를 앞당긴다고 설명합니다.',
     observationalNote: null,
     ingredientTags: ['SPF50+', '징크옥사이드'],
     timing: null,

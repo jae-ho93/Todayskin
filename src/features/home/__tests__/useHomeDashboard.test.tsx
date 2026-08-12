@@ -31,6 +31,7 @@ function recommendation(id: string): Recommendation {
     title: `추천 ${id}`,
     grade: 'A',
     sourceLabel: '가이드라인',
+    sources: [],
     explanation: '설명',
     ingredientTags: [],
     relatedProductIds: [],

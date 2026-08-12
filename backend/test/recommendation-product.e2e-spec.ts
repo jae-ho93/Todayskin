@@ -209,9 +209,10 @@ describe('Recommendation & Product (e2e)', () => {
       expect(Array.isArray(res.body)).toBe(true);
       expect(res.body.length).toBeGreaterThan(0);
       expect(res.body[0].grade).toBe('B');
-      expect(res.body[0].sourceLabel).toBe(
-        'AI 종합 분석 · 피부과학 일반 지식 기반',
-      );
+      // N45: B는 사진+날씨로 만든 생성물이라 인용할 문헌이 없다. 출처 칸을
+      // 그럴듯한 문구로 채우는 대신 생성물임을 밝히고 sources를 비운다.
+      expect(res.body[0].sourceLabel).toBe('AI 생성 · 내 진단 결과 기반');
+      expect(res.body[0].sources).toEqual([]);
       expect(res.body[0].ingredientTags).toBeDefined();
     });
   });
@@ -225,6 +226,10 @@ describe('Recommendation & Product (e2e)', () => {
 
       expect(res.body.id).toBe('rec-1');
       expect(res.body.grade).toBe('A');
+      // N45: A등급은 "공인 가이드라인"이라고 표기하므로 가리킬 문서가 실제로
+      // 있어야 한다. 없으면 등급 자체가 과장이다.
+      expect(res.body.sources.length).toBeGreaterThan(0);
+      expect(res.body.sources[0].url).toMatch(/^https:\/\//);
       // N20: seed가 템플릿↔제품을 연결하므로 관련 제품이 실제로 반환된다.
       expect(Array.isArray(res.body.relatedProductIds)).toBe(true);
       expect(res.body.relatedProductIds).toContain('prod-1');

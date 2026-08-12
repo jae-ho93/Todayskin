@@ -100,11 +100,21 @@ export interface SkinScoreSnapshot {
 
 export type RecommendationTiming = '외출 후' | '자기 전' | '언제든';
 
+/**
+ * N45: 추천이 실제로 참조한 문서. 서버 레지스트리에 등록된 것만 내려온다.
+ *
+ * 빈 배열은 "출처를 못 찾았다"가 아니라 "인용한 문헌이 없다"는 뜻이다. AI가 생성한
+ * 문장(B)과 개인 데이터 관찰(C)이 여기 해당하고, 화면은 그 둘을 인용처럼 보이게
+ * 하면 안 된다.
+ */
+export type EvidenceSource = NonNullable<components['schemas']['EvidenceSourceDto']>;
+
 export interface Recommendation {
   id: string;
   title: string; // 예: "오늘은 이중 세안을 권장해요"
   grade: EvidenceGrade;
-  sourceLabel: string; // 예: "국내 종단연구, 2019"
+  sourceLabel: string; // sources가 비었을 때 쓰는 등급 표기
+  sources: EvidenceSource[];
   explanation: string; // "왜 이 등급인가요?" 상세 설명
   observationalNote?: string; // C등급 전용 관찰적 문구
   ingredientTags: string[];
