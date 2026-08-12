@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../src/api/client';
 import { EvidenceBadge } from '../src/components/EvidenceBadge';
 import { FACE_PART_PIN_POSITION, FaceIllustration } from '../src/components/FaceIllustration';
+import { currentMonthBounds, todayKst } from '../src/lib/kst-date';
 import { getSession } from '../src/lib/session';
 import { gradeToColor } from '../src/lib/skinGrade';
 import { colors, radius, shadow, spacing, typography } from '../src/theme';
@@ -27,19 +28,6 @@ import type {
   SkinPartMetric,
   SkinScoreSnapshot,
 } from '../src/types';
-
-// KST(UTC+9) 기준 오늘 날짜 문자열.
-function todayKst(): string {
-  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
-}
-
-// 이번 달 범위 (스코어 추이 비교용).
-function currentMonthRange(): { from: string; to: string } {
-  const today = todayKst();
-  const [year, month] = today.split('-').map(Number);
-  const last = new Date(year, month, 0).getDate();
-  return { from: `${today.slice(0, 7)}-01`, to: `${today.slice(0, 7)}-${String(last).padStart(2, '0')}` };
-}
 
 // 종합 점수 → 등급 라벨 (백엔드 부위 등급 4단계와 별개인 화면용 단순 구간).
 function overallGrade(score: number): string {
@@ -70,7 +58,7 @@ export default function DiagnosisResultScreen() {
     Promise.all([
       api.getSkinScore(),
       getSession(),
-      api.getScoreSeries(currentMonthRange()),
+      api.getScoreSeries(currentMonthBounds()),
       api.getHistoryByDate(todayKst()),
     ]).then(([result, session, scoreSeries, history]) => {
       if (cancelled) return;

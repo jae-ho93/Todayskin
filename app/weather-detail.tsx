@@ -7,68 +7,31 @@ import { Card } from '../src/components/Card';
 import { ScreenContainer } from '../src/components/ScreenContainer';
 import { useToast } from '../src/components/Toast';
 import { useUserLocation } from '../src/hooks/useUserLocation';
+import { AIR_STATUS_COLOR, AIR_STATUS_LABEL } from '../src/lib/air-status';
 import { colors, radius, spacing, typography } from '../src/theme';
 import type { AirStatus, WeatherSnapshot } from '../src/types';
 
-// ── F41: 공식 기준치 (KMA/WHO) — FE 상수 ──────────────────────────
-// 각 지표별 구간 [min, max] → 등급. 값이 구간에 들어오면 해당 등급.
-const UV_BANDS: [number, number, AirStatus][] = [
-  [0, 2, 'good'],
-  [3, 5, 'moderate'],
-  [6, 7, 'moderate'],
-  [8, 10, 'bad'],
-  [11, Infinity, 'bad'],
-];
-const PM10_BANDS: [number, number, AirStatus][] = [
-  [0, 30, 'good'],
-  [31, 80, 'moderate'],
-  [81, 150, 'bad'],
-  [151, Infinity, 'bad'],
-];
-const PM25_BANDS: [number, number, AirStatus][] = [
-  [0, 15, 'good'],
-  [16, 35, 'moderate'],
-  [36, 75, 'bad'],
-  [76, Infinity, 'bad'],
-];
-const OZONE_BANDS: [number, number, AirStatus][] = [
-  [0, 0.03, 'good'],
-  [0.031, 0.09, 'moderate'],
-  [0.091, 0.15, 'bad'],
-  [0.151, Infinity, 'bad'],
-];
-const CAI_BANDS: [number, number, AirStatus][] = [
-  [0, 50, 'good'],
-  [51, 100, 'moderate'],
-  [101, 250, 'bad'],
-  [251, Infinity, 'bad'],
-];
-
-const STATUS_LABEL: Record<AirStatus, string> = { good: '좋음', moderate: '보통', bad: '나쁨' };
-const STATUS_COLOR: Record<AirStatus, string> = {
-  good: colors.statusGood,
-  moderate: colors.statusModerate,
-  bad: colors.statusBad,
-};
-
-// 구간 표시용 정규화 (0~1). bands 마지막이 Infinity여도 maxCap으로 자른다.
-function bandPosition(value: number, bands: [number, number, AirStatus][], maxCap: number): number {
-  const clamped = Math.max(0, Math.min(value, maxCap));
-  return maxCap > 0 ? clamped / maxCap : 0;
-}
+// R5: 등급 판정의 단일 출처는 서버(weather-status.policy.ts)다. 프론트는 서버가 내려준
+// uvStatus/pm10Status/... 를 그대로 쓰고, 여기서는 게이지 눈금(maxCap)만 갖는다.
+// maxCap은 등급 경계가 아니라 막대의 오른쪽 끝에 해당하는 표시용 상한이다.
+const UV_MAX = 11;
+const PM10_MAX = 150;
+const PM25_MAX = 75;
+const OZONE_MAX = 0.15;
+const CAI_MAX = 250;
 
 function StatusBar({
   value,
-  bands,
+  status,
   maxCap,
 }: {
   value: number;
-  bands: [number, number, AirStatus][];
+  status: AirStatus | null | undefined;
   maxCap: number;
 }) {
-  const status = bands.find(([lo, hi]) => value >= lo && value <= hi)?.[2] ?? 'moderate';
-  const pos = bandPosition(value, bands, maxCap) * 100;
-  const color = STATUS_COLOR[status];
+  const clamped = Math.max(0, Math.min(value, maxCap));
+  const pos = (maxCap > 0 ? clamped / maxCap : 0) * 100;
+  const color = status ? AIR_STATUS_COLOR[status] : colors.gray400;
   return (
     <View style={styles.barTrack}>
       <View style={styles.barFill} />
@@ -93,7 +56,6 @@ function MetricCard({
   status,
   description,
   extra,
-  bands,
   maxCap,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
@@ -103,10 +65,9 @@ function MetricCard({
   status: AirStatus | null | undefined;
   description: string;
   extra?: string;
-  bands?: [number, number, AirStatus][];
   maxCap?: number;
 }) {
-  const statusColor = status ? STATUS_COLOR[status] : colors.gray400;
+  const statusColor = status ? AIR_STATUS_COLOR[status] : colors.gray400;
   return (
     <Card style={styles.metricCard}>
       <View style={styles.metricHeader}>
@@ -115,9 +76,9 @@ function MetricCard({
         </View>
         <Text style={styles.metricLabel}>{label}</Text>
         {status ? (
-          <View style={[styles.statusPill, { backgroundColor: STATUS_COLOR[status] + '22' }]}>
-            <Text style={[styles.statusPillText, { color: STATUS_COLOR[status] }]}>
-              {STATUS_LABEL[status]}
+          <View style={[styles.statusPill, { backgroundColor: statusColor + '22' }]}>
+            <Text style={[styles.statusPillText, { color: statusColor }]}>
+              {AIR_STATUS_LABEL[status]}
             </Text>
           </View>
         ) : (
@@ -133,7 +94,7 @@ function MetricCard({
             <Text style={styles.metricUnit}>{unit}</Text>
           </View>
           {extra && <Text style={[styles.metricExtra, { color: colors.sageDark }]}>{extra}</Text>}
-          {bands && maxCap ? <StatusBar value={value} bands={bands} maxCap={maxCap} /> : null}
+          {maxCap ? <StatusBar value={value} status={status} maxCap={maxCap} /> : null}
           <Text style={styles.metricDescription}>{description}</Text>
         </>
       ) : (
@@ -148,7 +109,7 @@ function UvHeroCard({ weather }: { weather: WeatherSnapshot }) {
   const peak = weather.uvIndexPeak ?? weather.uvIndex;
   const peakStatus = weather.uvStatusPeak ?? weather.uvStatus;
   const peakHour = weather.uvIndexPeakHour;
-  const color = peakStatus ? STATUS_COLOR[peakStatus] : colors.gray400;
+  const color = peakStatus ? AIR_STATUS_COLOR[peakStatus] : colors.gray400;
   return (
     <Card style={styles.heroCard}>
       <View style={styles.heroTop}>
@@ -162,9 +123,9 @@ function UvHeroCard({ weather }: { weather: WeatherSnapshot }) {
           )}
         </View>
         {peakStatus && (
-          <View style={[styles.statusPill, { backgroundColor: STATUS_COLOR[peakStatus] + '22' }]}>
-            <Text style={[styles.statusPillText, { color: STATUS_COLOR[peakStatus] }]}>
-              {STATUS_LABEL[peakStatus]}
+          <View style={[styles.statusPill, { backgroundColor: color + '22' }]}>
+            <Text style={[styles.statusPillText, { color }]}>
+              {AIR_STATUS_LABEL[peakStatus]}
             </Text>
           </View>
         )}
@@ -175,9 +136,7 @@ function UvHeroCard({ weather }: { weather: WeatherSnapshot }) {
             <Text style={[styles.heroValue, { color }]}>{peak}</Text>
             <Text style={styles.heroUnit}>지수</Text>
           </View>
-          {typeof peak === 'number' && (
-            <StatusBar value={peak} bands={UV_BANDS} maxCap={11} />
-          )}
+          <StatusBar value={peak} status={peakStatus} maxCap={UV_MAX} />
         </>
       ) : (
         <Text style={styles.metricUnavailableText}>지금 값을 불러올 수 없어요</Text>
@@ -361,8 +320,7 @@ export default function WeatherDetailScreen() {
         value={weather.ozonePpm}
         unit="ppm"
         status={weather.ozoneStatus}
-        bands={OZONE_BANDS}
-        maxCap={0.15}
+        maxCap={OZONE_MAX}
         description="오존 농도가 높으면 피부 자극과 염증이 생기기 쉬워요. 외출 후 세안을 신경 써주세요."
       />
 
@@ -372,8 +330,7 @@ export default function WeatherDetailScreen() {
         value={weather.pm10}
         unit="㎍/㎥"
         status={weather.pm10Status}
-        bands={PM10_BANDS}
-        maxCap={150}
+        maxCap={PM10_MAX}
         description="입자가 상대적으로 커서 모공을 자극할 수 있어요."
       />
 
@@ -383,8 +340,7 @@ export default function WeatherDetailScreen() {
         value={weather.pm25}
         unit="㎍/㎥"
         status={weather.pm25Status}
-        bands={PM25_BANDS}
-        maxCap={75}
+        maxCap={PM25_MAX}
         description="입자가 작아 모공 깊숙이 침투해 활성산소를 만들고 콜라겐 분해를 촉진할 수 있다는 관찰 연구가 있어요."
       />
 
@@ -395,8 +351,7 @@ export default function WeatherDetailScreen() {
           value={weather.caiValue}
           unit="지수"
           status={weather.caiStatus}
-          bands={CAI_BANDS}
-          maxCap={250}
+          maxCap={CAI_MAX}
           description="오존·미세먼지 등 여러 오염물질을 하나로 합친 종합 점수예요."
         />
       )}
