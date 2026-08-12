@@ -59,5 +59,7 @@ backend/
 | env 목록·필수 | `.env.example`, `src/config/env.registry.ts` |
 | API 계약 | 개발 Swagger `/api/docs`, `test/*e2e*` |
 | 스키마·시드 | `prisma/` |
-| Task 이력·N16 | [docs/BACKEND_TASKS.md](../docs/BACKEND_TASKS.md) |
+| 활성 작업 보드 | [docs/BACKEND_TASKS.md](../docs/BACKEND_TASKS.md) |
+| 완료 이력 | [docs/BACKEND_ARCHIVE.md](../docs/BACKEND_ARCHIVE.md) |
+| 리팩토링 백로그 R1~R35 | [docs/REFACTORING_BACKLOG.md](../docs/REFACTORING_BACKLOG.md) |
 | 추론 서버 | `inference-service/README.md` |
