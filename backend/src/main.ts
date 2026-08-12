@@ -73,6 +73,12 @@ async function bootstrap() {
     SwaggerModule.setup('api/docs', app, document);
   }
 
+  // R4: SIGTERM(ECS 배포·스케일인)에서도 모듈 lifecycle이 돌아가야 한다.
+  // enableShutdownHooks()의 기본 시그널 핸들러는 정리 후 시그널을 재발생시켜
+  // 프로세스를 즉시 끝내므로 Sentry flush가 유실된다. 그래서 직접 핸들러를 달고
+  // app.close()로 OnModuleDestroy/OnApplicationShutdown을 호출한 뒤 flush한다.
+  registerShutdownHandlers(app);
+
   const port = configService.get<number>('PORT', 3000);
   await app.listen(port);
 
@@ -84,10 +90,53 @@ async function bootstrap() {
   if (sentryEnabled) {
     logger.log('Sentry error tracking enabled');
   }
+}
 
-  // 종료 시 Sentry 이벤트 플러시
+/**
+ * R4: graceful shutdown.
+ *
+ * ECS는 배포·스케일인 때 SIGTERM을 보내고 stopTimeout 후 SIGKILL한다.
+ * `beforeExit`는 이벤트 루프가 비어 정상 종료될 때만 발생하므로 SIGTERM에서는
+ * 절대 호출되지 않는다 — 그 결과 DB/Redis 커넥션과 처리 중인 BullMQ 잡이
+ * 정리되지 않고 Sentry 이벤트도 유실됐다.
+ *
+ * 순서: app.close()(진행 중 요청 종료 + lifecycle hook) → Sentry flush → exit.
+ */
+function registerShutdownHandlers(app: Awaited<ReturnType<typeof NestFactory.create>>): void {
+  const signals: NodeJS.Signals[] = ['SIGTERM', 'SIGINT'];
+  let shuttingDown = false;
+
+  const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
+    // 두 번째 시그널(배포 중 재전송 등)에 close()가 중복 실행되지 않게 한다.
+    if (shuttingDown) return;
+    shuttingDown = true;
+    try {
+      await app.close();
+    } catch (e) {
+      // 로거가 이미 닫혔을 수 있으므로 stderr로 남긴다.
+      console.error(`Graceful shutdown failed on ${signal}:`, e);
+    } finally {
+      await flushSentry();
+      process.exit(0);
+    }
+  };
+
+  for (const signal of signals) {
+    process.on(signal, () => {
+      void shutdown(signal);
+    });
+  }
+
+  // 이벤트 루프가 비어 정상 종료되는 경로(로컬 스크립트 등)도 계속 flush한다.
   process.on('beforeExit', () => {
     void flushSentry();
   });
 }
-bootstrap();
+
+bootstrap().catch((e) => {
+  // 부팅 실패는 조용히 죽지 않게 로깅하고 non-zero로 종료한다
+  // (ECS가 태스크 실패를 인지해 롤백 판단을 할 수 있어야 한다).
+  // Nest 로거가 아직 없으므로 stderr로 남긴다.
+  console.error('Nest application failed to start:', e);
+  process.exit(1);
+});

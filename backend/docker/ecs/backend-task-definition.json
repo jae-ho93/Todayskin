@@ -15,6 +15,8 @@
       "name": "backend",
       "image": "ACCOUNT_ID.dkr.ecr.ap-northeast-2.amazonaws.com/todayskin-backend:IMAGE_TAG",
       "essential": true,
+      "user": "10001",
+      "stopTimeout": 120,
       "portMappings": [
         {
           "containerPort": 3000,
@@ -29,7 +31,9 @@
         { "name": "MOCK_GEMINI", "value": "false" },
         { "name": "MOCK_INFERENCE", "value": "false" },
         { "name": "JOB_DISPATCHER", "value": "auto" },
-        { "name": "LOG_LEVEL", "value": "info" }
+        { "name": "LOG_LEVEL", "value": "info" },
+        { "name": "OCTOMO_ENDPOINT", "value": "https://api.octoverse.kr/octomo/v1/public/message/exists" },
+        { "name": "OCTOMO_RECIPIENT_NUMBER", "value": "1666-3538" }
       ],
       "secrets": [
         {
@@ -59,6 +63,10 @@
         {
           "name": "GEMINI_API_KEY",
           "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:ACCOUNT_ID:secret:todayskin/prod/GEMINI_API_KEY"
+        },
+        {
+          "name": "OCTOMO_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:ACCOUNT_ID:secret:todayskin/prod/OCTOMO_API_KEY"
         },
         {
           "name": "ALLOWED_ORIGINS",

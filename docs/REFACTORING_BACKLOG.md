@@ -6,6 +6,13 @@
 >
 > **요약:** Critical 6건 · High 15건 · Medium 11건 · Low 3건 (총 35건)
 
+## 진행 상황
+
+| 묶음 | 상태 | PR | 남은 일 |
+|---|---|---|---|
+| B1 | ✅ 완료 (2026-08-12) | `refactor/r-batch-01-security-critical` | AWS 작업 2건(코드 밖): Secrets Manager `todayskin/prod/OCTOMO_API_KEY` 등록, ALB deregistration delay < `stopTimeout`(120s) 설정. R6 2단계(vCPU 증설 + 슬롯 상향)는 부하 테스트 후 판단 — 값은 `INFERENCE_CONCURRENCY`로 이미 환경변수화됨 |
+| B2~B6 | 대기 | — | — |
+
 ## 작업 묶음 (Batch)
 
 > **R 단위로 PR을 쪼개지 않는다.** 아래 묶음 단위로 검토·승인하고, 묶음 하나 = 브랜치 하나 = PR 하나로 진행한다.
@@ -13,7 +20,7 @@
 
 | 묶음 | 포함 R | 브랜치 | 진행 기준 |
 |---|---|---|---|
-| **B1. 즉시 보안·운영** | R1, R2, R4, R6, R17, R19, R32 | `refactor/r-batch-01-security-critical` | Critical 우선 + 배포 차단(키·root·metrics) 항목 포함 |
+| **B1. 즉시 보안·운영** ✅ | R1, R2, R4, R6, R17, R19, R32 | `refactor/r-batch-01-security-critical` | Critical 우선 + 배포 차단(키·root·metrics) 항목 포함 |
 | **B2. 안전망 (타입·테스트·설정)** | R15, R16, R18, R34, R29 | `refactor/r-batch-02-safety-net` | 구조 작업 전 타입·테스트 기반 마련 |
 | **B3. 스케줄러·워커** | R3, R13, R31 | `refactor/r-batch-03-scheduler-worker` | 리더 락(R3) → 워커 분리(R13) 순서 |
 | **B4. DB (승인 필요, 한 마이그레이션)** | R33, R10, R11, R21 | `refactor/r-batch-04-db-migration` | 인덱스·컬럼·보존을 한 마이그레이션으로 묶음 |
@@ -95,7 +102,7 @@
 
 작업:
 
-- [ ] `expo-secure-store`(iOS Keychain / Android Keystore)를 도입해 토큰만 SecureStore로 옮긴다. 사용자 프로필처럼 민감하지 않은 값은 AsyncStorage에 남긴다. 최초 실행 시 기존 AsyncStorage 세션을 읽어 SecureStore로 이관하고 원본 키를 삭제하는 1회성 마이그레이션을 `session.ts` 내부에 둔다. `session.ts`의 함수 시그니처는 이미 async이므로 호출부는 변경되지 않는다.
+- [x] `expo-secure-store`(iOS Keychain / Android Keystore)를 도입해 토큰만 SecureStore로 옮긴다. 사용자 프로필처럼 민감하지 않은 값은 AsyncStorage에 남긴다. 최초 실행 시 기존 AsyncStorage 세션을 읽어 SecureStore로 이관하고 원본 키를 삭제하는 1회성 마이그레이션을 `session.ts` 내부에 둔다. `session.ts`의 함수 시그니처는 이미 async이므로 호출부는 변경되지 않는다.
 
 변경 범위:
 
@@ -121,7 +128,7 @@ dependency 변경   expo-secure-store 추가
 
 작업:
 
-- [ ] URL에서 `?key=`를 제거하고 요청 헤더에 `x-goog-api-key: {GEMINI_API_KEY}`를 추가한다. 함께, `RedactLogger`의 마스킹 대상에 `x-goog-api-key`를 추가한다.
+- [x] URL에서 `?key=`를 제거하고 요청 헤더에 `x-goog-api-key: {GEMINI_API_KEY}`를 추가한다. 함께, `RedactLogger`의 마스킹 대상에 `x-goog-api-key`를 추가한다.
 
 변경 범위:
 
@@ -175,7 +182,7 @@ text
 
 작업:
 
-- [ ] `app.enableShutdownHooks()`를 추가하고(`PrismaService`/`RedisService`/BullMQ dispatcher의 `OnModuleDestroy`가 자동 호출됨), `SIGTERM`/`SIGINT` 핸들러에서 `await app.close()` → `await flushSentry()` 순으로 정리한다. `bootstrap().catch(...)`로 부팅 실패를 로깅하고 `process.exit(1)`한다. ECS 서비스에는 ALB deregistration delay보다 긴 `stopTimeout`을 설정한다.
+- [x] `app.enableShutdownHooks()`를 추가하고(`PrismaService`/`RedisService`/BullMQ dispatcher의 `OnModuleDestroy`가 자동 호출됨), `SIGTERM`/`SIGINT` 핸들러에서 `await app.close()` → `await flushSentry()` 순으로 정리한다. `bootstrap().catch(...)`로 부팅 실패를 로깅하고 `process.exit(1)`한다. ECS 서비스에는 ALB deregistration delay보다 긴 `stopTimeout`을 설정한다.
 
 변경 범위:
 
@@ -227,9 +234,9 @@ API 변경   없음 (기존 응답 필드를 사용만 시작)
 
 작업:
 
-- [ ] **1단계(저위험):** 락을 제거하지 말고 `asyncio.Semaphore(N)` + 명시적 대기 타임아웃으로 바꾼다. PyTorch CPU 추론은 스레드 안전하므로(`torch.set_num_threads(1)`로 스레드당 BLAS 스레드를 고정하면) N을 vCPU 수에 맞춰 2~4로 올릴 수 있다. 세마포어 대기 시간을 `/metrics`에 히스토그램으로 추가하고, 대기 타임아웃 초과 시 429를 반환해 NestJS가 즉시 fallback하도록 한다. 락이 정말로 필요한 이유(모델 내부 가변 상태 등)가 있다면 그 부분만 좁은 범위로 감싼다.
-- [ ] **2단계:** ECS 태스크 vCPU를 2로 올리고 `uvicorn --workers 2`로 프로세스를 나눈다. 모델이 프로세스별로 메모리를 차지하므로 메모리 상한 확인이 선행되어야 한다.
-- [ ] 함께, `analyzer`가 startup 실패로 `None`인 상태에서 요청이 들어오면 `AttributeError` → 500이 되므로, `/health`가 `analyzer is None`일 때 실패를 반환하도록 하고 `analyze`는 503을 반환하게 한다.
+- [x] **1단계(저위험):** 락을 제거하지 말고 `asyncio.Semaphore(N)` + 명시적 대기 타임아웃으로 바꾼다. PyTorch CPU 추론은 스레드 안전하므로(`torch.set_num_threads(1)`로 스레드당 BLAS 스레드를 고정하면) N을 vCPU 수에 맞춰 2~4로 올릴 수 있다. 세마포어 대기 시간을 `/metrics`에 히스토그램으로 추가하고, 대기 타임아웃 초과 시 429를 반환해 NestJS가 즉시 fallback하도록 한다. 락이 정말로 필요한 이유(모델 내부 가변 상태 등)가 있다면 그 부분만 좁은 범위로 감싼다.
+- [ ] **2단계(보류 — 실측 필요):** ECS 태스크 vCPU를 2로 올리고 `uvicorn --workers 2`로 프로세스를 나눈다. 모델이 프로세스별로 메모리를 차지하므로 메모리 상한 확인이 선행되어야 한다. → 1단계에서 `INFERENCE_CONCURRENCY`(기본 1, 최대 4)로 슬롯 수를 환경변수화했으므로, 부하 테스트 후 값만 올리면 된다. cpu/memory 증설은 그 결과에 따라 결정한다.
+- [x] 함께, `analyzer`가 startup 실패로 `None`인 상태에서 요청이 들어오면 `AttributeError` → 500이 되므로, `/health`가 `analyzer is None`일 때 실패를 반환하도록 하고 `analyze`는 503을 반환하게 한다.
 
 변경 범위:
 
@@ -564,7 +571,7 @@ dependency 변경   jest-expo, @testing-library/react-native, @types/jest 추가
 
 작업:
 
-- [ ] task definition의 `secrets`에 `OCTOMO_API_KEY`를 추가하고 Secrets Manager에 값을 등록한다. `OCTOMO_ENDPOINT`, `OCTOMO_RECIPIENT_NUMBER`는 비밀이 아니므로 `environment`에 명시한다. 근본 대책으로 `getRequiredEnvKeys('production')`의 결과와 task definition의 `environment ∪ secrets` 키 집합을 비교하는 CI 검증 스크립트를 추가해 같은 종류의 누락을 자동 차단한다.
+- [x] task definition의 `secrets`에 `OCTOMO_API_KEY`를 추가하고 Secrets Manager에 값을 등록한다. `OCTOMO_ENDPOINT`, `OCTOMO_RECIPIENT_NUMBER`는 비밀이 아니므로 `environment`에 명시한다. 근본 대책으로 `getRequiredEnvKeys('production')`의 결과와 task definition의 `environment ∪ secrets` 키 집합을 비교하는 CI 검증 스크립트를 추가해 같은 종류의 누락을 자동 차단한다.
 
 변경 범위:
 
@@ -617,9 +624,9 @@ text
 
 작업:
 
-- [ ] 두 Dockerfile 모두 마지막 스테이지에서 비-root 유저를 만들고 전환한다.
-- [ ] RUN useradd --system --uid 10001 --create-home appuser
-- [ ] NestJS 이미지는 `entrypoint.sh`와 `dist`의 소유권을 맞춰야 한다. 추론 이미지는 `COPY . .` 대신 필요한 `*.py`와 `assets/`만 명시적으로 복사한다. ECS task definition에도 `"user": "10001"`을 명시해 이미지 변경과 무관하게 강제한다.
+- [x] 두 Dockerfile 모두 마지막 스테이지에서 비-root 유저를 만들고 전환한다.
+- [x] RUN useradd --system --uid 10001 --create-home appuser
+- [x] NestJS 이미지는 `entrypoint.sh`와 `dist`의 소유권을 맞춰야 한다. 추론 이미지는 `COPY . .` 대신 필요한 `*.py`와 `assets/`만 명시적으로 복사한다. ECS task definition에도 `"user": "10001"`을 명시해 이미지 변경과 무관하게 강제한다.
 
 변경 범위:
 
@@ -966,7 +973,7 @@ text
 
 작업:
 
-- [ ] `/metrics`에도 `X-Inference-Key` 검증을 적용하거나, 별도 관리 포트로 분리한다. `/health`는 ECS 헬스체크가 호출하므로 무인증을 유지한다(민감 정보를 담지 않도록 응답 내용도 함께 점검한다).
+- [x] `/metrics`에도 `X-Inference-Key` 검증을 적용하거나, 별도 관리 포트로 분리한다. `/health`는 ECS 헬스체크가 호출하므로 무인증을 유지한다(민감 정보를 담지 않도록 응답 내용도 함께 점검한다).
 
 변경 범위:
 

@@ -21,6 +21,23 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit
 
+  # inference-service 계약 테스트 (N13/R6/R32). analyzer/part_mapping을 stub하므로
+  # torch·mediapipe 설치 없이 수 초 안에 끝난다.
+  inference-contract-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/inference-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/inference-service/requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest tests/ -q
+
   backend-build-test:
     runs-on: ubuntu-latest
     services:

@@ -93,6 +93,14 @@ Task definition 템플릿:
 배포 전 `ACCOUNT_ID` / IAM role ARN / secret ARN을 실제 값으로 맞춘다.
 워크플로는 ECR registry에서 ACCOUNT_ID를 추출해 템플릿을 치환한다.
 
+컨테이너 실행 정책 (2026-08-12, R4/R19):
+
+- 세 task definition 모두 `"user": "10001"` — 이미지도 비-root(`appuser`, uid 10001)로 실행한다.
+  이미지를 바꿔도 task definition이 비-root를 강제한다.
+- backend는 `"stopTimeout": 120`(Fargate 최대). SIGTERM에서 `app.close()` → Sentry flush →
+  종료가 끝날 시간을 확보한다. **ALB target group의 deregistration delay를 stopTimeout보다
+  작게(예: 30초) 설정해야** 종료 중인 태스크로 새 요청이 가지 않는다.
+
 ### GitHub 설정
 
 **Secret**
@@ -125,6 +133,12 @@ Task definition 템플릿:
 - `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`
 - `KMA_API_KEY`, `AIRKOREA_API_KEY`, `GEMINI_API_KEY`
 - `ALLOWED_ORIGINS`, `S3_BUCKET`, `INFERENCE_SERVICE_URL`, `INFERENCE_SHARED_SECRET`, `SENTRY_DSN`
+- `OCTOMO_API_KEY` (R17 — 누락 시 `/health/ready`가 항상 not-ready이고 신규 가입·신규 디바이스
+  로그인이 막힌다. 비밀이 아닌 `OCTOMO_ENDPOINT`·`OCTOMO_RECIPIENT_NUMBER`는 task definition의
+  `environment`에 명시한다.)
+
+> `getRequiredEnvKeys('production')`과 task definition의 `environment ∪ secrets` 키 집합은
+> `src/config/task-definition-env.spec.ts`가 CI에서 대조한다 — 같은 종류의 누락은 테스트가 막는다.
 
 IAM:
 
@@ -158,6 +172,8 @@ inference-service는 **내부망 전용** 서비스다. 무제한 이미지 처�
 - GitHub Variables `ECS_SECURITY_GROUPS`에는 backend/inference 각각의 SG id를 지정한다.
   (ECS service가 task에 연결된 SG를 그대로 사용하므로, 배포 시에도 SG reference rule이 유지된다.)
 - `/health`는 (외부 ALB/헬스체크용으로) 열 수 있지만 `/infer`·`/metrics`는 내부망으로만 노출한다.
+  R32: `/metrics`도 `X-Inference-Key`를 요구하므로 Prometheus 등 스크레이퍼는 같은 헤더를 보내야
+  한다. `/health`만 무인증이며 상태 문자열 외 정보를 담지 않는다(모델 미준비 시 503).
 
 ### RDS · S3 · CloudWatch
 

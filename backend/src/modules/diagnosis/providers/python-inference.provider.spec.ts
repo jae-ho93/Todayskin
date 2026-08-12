@@ -1,4 +1,7 @@
-import { PythonInferenceProvider } from './python-inference.provider';
+import {
+  InferenceBusyError,
+  PythonInferenceProvider,
+} from './python-inference.provider';
 import { InferenceImages } from './inference-provider.interface';
 
 /**
@@ -71,5 +74,48 @@ describe('PythonInferenceProvider', () => {
 
     const provider = new PythonInferenceProvider('http://127.0.0.1:8000', 'test-shared-secret');
     await expect(provider.infer(images)).rejects.toThrow(/Unexpected inference service response/);
+  });
+
+  // R6: 추론 슬롯 혼잡(429)
+  describe('429 혼잡 처리', () => {
+    const busy = {
+      ok: false,
+      status: 429,
+      headers: { get: () => '1' },
+      text: async () => '추론 서버가 혼잡합니다',
+    };
+
+    it('한 번 재시도해서 성공하면 정상 결과를 반환한다', async () => {
+      global.fetch = jest
+        .fn()
+        .mockResolvedValueOnce(busy)
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => validResponse })
+        .mockName('fetch') as unknown as typeof fetch;
+
+      const provider = new PythonInferenceProvider('http://127.0.0.1:8000', 'secret');
+      await expect(provider.infer(images)).resolves.toEqual(validResponse);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('재시도도 429면 InferenceBusyError — 무한 재시도하지 않는다', async () => {
+      global.fetch = jest.fn().mockResolvedValue(busy) as unknown as typeof fetch;
+
+      const provider = new PythonInferenceProvider('http://127.0.0.1:8000', 'secret');
+      await expect(provider.infer(images)).rejects.toBeInstanceOf(InferenceBusyError);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('Retry-After가 과도해도 대기 상한을 넘기지 않는다', async () => {
+      global.fetch = jest
+        .fn()
+        .mockResolvedValueOnce({ ...busy, headers: { get: () => '600' } })
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => validResponse })
+        .mockName('fetch') as unknown as typeof fetch;
+
+      const provider = new PythonInferenceProvider('http://127.0.0.1:8000', 'secret');
+      const startedAt = Date.now();
+      await provider.infer(images);
+      expect(Date.now() - startedAt).toBeLessThan(3000);
+    });
   });
 });

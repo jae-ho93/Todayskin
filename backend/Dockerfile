@@ -32,14 +32,21 @@ WORKDIR /app
 ENV NODE_ENV=production
 RUN apt-get update && apt-get install -y --no-install-recommends openssl wget && rm -rf /var/lib/apt/lists/*
 
+# R19: 비-root 실행. 컨테이너 내 RCE가 root로 이어지지 않게 한다.
+RUN groupadd --system --gid 10001 appuser \
+  && useradd --system --uid 10001 --gid 10001 --create-home appuser
+
 # 운영 의존성 + 빌드 결과물 + Prisma client(migration 실행에 필요)
-COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
-COPY --from=builder /app/docker/entrypoint.sh ./docker/entrypoint.sh
-COPY package.json ./
+# 소유권을 appuser로 맞춘다 — entrypoint 실행과 prisma engine 캐시 접근에 필요하다.
+COPY --from=prod-deps --chown=appuser:appuser /app/node_modules ./node_modules
+COPY --from=builder --chown=appuser:appuser /app/dist ./dist
+COPY --from=builder --chown=appuser:appuser /app/prisma ./prisma
+COPY --from=builder --chown=appuser:appuser /app/prisma.config.ts ./prisma.config.ts
+COPY --from=builder --chown=appuser:appuser /app/docker/entrypoint.sh ./docker/entrypoint.sh
+COPY --chown=appuser:appuser package.json ./
 RUN chmod +x ./docker/entrypoint.sh
+
+USER 10001
 
 EXPOSE 3000
 

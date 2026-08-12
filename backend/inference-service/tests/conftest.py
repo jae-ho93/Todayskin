@@ -83,7 +83,29 @@ import main  # noqa: E402  (stub 설치 후 import)
 @pytest.fixture()
 def client():
     os.environ["INFERENCE_SHARED_SECRET"] = TEST_SECRET
+    os.environ.pop("INFERENCE_CONCURRENCY", None)
     from fastapi.testclient import TestClient
 
     with TestClient(main.app) as c:
         yield c
+
+
+@pytest.fixture()
+def make_client():
+    """R6: 슬롯 수(INFERENCE_CONCURRENCY)를 바꿔 앱을 띄우는 팩토리."""
+    from fastapi.testclient import TestClient
+
+    created = []
+
+    def _make(concurrency: int = 1):
+        os.environ["INFERENCE_SHARED_SECRET"] = TEST_SECRET
+        os.environ["INFERENCE_CONCURRENCY"] = str(concurrency)
+        c = TestClient(main.app)
+        c.__enter__()
+        created.append(c)
+        return c
+
+    yield _make
+    for c in reversed(created):
+        c.__exit__(None, None, None)
+    os.environ.pop("INFERENCE_CONCURRENCY", None)
