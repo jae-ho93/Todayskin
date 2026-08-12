@@ -301,14 +301,44 @@ export class ImageStorageService {
    * 던져 호출자(철회/탈퇴)가 재시도하도록 한다. 미완료 row는 재시도 worker가 수렴시킨다.
    */
   async deleteAllForUser(userId: number): Promise<number> {
+    try {
+      return await this.deleteImagesWhere({ userId });
+    } finally {
+      // 이미지가 없어도 랜드마크만 남아 있을 수 있으므로 사용자 진단 landmarks를 비운다.
+      // S3 삭제가 실패해 503으로 빠져나가더라도 지운다 — 랜드마크는 DB에만 있는
+      // 얼굴 기하 정보라 객체 삭제 성공 여부와 무관하게 파기 대상이다.
+      await this.prisma.diagnosis.updateMany({
+        where: { userId },
+        data: { landmarks: Prisma.JsonNull },
+      });
+    }
+  }
+
+  /**
+   * N43: 진단 한 건의 이미지만 삭제한다. 기록 삭제가 이 단계를 먼저 거친다.
+   *
+   * 진단 row를 먼저 지우면 `DiagnosisImage`가 Cascade로 함께 사라져 s3Key를 잃는다.
+   * 그 순간 S3 객체는 아무도 가리키지 않는 orphan이 되어 정기 스캔 전까지 남는다.
+   * 그래서 객체를 먼저 지우고, 실패하면 예외로 호출자를 멈춘다.
+   */
+  async deleteForDiagnosis(userId: number, diagnosisId: string): Promise<number> {
+    return this.deleteImagesWhere({ userId, diagnosisId });
+  }
+
+  /** N10 2단계 삭제의 공통 루프. 대상 범위(`scope`)만 호출자가 정한다. */
+  private async deleteImagesWhere(scope: {
+    userId: number;
+    diagnosisId?: string;
+  }): Promise<number> {
+    const { userId } = scope;
     const images = await this.prisma.diagnosisImage.findMany({
-      where: { userId, deletedAt: null },
+      where: { ...scope, deletedAt: null },
     });
 
     // 1단계: DB에 삭제 의도를 기록. 이후 프로세스가 죽어도 worker가 재시도한다.
     if (images.length > 0) {
       await this.prisma.diagnosisImage.updateMany({
-        where: { userId, deletedAt: null, pendingDeleteAt: null },
+        where: { ...scope, deletedAt: null, pendingDeleteAt: null },
         data: { pendingDeleteAt: new Date() },
       });
     }
@@ -366,12 +396,6 @@ export class ImageStorageService {
         metadata: { diagnosisId: img.diagnosisId },
       });
     }
-
-    // 이미지가 없어도 랜드마크만 남아 있을 수 있으므로 사용자 진단 landmarks를 비운다.
-    await this.prisma.diagnosis.updateMany({
-      where: { userId },
-      data: { landmarks: Prisma.JsonNull },
-    });
 
     if (failed > 0) {
       throw new ServiceUnavailableException(

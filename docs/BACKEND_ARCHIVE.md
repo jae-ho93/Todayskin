@@ -680,6 +680,34 @@ districtName = nearest?.districtName ?? region.airkoreaStationName;
 
 완료 기준: 일시 실패가 진단 기록을 영구 훼손하지 않는다. 실패한 경우 화면이 "값 없음"과 "수집 실패"를 구별해 보여준다. → 충족
 
+### N43. 진단 기록 삭제 API가 없다
+
+브랜치: `feature/diagnosis-record-deletion` (프론트 F67 포함)
+
+얼굴 이미지에서 나온 기록인데 사용자가 지울 수단이 없었다.
+
+- [x] `DELETE /diagnosis/:id` 추가 — 소유권 검사는 진단 상세 조회와 같은 방식(없으면 404, 남의 것이면 403)
+- [x] 이미지와 랜드마크는 즉시 물리 삭제
+- [x] 진단 row도 **물리 삭제**한다(N44와 같은 기준) → 아래 참고
+- [x] 추천·패턴 집계에서 빠지는지 확인 → 추천은 명시적으로 함께 지운다. 패턴·추이·목록은 진단 row를 보므로 자동으로 빠진다
+- [x] 삭제 후 목록·캘린더·추이에서 사라지는지 통합 테스트로 고정 (`test/diagnosis-delete.e2e-spec.ts`)
+
+**soft delete를 쓰지 않은 이유.** 진단 row를 지우는 주체가 어디에도 없다. retention
+sweep(N37)은 세션·job·날씨만 보고, purge 스케줄러는 탈퇴 사용자만 본다. soft delete로
+두면 사실상 "화면에서만 감추기"가 되고, 처리방침의 "철회 시 지체 없이 파기"와 어긋난다.
+
+**추천을 함께 지운다.** `Recommendation.diagnosisId`가 SetNull이라 진단만 지우면 추천이
+사용자에게 그대로 남는다. 그 문장은 지운 진단을 설명하는 글이다.
+
+**이미지를 먼저 지운다.** 진단 row를 먼저 지우면 `DiagnosisImage`가 Cascade로 사라지며
+s3Key를 잃고, S3 객체는 아무도 가리키지 않는 orphan이 된다. 객체 삭제가 실패하면 503으로
+멈춰 진단 row를 남긴다 — 사용자에게는 삭제 실패로 보이고 재시도할 수 있다. 반대 순서면
+사진만 남고 기록이 사라져, 가장 지우고 싶었던 것이 남는다.
+
+되돌릴 수 없는 개인정보 삭제이므로 감사 로그(`diagnosis.deleted`)를 남긴다.
+
+완료 기준: 본인 기록만 삭제되고, 이미지가 즉시 사라지며, 목록·추이·추천에서 함께 빠진다. → 충족
+
 
 > **N16 (AWS 첫 배포)는 Open** — [`docs/BACKEND_TASKS.md`](BACKEND_TASKS.md) 참고.
 > 프론트 범위 완료 기록(N15/N18/N19)은 [`docs/FRONTEND_TASKS.md`](FRONTEND_TASKS.md)에 있다.

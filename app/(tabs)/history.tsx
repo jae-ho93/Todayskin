@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -47,6 +47,7 @@ export default function HistoryScreen() {
   // 날짜를 빠르게 연타하면 늦게 도착한 이전 요청이 최신 요청을 덮어쓸 수 있다.
   // 요청 시퀀스를 추적해 stale 응답을 폐기한다.
   const dayRequestSeq = useRef(0);
+  const initialLoadDoneRef = useRef(false);
 
   const load = useCallback(async () => {
     setScoreSeries(await api.getScoreSeries(monthBounds(currentMonth)));
@@ -74,11 +75,24 @@ export default function HistoryScreen() {
   useEffect(() => {
     // 기본으로 오늘 날짜를 선택해 바로 내용이 보이게 한다.
     selectDay(today);
+    initialLoadDoneRef.current = true;
     return () => {
       dayRequestSeq.current += 1; // 언마운트 후 도착하는 응답도 폐기
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /**
+   * F67: 상세에서 기록을 지우고 돌아오면 목록·추이가 그대로여서 지운 기록이 남아 보인다.
+   * 포커스 복귀 시 다시 불러온다. 첫 진입은 위 effect가 처리하므로 건너뛴다(F52와 같은 방식).
+   */
+  useFocusEffect(
+    useCallback(() => {
+      if (!initialLoadDoneRef.current) return;
+      void load();
+      if (selectedDate) void loadDay(selectedDate);
+    }, [load, loadDay, selectedDate]),
+  );
 
   const calendarDays = useMemo(() => {
     const { to } = monthBounds(currentMonth);

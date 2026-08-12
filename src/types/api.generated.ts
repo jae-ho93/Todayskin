@@ -693,6 +693,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/diagnosis/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** N43: 진단 기록 삭제 (본인) — 이미지·추천까지 물리 삭제 */
+        delete: operations["DiagnosisController_remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/diagnosis/pattern": {
         parameters: {
             query?: never;
@@ -2567,6 +2584,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SkinScoreSnapshotDto"];
                 };
+            };
+        };
+    };
+    DiagnosisController_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 진단 id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 삭제 완료 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

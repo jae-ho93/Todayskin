@@ -230,6 +230,18 @@ async function authPutJson<T>(path: string, body: unknown): Promise<T> {
   return data as T;
 }
 
+/**
+ * 인증이 필요한 삭제 요청. 204(본문 없음)를 정상으로 보고, 실패는 던진다.
+ * 삭제 실패를 조용히 넘기면 화면에서만 사라지고 서버에는 남아, 사용자가
+ * 지웠다고 믿는 기록이 다음 실행에서 되살아난다.
+ */
+async function authDelete(path: string): Promise<void> {
+  const res = await fetchWithAuth(path, { method: 'DELETE', timeoutMs: 8000 });
+  if (res.ok) return;
+  const data = await res.json().catch(() => null);
+  throw new Error(extractErrorMessage(data, res.status));
+}
+
 async function authPatchJson<T>(path: string, body: unknown): Promise<T> {
   // 백엔드 라우트는 PATCH(/auth/me) — PUT이 아니다. method 불일치 시 404가 난다.
   const res = await fetchWithAuth(path, {
@@ -270,6 +282,8 @@ export const api = {
     );
     return result.status === 'ok' ? result.data : null;
   },
+  // N43: 진단 기록 삭제. 사진·부위 점수·추천까지 서버에서 물리 삭제된다(되돌릴 수 없음).
+  deleteDiagnosis: (id: string) => authDelete(`/diagnosis/${id}`),
   // 정면 촬영 1장을 서버로 전송해 진단을 생성·저장한다. 쓰기 요청이므로 실패 시 에러를 던진다.
   // wentOutside=true일 때만 서버가 날씨 스냅샷을 진단에 연결한다(실내에만 있었으면 날씨를 엮지 않음).
   submitDiagnosis: async (photo: {
