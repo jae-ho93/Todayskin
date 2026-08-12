@@ -30,39 +30,6 @@ RDS·S3·CloudWatch 연동, Pino·Sentry·Helmet·JWT·Swagger·Jest를 적용�
 각 Task는 브랜치 하나 = PR 하나이며, 코드 변경이 없는 인프라 설정 작업은
 설정 근거와 확인 결과를 PR 본문 또는 이 문서에 남긴다.
 
-### N39. 자외선 최고 시각이 9시간 밀려 표시된다 (2026-08-13 실기기)
-
-원인 확정 · 코드 수정 · AWS 무관
-
-앱에 "자외선 최고 시각 21시"가 뜬다. 밤 9시에 자외선이 가장 높을 수는 없다. 실측:
-
-```text
-GET /weather?lat=35.16526&lon=129.16350
-  uvIndexPeak = 9   uvIndexPeakHour = 21   ← 실제 최고 시각은 KST 12시
-```
-
-원인은 `weather/clients/kma.client.ts`의 `todayRemainingSlots()`다. `toKst()`는 epoch에 +9시간을
-더한 `Date`를 돌려주므로 **UTC 게터로 읽어야** KST 값이 나온다(`formatKmaQueryTime()`은 그렇게 읽는다).
-그런데 이 함수만 로컬 게터로 읽는다.
-
-```text
-kma.client.ts:157  toKst(base).getDate()        ← getUTCDate() 여야 한다
-kma.client.ts:160  toKst(slotDt).getDate()      ← getUTCDate()
-kma.client.ts:161  toKst(slotDt).getHours()     ← getUTCHours()
-```
-
-머신 시간대가 KST면 +9가 두 번 적용된다. 실제 KST 12시 → 21시, 15시 → 0시로 보고된다(검증됨).
-`getDate()`도 같이 밀리므로 "오늘 남은 슬롯"의 날짜 경계 판정이 어긋나 **최고값 자체가 다른 날 슬롯에서
-뽑힐 수 있다.** 운영 컨테이너는 TZ를 지정하지 않아 UTC로 돌기 때문에 지금은 증상이 안 나타난다 —
-즉 정답이 서버 시간대에 의존하는 잠재 결함이며, 로컬·CI에서만 드러난다.
-
-- [ ] 세 곳을 UTC 게터로 바꿔 `toKst()` 사용 규약을 통일한다
-- [ ] `todayRemainingSlots`가 `base`(= 조회시각 −3시간)부터 시작해 **이미 지난 슬롯**을 포함하는 점을 함께 판단한다. "오늘의 최고"라면 지난 시간도 포함이 맞고, "앞으로 남은 시간의 최고"라면 현재 이후만 봐야 한다. 어느 쪽인지 정하고 함수명·주석을 맞춘다
-- [ ] `TZ=Asia/Seoul`과 `TZ=UTC` 두 환경에서 같은 결과가 나오는지 고정하는 테스트를 넣는다. 시간대에 따라 값이 달라지는 것 자체가 결함이다
-- [ ] 잘못 저장된 기존 `weather_snapshots.uv_index_peak_hour` 값의 처리 방침을 정한다(방치 / 재계산 불가 시 표시 보류)
-
-완료 기준: KST·UTC 어느 시간대에서 돌려도 자외선 최고 시각이 실제 예보 시각과 일치하고, 테스트가 이를 고정한다.
-
 ### N40. 지표별 등급 어휘를 분리한다 (자외선 5단계 / 대기질 4단계)
 
 계약 변경 · 프론트 F64와 함께 배포
