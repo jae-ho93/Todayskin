@@ -4,6 +4,7 @@ import { AdminService } from './admin.service';
 import { AuditLogService } from './audit-log.service';
 import { SoftDeleteModule } from '../../common/soft-delete/soft-delete.module';
 import { StorageModule } from '../storage/storage.module';
+import { ProductCatalogModule } from '../products/product-catalog.module';
 
 /**
  * ADMIN 운영 모듈.
@@ -18,6 +19,8 @@ import { StorageModule } from '../storage/storage.module';
     forwardRef(() => SoftDeleteModule),
     // StorageModule도 AdminModule(AuditLogService)을 참조하므로 forwardRef로 순환 해소.
     forwardRef(() => StorageModule),
+    // R9: 카탈로그 캐시 무효화 — 읽기/캐시만 담은 모듈이라 순환이 없다.
+    ProductCatalogModule,
   ],
   controllers: [AdminController],
   providers: [AdminService, AuditLogService],

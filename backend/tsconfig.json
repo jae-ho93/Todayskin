@@ -9,6 +9,9 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "target": "ES2022",
+    // 런타임은 Node 22(Dockerfile·CI 동일)이므로 Promise.withResolvers 같은 ES2024 API를
+    // 쓸 수 있다. target은 그대로 두고 lib만 올려 출력 문법은 바꾸지 않는다.
+    "lib": ["ES2024"],
     "sourceMap": true,
     "outDir": "./dist",
     "baseUrl": "./",
@@ -25,6 +28,9 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "test"]
+  // e2e(`test/`)도 포함한다. 빌드 산출물은 tsconfig.build.json이 spec/test를 제외하므로
+  // dist에는 들어가지 않는다. 여기서 빼두면 `npm run typecheck`와 타입 인식 ESLint가
+  // e2e 파일을 보지 못한다.
+  "include": ["src/**/*", "test/**/*"],
+  "exclude": ["node_modules", "dist"]
 }

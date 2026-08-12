@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { errorName } from '../../../common/errors/error-name.util';
+import { fetchWithTimeout } from './fetch-with-timeout';
 
 /** 한국 표준시(UTC+9) */
 const KST_OFFSET_MIN = 9 * 60;
@@ -158,16 +160,3 @@ function parseAirKoreaTime(dataTime?: string): Date | null {
   return new Date(utcMs);
 }
 
-function errorName(e: unknown): string {
-  return e instanceof Error ? e.name : String(e);
-}
-
-async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms);
-  try {
-    return await fetch(url, { signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-}

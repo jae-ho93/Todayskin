@@ -6,6 +6,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { RecommendationService } from './recommendation.service';
+import { RecommendationRepository } from './recommendation.repository';
 import { GeminiClient, GeminiUnavailable } from '../gemini/gemini.client';
 import { ConsentService } from '../consent/consent.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -13,6 +14,8 @@ import { IdempotencyService } from '../idempotency/idempotency.service';
 import { RedisService } from '../../redis/redis.service';
 import { JobService } from '../jobs/job.service';
 import { JobStateService } from '../jobs/job-state.service';
+import { FastPathCoordinator } from '../jobs/fast-path.coordinator';
+import { ProductCatalogService } from '../products/product-catalog.service';
 import { JobStatus } from '../jobs/enums/job-status.enum';
 import { EvidenceGrade } from './enums/evidence-grade.enum';
 import { RecommendationDto } from './dto/recommendation.dto';
@@ -36,6 +39,7 @@ describe('RecommendationService', () => {
   let jobService: { enqueue: jest.Mock };
   // R10: dedupe 조회는 JobStateService 파사드를 거친다(async_jobs 직접 쿼리 금지).
   let jobState: { findRecentByDedupeKey: jest.Mock };
+  let productCatalog: { load: jest.Mock; invalidate: jest.Mock };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let prisma: Record<string, any>;
 
@@ -88,10 +92,19 @@ describe('RecommendationService', () => {
     };
     // N32/R10: 빠른 경로 job dedup 조회.
     jobState = { findRecentByDedupeKey: jest.fn().mockResolvedValue(null) };
+    // R9: 카탈로그 읽기는 캐시 계층을 거친다. 캐시 정책 자체는
+    // product-catalog.service.spec에서 보고, 여기서는 "DB가 준 카탈로그"만 흘려준다.
+    productCatalog = {
+      load: jest.fn(() => prisma.product.findMany()),
+      invalidate: jest.fn().mockResolvedValue(undefined),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         RecommendationService,
+        // R7: 리포지토리는 목이 아니라 실제 구현을 쓴다 — 쿼리 모양(정렬·where)까지
+        // 계속 검증 대상으로 남기려면 prisma 목 위에서 돌려야 한다.
+        RecommendationRepository,
         { provide: GeminiClient, useValue: geminiClient },
         { provide: ConsentService, useValue: consentService },
         { provide: IdempotencyService, useValue: idempotency },
@@ -99,6 +112,10 @@ describe('RecommendationService', () => {
         { provide: RedisService, useValue: redis },
         { provide: JobService, useValue: jobService },
         { provide: JobStateService, useValue: jobState },
+        { provide: ProductCatalogService, useValue: productCatalog },
+        // R8: SWR 절차 자체를 검증 대상으로 남기려고 실제 코디네이터를 쓴다
+        // (redis/jobState 목 위에서 돈다).
+        FastPathCoordinator,
       ],
     }).compile();
 
@@ -480,7 +497,7 @@ describe('RecommendationService', () => {
     it('Redis SWR hit → source: CACHED (신선하면 재검증 job 없음)', async () => {
       prisma.recommendation.findMany.mockResolvedValue([]);
       redis.getJson.mockResolvedValue({
-        recommendations: [
+        items: [
           {
             id: 'gemini-cached', userId: 1, diagnosisId: 'diag-fast',
             title: '캐시 추천', grade: 'B', sourceLabel: 'AI',
@@ -501,7 +518,7 @@ describe('RecommendationService', () => {
     it('CACHED가 stale이면 재검증 job을 enqueue하고 jobId를 함께 반환한다 (SWR)', async () => {
       prisma.recommendation.findMany.mockResolvedValue([]);
       redis.getJson.mockResolvedValue({
-        recommendations: [],
+        items: [],
         generatedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
       });
 
@@ -575,7 +592,7 @@ describe('RecommendationService', () => {
       // LIVE 결과가 Redis SWR에 기록된다.
       expect(redis.setJson).toHaveBeenCalledWith(
         'rec:fast:1:diag-fast',
-        expect.objectContaining({ recommendations: expect.any(Array) }),
+        expect.objectContaining({ items: expect.any(Array) }),
         expect.any(Number),
       );
     });

@@ -332,6 +332,22 @@ append-only 테이블 정리는 `SoftDeletePurgeScheduler`(리더 선출 대상)
 이 기간에는 R21 재사용 탐지가 폐기된 세션을 조회할 수 있어야 하므로 0으로 두지 않는다.
 `WeatherSnapshot`은 개인 패턴 분석이 계절 1주기를 비교하므로 400일보다 줄이지 않는다.
 
+### 제품 카탈로그 시드 반영 (R9)
+
+카탈로그는 `ProductCatalogService`가 Redis에 **10분** TTL로 캐시한다(Redis 미가용 시
+프로세스 내 캐시). 따라서 `prisma db seed`로 상품을 바꿔도 **최대 10분간 예전 목록이
+보인다.** 즉시 반영하려면 시드 직후 관리자 토큰으로 캐시를 비운다.
+
+```bash
+curl -X POST https://<api-host>/admin/products/cache/invalidate \
+  -H "Authorization: Bearer <ADMIN_ACCESS_TOKEN>"
+```
+
+- ADMIN 전용이며 `product.catalog_cache_invalidated`로 감사 로그에 남는다.
+- 캐시만 비우므로 실패해도 데이터는 안전하다 — 다음 요청이 DB에서 다시 읽는다.
+- 인스턴스가 여러 개여도 Redis 키 하나를 지우므로 한 번만 호출하면 된다.
+  (Redis 장애 중이라면 각 인스턴스의 프로세스 캐시는 TTL로 만료된다)
+
 ### 헬스체크 (live / ready 분리 — N6)
 
 - `GET /health` — 현재 Dockerfile / ECS healthcheck 기준

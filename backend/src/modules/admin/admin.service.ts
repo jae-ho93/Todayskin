@@ -15,6 +15,7 @@ import { ChangeRoleDto } from './dto/change-role.dto';
 import { ReconcileImagesDto } from './dto/reconcile-images.dto';
 import { SoftDeleteService } from '../../common/soft-delete/soft-delete.service';
 import { ImageStorageService } from '../storage/image-storage.service';
+import { ProductCatalogService } from '../products/product-catalog.service';
 
 /**
  * ADMIN 운영 서비스.
@@ -32,6 +33,7 @@ export class AdminService {
     private readonly auditLog: AuditLogService,
     private readonly softDelete: SoftDeleteService,
     private readonly imageStorage: ImageStorageService,
+    private readonly productCatalog: ProductCatalogService,
   ) {}
 
   async listUsers(): Promise<AdminUserListResponseDto> {
@@ -158,5 +160,22 @@ export class AdminService {
       metadata: { ...result },
     });
     return result;
+  }
+
+  /**
+   * R9: 제품 카탈로그 캐시 비우기.
+   *
+   * 카탈로그는 `prisma db seed`로만 바뀌고 백엔드에 상품 쓰기 경로가 없어 자동
+   * 무효화 훅을 걸 곳이 없다. 시드 직후 TTL(10분)을 기다리지 않고 반영하려면 이걸 쓴다.
+   */
+  async invalidateProductCatalogCache(actorId: number) {
+    await this.productCatalog.invalidate();
+    await this.auditLog.log({
+      actorId,
+      action: 'product.catalog_cache_invalidated',
+      targetType: 'Product',
+      result: 'success',
+    });
+    return { invalidated: true };
   }
 }

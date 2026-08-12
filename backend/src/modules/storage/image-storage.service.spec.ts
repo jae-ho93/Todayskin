@@ -54,6 +54,38 @@ describe('ImageStorageService', () => {
     );
   });
 
+  describe('presignImages (R20 배치 서명)', () => {
+    const image = (key: string) => ({
+      s3Bucket: 'todayskin-bucket',
+      s3Key: key,
+      contentType: 'image/jpeg',
+    });
+
+    it('DB를 다시 읽지 않고 넘겨받은 row로만 서명한다', async () => {
+      store.getPresignedUrl.mockImplementation(({ key }: { key: string }) =>
+        Promise.resolve(`https://signed/${key}`),
+      );
+
+      const result = await service.presignImages([image('a.jpg'), image('b.jpg')], 60);
+
+      expect(result.map((r) => r?.url)).toEqual(['https://signed/a.jpg', 'https://signed/b.jpg']);
+      // N+1의 원인이던 조회가 사라졌다.
+      expect(prisma.diagnosisImage.findMany).not.toHaveBeenCalled();
+      expect(store.getPresignedUrl).toHaveBeenCalledTimes(2);
+    });
+
+    it('한 건의 서명 실패가 나머지 항목을 버리지 않는다', async () => {
+      store.getPresignedUrl
+        .mockRejectedValueOnce(new Error('signing failed'))
+        .mockResolvedValueOnce('https://signed/b.jpg');
+
+      const result = await service.presignImages([image('a.jpg'), image('b.jpg')]);
+
+      expect(result[0]).toBeNull();
+      expect(result[1]?.url).toBe('https://signed/b.jpg');
+    });
+  });
+
   describe('storeDiagnosisImage', () => {
     const ref = {
       bucket: 'todayskin-bucket',

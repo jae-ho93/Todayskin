@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnApplicationBootstrap,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job, Queue, Worker } from 'bullmq';
 import type { ConnectionOptions } from 'bullmq';
@@ -33,7 +38,7 @@ interface BullJobData {
  */
 @Injectable()
 export class BullMqJobDispatcher
-  implements JobDispatcher, OnModuleInit, OnModuleDestroy
+  implements JobDispatcher, OnApplicationBootstrap, OnModuleDestroy
 {
   private readonly logger = new Logger(BullMqJobDispatcher.name);
   private readonly queues = new Map<AppQueueName, Queue<BullJobData>>();
@@ -46,7 +51,15 @@ export class BullMqJobDispatcher
     private readonly jobState: JobStateService,
   ) {}
 
-  async onModuleInit(): Promise<void> {
+  /**
+   * R12: 워커 시작을 `onApplicationBootstrap`으로 미룬다.
+   *
+   * 잡 핸들러는 이제 각 도메인 모듈의 `onModuleInit`에서 등록되고, 도메인 모듈은
+   * JobsModule보다 나중에 초기화된다. 워커를 모듈 초기화 시점에 띄우면 등록 전에
+   * 큐에서 잡을 집어들어 "No job handler registered"로 실패할 수 있다.
+   * 이 훅은 모든 모듈의 초기화가 끝난 뒤 실행된다.
+   */
+  async onApplicationBootstrap(): Promise<void> {
     const mode = this.configService.get<string>('JOB_DISPATCHER', 'auto');
     const isTest = this.configService.get<string>('NODE_ENV') === 'test';
     if (isTest || mode === 'inline') {

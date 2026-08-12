@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -169,7 +170,7 @@ describe('API Response Contract (e2e)', () => {
     // N32: weather-based 빠른 경로는 규칙 FALLBACK이 실제 카탈로그 제품을 골라야 하므로
     // 이 suite가 쓰는 로컬 제품 3개(규칙 fallback 3슬롯 충족)를 시드한다.
     // (다른 suite가 시드하는 PRODUCTS id와 겹치지 않게 접두사 acct- 사용)
-    const localProducts = [
+    const localProducts: Prisma.ProductCreateInput[] = [
       {
         id: 'acct-prod-1',
         name: '독도 클렌저',

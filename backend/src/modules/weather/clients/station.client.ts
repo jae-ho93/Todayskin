@@ -3,6 +3,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import proj4 from 'proj4';
 import { DEFAULT_REGION } from '../regions/region.registry';
+import { errorName } from '../../../common/errors/error-name.util';
+import { fetchWithTimeout } from './fetch-with-timeout';
 
 /** 에어코리아 근접측정소 목록 endpoint ("측정소정보 조회 서비스") */
 const NEARBY_STATION_ENDPOINT =
@@ -122,16 +124,3 @@ function extractFirstItem(data: StationResponse): StationItem | null {
   return items as StationItem;
 }
 
-function errorName(e: unknown): string {
-  return e instanceof Error ? e.name : String(e);
-}
-
-async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms);
-  try {
-    return await fetch(url, { signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-}

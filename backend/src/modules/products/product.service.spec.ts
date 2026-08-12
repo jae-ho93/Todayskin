@@ -6,6 +6,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { RedisService } from '../../redis/redis.service';
 import { JobService } from '../jobs/job.service';
 import { JobStateService } from '../jobs/job-state.service';
+import { FastPathCoordinator } from '../jobs/fast-path.coordinator';
+import { ProductCatalogService } from './product-catalog.service';
 import { JobStatus } from '../jobs/enums/job-status.enum';
 import { IdempotencyService } from '../idempotency/idempotency.service';
 import { WeatherService } from '../weather/weather.service';
@@ -34,8 +36,8 @@ describe('ProductService', () => {
   let prisma: {
     product: { findMany: jest.Mock };
     weatherSnapshot: { findFirst: jest.Mock };
-    asyncJob: { findFirst: jest.Mock };
   };
+  let productCatalog: { load: jest.Mock; invalidate: jest.Mock };
 
   beforeEach(async () => {
     geminiClient = {
@@ -67,6 +69,12 @@ describe('ProductService', () => {
         findFirst: jest.fn(),
       },
     };
+    // R9: 카탈로그 읽기는 캐시 계층을 거친다. 캐시 정책 자체는
+    // product-catalog.service.spec에서 보고, 여기서는 "DB가 준 카탈로그"만 흘려준다.
+    productCatalog = {
+      load: jest.fn(() => prisma.product.findMany()),
+      invalidate: jest.fn().mockResolvedValue(undefined),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -78,6 +86,10 @@ describe('ProductService', () => {
         { provide: JobService, useValue: jobService },
         { provide: JobStateService, useValue: jobState },
         { provide: IdempotencyService, useValue: idempotency },
+        { provide: ProductCatalogService, useValue: productCatalog },
+        // R8: SWR 절차 자체를 검증 대상으로 남기려고 실제 코디네이터를 쓴다
+        // (redis/jobState 목 위에서 돈다).
+        FastPathCoordinator,
       ],
     }).compile();
 

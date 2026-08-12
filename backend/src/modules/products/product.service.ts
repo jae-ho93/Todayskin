@@ -4,7 +4,6 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { RedisService } from '../../redis/redis.service';
 import {
   CatalogProduct,
   GeminiClient,
@@ -21,13 +20,17 @@ import { JobService } from '../jobs/job.service';
 import { JobStateService } from '../jobs/job-state.service';
 import { jobDedupeKeyOf } from '../jobs/job-dedupe';
 import { JobType } from '../jobs/enums/job-type.enum';
-import { JobStatus } from '../jobs/enums/job-status.enum';
+import {
+  FastPathCoordinator,
+  FAST_PATH_JOB_DEDUPE_WINDOW_MS,
+} from '../jobs/fast-path.coordinator';
+import { ProductCatalogService } from './product-catalog.service';
 import { IdempotencyService } from '../idempotency/idempotency.service';
 import { todayKst } from '../diagnosis/calendar-date.util';
 import { WeatherService } from '../weather/weather.service';
 import { WeatherSnapshotDto } from '../weather/dto/weather-snapshot.dto';
+import { toWeatherSnapshotDto } from '../weather/mappers/weather-snapshot.mapper';
 import { WeatherSource } from '../../common/enums/weather-source.enum';
-import { AirStatus } from '../../common/enums/air-status.enum';
 import {
   buildCursorPage,
   CursorPageDto,
@@ -53,26 +56,15 @@ export class ProductService {
   /** 최근 스냅샷 fallback 허용 기간. 이 기간 안에 수집된 스냅샷만 오늘 날씨 대용으로 쓴다. */
   private static readonly SNAPSHOT_FALLBACK_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
-  /** N32: 날씨 제품 Redis SWR 캐시 TTL(초). */
-  private static readonly WEATHER_PRODUCTS_CACHE_TTL_S = 6 * 60 * 60;
-
-  /** N32: CACHED 항목이 이 시간보다 오래되면 재검증(LIVE) job을 enqueue한다(SWR). */
-  private static readonly WEATHER_PRODUCTS_REVALIDATE_MS = 30 * 60 * 1000;
-
-  /** N32: 중복 enqueue 방지 job 조회 창. */
-  private static readonly FAST_JOB_DEDUP_WINDOW_MS = 10 * 60 * 1000;
-
-  /** N32: FAILED job이 이 시간 안이면 재사용(FALLBACK + 같은 jobId), 지나면 새 job. */
-  private static readonly FAILED_COOLDOWN_MS = 5 * 60 * 1000;
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly geminiClient: GeminiClient,
     private readonly weatherService: WeatherService,
-    private readonly redis: RedisService,
     private readonly jobService: JobService,
     private readonly jobState: JobStateService,
     private readonly idempotency: IdempotencyService,
+    private readonly fastPath: FastPathCoordinator,
+    private readonly catalog: ProductCatalogService,
   ) {}
 
   /**
@@ -128,7 +120,7 @@ export class ProductService {
     const weather = await this.resolveServerWeather(opts?.lat, opts?.lon);
 
     // N27: 실제 카탈로그만 사용. 카탈로그가 비어 있으면 가상 제품을 만들 수 없으므로 503.
-    const catalog = await this.prisma.product.findMany();
+    const catalog = await this.catalog.load();
     if (catalog.length === 0) {
       throw new ServiceUnavailableException(
         '추천할 실제 제품이 아직 준비되지 않았어요. 잠시 후 다시 시도해주세요.',
@@ -187,70 +179,24 @@ export class ProductService {
     const regionKey = weather.regionName ?? 'base';
 
     // N27: 실제 카탈로그만 사용. 카탈로그가 비어 있으면 가상 제품을 만들 수 없으므로 503.
-    const catalog = await this.prisma.product.findMany();
+    const catalog = await this.catalog.load();
     if (catalog.length === 0) {
       throw new ServiceUnavailableException(
         '추천할 실제 제품이 아직 준비되지 않았어요. 잠시 후 다시 시도해주세요.',
       );
     }
 
-    // 1) job dedup — 같은 지역의 진행 중/완료/최근 실패 job을 재사용한다.
-    //    (FAILED도 cooldown 안이면 같은 jobId로 재사용해 job 스팸을 막는다 — N32)
-    const job = await this.findWeatherProductsJob(userId, regionKey);
-    if (job) {
-      if (job.status === JobStatus.COMPLETED) {
-        const result = job.result as { products?: ProductDto[] } | null;
-        const items = result?.products ?? [];
-        if (items.length > 0) {
-          return {
-            source: 'LIVE',
-            jobId: job.id,
-            generatedAt: job.finishedAt?.toISOString(),
-            items,
-          };
-        }
-      } else if (this.isRecentlyFailed(job)) {
-        // Gemini 실패 직후 — 같은 jobId(FE가 FAILED를 볼 수 있게) + FALLBACK 유지.
-        return {
-          source: 'FALLBACK',
-          jobId: job.id,
-          items: this.buildWeatherProducts(catalog, weather, []),
-        };
-      } else if (job.status === JobStatus.PENDING) {
-        // PENDING — 같은 job을 그대로 알려주고 규칙 FALLBACK을 먼저 보여준다.
-        return {
-          source: 'FALLBACK',
-          jobId: job.id,
-          items: this.buildWeatherProducts(catalog, weather, []),
-        };
-      }
-      // FAILED가 cooldown을 지났으면 아래로 내려가 새 job을 enqueue한다.
-    }
-
-    // 2) Redis SWR hit → CACHED.
-    const cacheKey = this.weatherProductsCacheKey(regionKey);
-    const cached = await this.readWeatherCache(cacheKey);
-    if (cached) {
-      const stale =
-        Date.now() - new Date(cached.generatedAt).getTime() >
-        ProductService.WEATHER_PRODUCTS_REVALIDATE_MS;
-      let jobId: string | undefined;
-      if (stale) {
-        // SWR: 낡은 데이터를 먼저 보여주고, 뒤에서 LIVE로 재검증한다.
-        jobId = await this.enqueueWeatherProductsJob(userId, regionKey, opts);
-      }
-      return {
-        source: 'CACHED',
-        jobId,
-        generatedAt: cached.generatedAt,
-        items: cached.items,
-      };
-    }
-
-    // 3) miss → 규칙 기반 실제품 FALLBACK 즉시 반환 + LIVE job enqueue.
-    const fallback = this.buildWeatherProducts(catalog, weather, []);
-    const jobId = await this.enqueueWeatherProductsJob(userId, regionKey, opts);
-    return { source: 'FALLBACK', jobId, items: fallback };
+    // R8: job 재사용 → Redis SWR → 규칙 fallback 순서는 FastPathCoordinator가 정한다.
+    return this.fastPath.resolve<ProductDto>({
+      userId,
+      jobType: JobType.WEATHER_PRODUCTS_GENERATE,
+      dedupeKey: jobDedupeKeyOf('regionKey', regionKey),
+      cacheKey: this.weatherProductsCacheKey(regionKey),
+      readJobResult: (result) =>
+        (result as { products?: ProductDto[] } | null)?.products ?? [],
+      loadFallback: () => this.buildWeatherProducts(catalog, weather, []),
+      enqueue: () => this.enqueueWeatherProductsJob(userId, regionKey, opts),
+    });
   }
 
   // ── N32 빠른 경로 헬퍼 ──────────────────────────
@@ -264,17 +210,8 @@ export class ProductService {
       userId,
       type: JobType.WEATHER_PRODUCTS_GENERATE,
       dedupeKey: jobDedupeKeyOf('regionKey', regionKey),
-      withinMs: ProductService.FAST_JOB_DEDUP_WINDOW_MS,
+      withinMs: FAST_PATH_JOB_DEDUPE_WINDOW_MS,
     });
-  }
-
-  /** FAILED가 cooldown 안이면 같은 jobId를 재사용한다 (job 스팸 방지). */
-  private isRecentlyFailed(job: { status: string; finishedAt: Date | null }): boolean {
-    return (
-      job.status === JobStatus.FAILED &&
-      !!job.finishedAt &&
-      Date.now() - job.finishedAt.getTime() < ProductService.FAILED_COOLDOWN_MS
-    );
   }
 
   /**
@@ -329,23 +266,12 @@ export class ProductService {
     return `prod:weather:${regionKey}:${todayKst()}`;
   }
 
-  private async readWeatherCache(
-    key: string,
-  ): Promise<{ items: ProductDto[]; generatedAt: string } | null> {
-    return this.redis.getJson<{ items: ProductDto[]; generatedAt: string }>(key);
-  }
-
   /** LIVE 생성 결과를 Redis SWR에 저장. Redis 장애 시 조용히 실패. */
   private async cacheWeatherProducts(
     regionKey: string,
     items: ProductDto[],
   ): Promise<void> {
-    const key = this.weatherProductsCacheKey(regionKey);
-    await this.redis.setJson(
-      key,
-      { items, generatedAt: new Date().toISOString() },
-      ProductService.WEATHER_PRODUCTS_CACHE_TTL_S,
-    );
+    await this.fastPath.writeCache(this.weatherProductsCacheKey(regionKey), items);
   }
 
   // ── N12 서버 소유 날씨 구성 헬퍼 ──────────────────────────
@@ -403,29 +329,12 @@ export class ProductService {
     });
   }
 
-  /** WeatherSnapshot row → 응답 DTO. 출처는 CACHED로 표기해 "라이브가 아님"을 명시한다. */
+  /**
+   * WeatherSnapshot row → 응답 DTO. 출처는 CACHED로 표기해 "라이브가 아님"을 명시한다.
+   * R22: 지표 복사는 공용 매퍼가 한다(이전 사본은 districtName을 빠뜨리고 있었다).
+   */
   private snapshotToDto(s: WeatherSnapshot): WeatherSnapshotDto {
-    const dto = new WeatherSnapshotDto();
-    dto.observedAt = s.observedAt.toISOString();
-    dto.regionName = s.regionName;
-    dto.source = WeatherSource.CACHED;
-    dto.uvIndex = s.uvIndex;
-    dto.uvStatus = s.uvStatus as AirStatus;
-    dto.uvIndexPeak = s.uvIndexPeak;
-    dto.uvStatusPeak = s.uvStatusPeak as AirStatus;
-    dto.uvIndexPeakHour = s.uvIndexPeakHour;
-    dto.ozonePpm = s.ozonePpm;
-    dto.ozoneStatus = s.ozoneStatus as AirStatus;
-    dto.pm25 = s.pm25;
-    dto.pm25Status = s.pm25Status as AirStatus;
-    dto.pm10 = s.pm10;
-    dto.pm10Status = s.pm10Status as AirStatus;
-    dto.caiValue = s.caiValue;
-    dto.caiStatus = s.caiStatus as AirStatus;
-    dto.no2Value = s.no2Value;
-    dto.so2Value = s.so2Value;
-    dto.coValue = s.coValue;
-    return dto;
+    return toWeatherSnapshotDto(s, WeatherSource.CACHED);
   }
 
   // ── N27 실제품 매핑·규칙 fallback ──────────────────────────

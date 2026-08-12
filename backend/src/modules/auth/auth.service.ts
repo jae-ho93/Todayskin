@@ -140,14 +140,14 @@ export class AuthService {
       throw new UnauthorizedException('전화번호 본인확인(OTP)이 필요합니다');
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { phoneNumber },
+    // R35: soft-delete 조건은 notDeletedWhere 하나로 통일한다.
+    // 탈퇴 시 전화번호가 스크럽되므로(anonymizedPhone) 원래 번호로는 애초에 조회되지
+    // 않는다 — 별도 '탈퇴한 계정' 분기는 도달할 수 없는 코드였다.
+    const user = await this.prisma.user.findFirst({
+      where: notDeletedWhere({ phoneNumber }),
     });
     if (!user) {
       throw new NotFoundException('가입되지 않은 휴대폰 번호입니다');
-    }
-    if (user.deletedAt) {
-      throw new ConflictException('탈퇴한 계정입니다');
     }
 
     // 기존 FastAPI /auth/login 응답 호환:
@@ -191,10 +191,13 @@ export class AuthService {
     let isNewUser = false;
 
     if (account) {
-      const existing = await this.prisma.user.findUnique({
-        where: { id: account.userId },
+      // R35: SocialAccount는 탈퇴 후에도 남으므로(unique(provider, providerUserId))
+      // 탈퇴 계정의 재로그인이 실제로 여기까지 온다. 새 계정을 만들 수 없는 상태라
+      // 여기서는 '없음'이 아니라 409로 알려야 클라이언트가 상황을 구분할 수 있다.
+      const existing = await this.prisma.user.findFirst({
+        where: notDeletedWhere({ id: account.userId }),
       });
-      if (!existing || existing.deletedAt) {
+      if (!existing) {
         throw new ConflictException('탈퇴한 계정입니다');
       }
       user = existing;
@@ -232,12 +235,17 @@ export class AuthService {
                 providerUserId: profile.providerUserId,
               },
             },
-            include: { user: true },
+            select: { userId: true },
           });
-          if (!linked?.user || linked.user.deletedAt) {
+          const linkedUser = linked
+            ? await this.prisma.user.findFirst({
+                where: notDeletedWhere({ id: linked.userId }),
+              })
+            : null;
+          if (!linkedUser) {
             throw new ConflictException('탈퇴한 계정입니다');
           }
-          user = linked.user;
+          user = linkedUser;
         } else {
           throw e;
         }
@@ -284,14 +292,13 @@ export class AuthService {
       throw new ConflictException('이미 전화번호가 연결된 계정입니다');
     }
 
-    const existing = await this.prisma.user.findUnique({
-      where: { phoneNumber },
+    // R35: 여기도 notDeletedWhere로 통일한다. 탈퇴 계정은 번호가 스크럽되므로
+    // 이 조회에 걸리지 않고, 걸리던 '탈퇴한 계정' 분기는 도달 불가였다.
+    const existing = await this.prisma.user.findFirst({
+      where: notDeletedWhere({ phoneNumber }),
     });
     if (existing && existing.id !== userId) {
       throw new ConflictException('이미 가입된 휴대폰 번호입니다');
-    }
-    if (existing?.deletedAt) {
-      throw new ConflictException('탈퇴한 계정입니다');
     }
 
     try {
@@ -366,10 +373,10 @@ export class AuthService {
       throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다');
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
+    const user = await this.prisma.user.findFirst({
+      where: notDeletedWhere({ id: payload.sub }),
     });
-    if (!user || user.deletedAt) {
+    if (!user) {
       throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다');
     }
 
@@ -412,10 +419,10 @@ export class AuthService {
   }
 
   async getMe(userId: number): Promise<UserResponseDto> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+    const user = await this.prisma.user.findFirst({
+      where: notDeletedWhere({ id: userId }),
     });
-    if (!user || user.deletedAt) {
+    if (!user) {
       throw new NotFoundException('사용자를 찾을 수 없습니다');
     }
     return this.toUserResponse(user);
@@ -428,10 +435,10 @@ export class AuthService {
    * GET /auth/me와 동일한 UserResponseDto 형태를 반환한다.
    */
   async updateMe(userId: number, dto: UpdateMeDto): Promise<UserResponseDto> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+    const user = await this.prisma.user.findFirst({
+      where: notDeletedWhere({ id: userId }),
     });
-    if (!user || user.deletedAt) {
+    if (!user) {
       throw new NotFoundException('사용자를 찾을 수 없습니다');
     }
 

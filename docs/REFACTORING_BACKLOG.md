@@ -14,7 +14,8 @@
 | B2 | ✅ 완료 (2026-08-12) | `refactor/r-batch-02-safety-net` | 없음. R16의 `useAsyncJob` 테스트는 훅 추출(R27, B6) 후에 추가한다 |
 | B3 | ✅ 완료 (2026-08-12) | `refactor/r-batch-03-scheduler-worker` | AWS/GitHub 작업(코드 밖): ① 워커 ECS 서비스 생성 + Variable `ECS_SERVICE_WORKER` 설정 → 큐 소비 확인 후 ② backend task definition에 `JOB_ROLE=api` 추가. 순서를 뒤집으면 잡이 처리되지 않는다 |
 | B4 | ✅ 완료 (2026-08-12) | `refactor/r-batch-04-db-migration` | 운영 작업(코드 밖): ① 마이그레이션 배포 후 R11 스윕을 `RETENTION_SWEEP_MODE=dry-run`으로 켜서 삭제 대상 규모 확인 → ② RDS 스냅샷 확보 → ③ `delete`로 전환. 기본값 `off`이므로 배포만으로는 아무 데이터도 지워지지 않는다 |
-| B5~B6 | 대기 | — | — |
+| B5 | ✅ 완료 (2026-08-12) | `refactor/r-batch-05-backend-structure` | 운영 작업(코드 밖): R9 캐시 TTL 10분이므로 상품 시드 직후 즉시 반영이 필요하면 `POST /admin/products/cache/invalidate`를 호출한다. R30 타임아웃 조정이 필요하면 `GEMINI_TIMEOUT_MS`로 조절 |
+| B6 | 대기 | — | — |
 
 ## 작업 묶음 (Batch)
 
@@ -27,7 +28,7 @@
 | **B2. 안전망 (타입·테스트·설정)** ✅ | R15, R16, R18, R34, R29 | `refactor/r-batch-02-safety-net` | 구조 작업 전 타입·테스트 기반 마련 |
 | **B3. 스케줄러·워커** ✅ | R3, R13, R31 | `refactor/r-batch-03-scheduler-worker` | 리더 락(R3) → 워커 분리(R13) 순서 |
 | **B4. DB (한 마이그레이션)** ✅ | R33, R10, R11, R21 | `refactor/r-batch-04-db-migration` | 인덱스·컬럼·보존을 한 마이그레이션으로 묶음 |
-| **B5. 백엔드 구조 (동작 보존)** | R7, R8, R9, R12, R20, R22, R23, R24, R30, R35 | `refactor/r-batch-05-backend-structure` | 순수 구조 개선 — 동작 불변 목표 |
+| **B5. 백엔드 구조 (동작 보존)** ✅ | R7, R8, R9, R12, R20, R22, R23, R24, R30, R35 | `refactor/r-batch-05-backend-structure` | 순수 구조 개선 — 동작 불변 목표 |
 | **B6. 계약·프론트 구조** | R5, R14, R25, R26, R27, R28 | `refactor/r-batch-06-contract-frontend` | B2 완료 후 권장 (strict·테스트가 회귀를 잡음) |
 
 ## 선후관계 (순서가 중요한 것)
@@ -85,7 +86,7 @@
 ## 승인 시 방향 결정이 필요한 항목
 
 - **R5** UV 6~7 등급 정본 — 서버(`bad`) vs 화면(`moderate`)
-- **R8** fast-path SWR 두 구현 중 정본 선택
+- ~~**R8** fast-path SWR 두 구현 중 정본 선택~~ — 두 구현의 상수·조건이 실제로는 동일해 결정 불필요(R8 항목 참조)
 - **R11** 테이블별 보존 기간 (특히 `WeatherSnapshot`)
 - **R13** ECS worker 서비스 신설 여부 (비용·리소스)
 - **R14/R29** 미사용 API 제거·인증 강제 (구버전 앱 영향)
@@ -270,24 +271,31 @@ API 변경   429 응답 코드 추가 (NestJS provider의 재시도/fallback 처
 
 작업:
 
-- [ ] 클래스를 넷으로 쪼갠다. 새 추상화를 만드는 게 아니라 **이미 존재하는 경계선을 파일로 드러내는** 작업이다.
-- [ ] `RecommendationService` — 유스케이스 오케스트레이션만 (동의 → 예약 → 생성 → 저장 → 매핑 호출)
-- [ ] `RecommendationRepository` — 4중 중복된 조회/영속화 쿼리 + advisory lock 트랜잭션
-- [ ] `RecommendationMapper` — 엔티티 → DTO 변환 (순수 함수, 목킹 없이 테스트 가능)
-- [ ] `RecommendationFallbackPolicy` — fallback 슬롯 정의와 한국어 문구 (제안 [24]와 연결)
-- [ ] Gemini 호출과 캐시/잡은 각각 기존 `GeminiClient`와 신설 `FastPathCoordinator`(제안 [8])로 나간다.
+- [x] 클래스를 넷으로 쪼갰다. 새 추상화가 아니라 **이미 있던 경계선을 파일로 드러낸** 것이다(781줄 → 서비스 460줄).
+- [x] `RecommendationService` — 유스케이스 순서만 (동의 → 예약 → Gemini → 링크 구성 → 저장 → 매핑).
+- [x] `RecommendationRepository` — 4중 복붙이던 "이 진단의 추천 조회"를 `findByDiagnosis()` 하나로 모으고,
+      advisory lock 트랜잭션을 `createGenerated()` 한 곳에만 뒀다. 락 키 문자열도 여기 하나뿐이다.
+- [x] `recommendation.mapper.ts` — 엔티티 → DTO 변환. Prisma string → 계약 유니온 캐스팅을 이 경계로 모았다.
+- [x] `recommendation.fallback.ts` — 슬롯 정의·제품 선택 규칙(순수 함수). 목킹 없는 spec 11개를 새로 붙였다.
+- [x] 캐시/잡은 R8의 `FastPathCoordinator`로 이미 나갔다.
+
+**트랜잭션 경계는 그대로다.** 락 획득 → 재확인 → `createMany` → 링크 저장 순서와 범위를 바꾸지 않았다.
+링크 계산만 트랜잭션 밖으로 옮겼는데, 원래도 트랜잭션 전에 읽은 카탈로그만 쓰는 순수 계산이라 DB 상태에
+의존하지 않는다(재확인에서 기존 추천을 찾으면 계산 결과를 버릴 뿐이다).
+
+검증: `recommendation.service.spec.ts`의 기존 29개 테스트를 **한 줄도 고치지 않고** 통과시켰다
+(리포지토리는 목이 아니라 prisma 목 위의 실제 구현을 주입해 쿼리 모양까지 계속 검증한다).
 
 변경 범위:
 
 ```text
-text
-파일 추가   recommendation.repository.ts, recommendation.mapper.ts, recommendation.fallback.ts
+파일 추가   recommendation.repository.ts, recommendation.mapper.ts, recommendation.fallback.ts(+spec)
 파일 수정   recommendation.service.ts, recommendation.module.ts, recommendation.service.spec.ts
 ```
 
-위험: SAFE REFACTOR.  — 외부 동작 불변이 목표다. 다만 918줄을 옮기는 작업이므로 트랜잭션 경계(advisory lock 범위)를 잘못 옮기면 동시성 버그가 생긴다. 리포지토리 메서드가 
+위험: SAFE REFACTOR — 외부 동작 불변. 트랜잭션 경계를 옮기지 않았고 유닛 436개·관련 e2e가 통과한다.
 
-완료 기준: R7 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다.
+완료 기준: R7 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다. → 완료.
 
 ## R8. fast-path SWR 알고리즘이 두 서비스에 통째로 중복돼 있다
 
@@ -301,24 +309,40 @@ text
 
 작업:
 
-- [ ] `FastPathCoordinator`(또는 `SwrJobCoordinator`) 하나를 만들어 제네릭 시그니처로 노출한다.
-- [ ] cacheKey, freshTtl, staleTtl,
-- [ ] jobType, jobPayload, dedupeWindow, failureBackoff,
-- [ ] loadFallback,          // 캐시 미스 시 DB에서 뭘 보여줄지
-- [ ] }) → { data, jobId | null, source }
-- [ ] 두 서비스는 도메인별 파라미터만 넘긴다. 이것은 "미래 확장을 위한 추상화"가 아니라 **이미 두 번 복제된 알고리즘을 한 번으로 되돌리는** 작업이다.
+- [x] `FastPathCoordinator`를 만들어 제네릭 `resolve<T>()` 하나로 노출한다(`jobs/fast-path.coordinator.ts`, `JobsModule`이 export).
+- [x] 도메인은 파라미터만 넘긴다 — `cacheKey`, `dedupeKey`, `jobType`, `readJobResult`, `loadFallback`, `enqueue`.
+- [x] 신선도·중복 억제·실패 억제 상수 4개(TTL 6h / 재검증 30m / dedupe 창 10m / FAILED cooldown 5m)를 코디네이터에 한 번만 둔다.
+- [x] `recommendation.service` / `product.service`의 SWR·dedupe·캐시 헬퍼를 삭제하고 코디네이터 호출로 대체한다.
+
+**정본 선택 결정 — 선택할 것이 없었다.** 착수 전 두 구현의 상수·분기를 표로 비교했더니 네 상수가 모두 같은 값이었고
+(6h / 30m / 10m / 5m), 응답 우선순위와 FAILED cooldown 조건도 동일했다. "상수가 이미 다르다"는 백로그 기술은
+사실이 아니었다(작성 시점 이후 한쪽이 맞춰진 것으로 보인다). 따라서 한쪽 동작을 바꾸는 선택 없이 그대로 합쳤다.
+
+남은 차이는 도메인 고유라 코디네이터 밖에 남겼다:
+
+| 항목 | 추천 | 날씨 제품 |
+|---|---|---|
+| 코디네이터 앞 단계 | 저장된 추천이 있으면 DB에서 바로 LIVE | 카탈로그가 비면 503 |
+| dedupeKey | `diagnosisId:*` (호환 모드는 키 없음 → job 재사용 생략) | `regionKey:*` |
+| enqueue | 단순 enqueue | N14 예약 가드 경유 |
+| COMPLETED 결과 캐시 적재 | 함(`cacheLiveResult: true`) | 안 함(LIVE 생성 경로에서 이미 적재) |
+
+- [x] **캐시 봉투 통일:** 추천이 `{ recommendations }`, 제품이 `{ items }`로 서로 달랐다 → `{ items, generatedAt }`으로 맞췄다.
+      배포 시점에 남아 있는 예전 형식 값은 코디네이터가 **miss로 처리**한다(빈 배열로 오해해 빈 화면을 보여주지 않는다).
+      키는 그대로라 TTL(6h) 안에 자연 교체된다. Redis는 최적화 계층이므로 이 miss는 FALLBACK + 재생성으로 흡수된다.
+- [x] 코디네이터 자체 spec 12개를 추가했다 — 두 화면이 공유하는 정책이라 도메인 없이 우선순위를 직접 검증한다.
 
 변경 범위:
 
 ```text
-text
-파일 추가   backend/src/modules/jobs/fast-path.coordinator.ts
-파일 수정   recommendation.service.ts, product.service.ts, 두 모듈 파일, 두 spec 파일
+파일 추가   backend/src/modules/jobs/fast-path.coordinator.ts(+spec)
+파일 수정   recommendation.service.ts, product.service.ts, jobs.module.ts, 두 spec 파일
 ```
 
-위험: BEHAVIOR-PRESERVING REFACTOR. . 두 구현의 상수/조건이 현재 다르므로 통합하면 **한쪽 동작이 바뀐다.** 통합 전에 두 구현의 차이를 표로 정리해 어느 쪽을 정본으로 삼을지 먼저 결정해야 한다. 이 결정은 승인 대상이다.
+위험: BEHAVIOR-PRESERVING REFACTOR. 상수가 동일해 통합으로 바뀌는 동작은 없다. 유일한 관찰 가능한 변화는
+배포 직후 남은 추천 캐시가 한 번 miss가 되는 것(→ FALLBACK 후 재생성)이다.
 
-완료 기준: R8 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다.
+완료 기준: R8 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다. → 유닛 425개 통과, typecheck·lint 통과.
 
 ## R9. 요청마다 상품 카탈로그 전체를 메모리로 로드한다
 
@@ -332,22 +356,37 @@ text
 
 작업:
 
-- [ ] 카탈로그를 `RedisService`에 TTL 캐시(예: 10~30분)로 올리고, 관리자 상품 변경 시 `invalidate`한다. Redis 미가용 시 프로세스 내 TTL 캐시로 폴백한다.
-- [ ] `pickRuleProduct` 같이 특정 카테고리/등급만 필요한 경로는 `where: { category, evidenceGrade }`로 좁혀 조회한다.
-- [ ] 함께 `Product`에 `@@index([category])`와 커서 페이지네이션용 `@@index([createdAt, id])`를 추가한다(제안 [33]에 포함).
+- [x] `ProductCatalogService`(신설, `ProductCatalogModule`로 노출)가 카탈로그 읽기를 전담한다. Redis TTL **10분**.
+- [x] Redis 미가용이면 프로세스 내 TTL 캐시로 폴백한다(같은 TTL). 인스턴스마다 스냅샷이 최대 TTL만큼 다를 수 있으나 시드로만 바뀌는 데이터라 감수한다.
+- [x] 캐시에서 읽은 `createdAt`을 Date로 되돌린다 — hit/miss에 따라 타입이 달라지면 정렬·커서가 조용히 문자열 비교가 된다.
+- [x] 호출처 3곳(`product.service` 2곳, 추천 생성/규칙 fallback)을 이 서비스로 모았다. `GET /products` 목록은 여전히 DB 직접 조회다(카테고리 필터 + 커서 페이지네이션이라 캐시 대상이 아니다).
+- [x] `Product` 인덱스(`category`, `createdAt,id`)는 R33에서 이미 추가돼 있었다 — 추가 마이그레이션 없음.
+
+**무효화 결정:** 백로그는 "관리자 상품 변경 시 invalidate"를 전제했지만, **백엔드에 상품 쓰기 경로가 아예 없다.**
+카탈로그는 `prisma db seed`(CLI)로만 바뀐다. 그래서 훅을 걸 지점이 없어 다음 둘로 갈음했다.
+
+1. TTL 10분 자동 만료 — 시드를 바꿔도 최대 10분이면 반영된다.
+2. `POST /admin/products/cache/invalidate` (ADMIN, 감사 로그 기록) — 시드 직후 즉시 반영이 필요할 때 쓴다.
+   데이터를 새로 노출하지 않고 캐시만 비우는 엔드포인트다.
+
+- [ ] (보류) 특정 카테고리/등급만 필요한 경로를 `where`로 좁히는 건 하지 않았다. 현재 규칙 선택은 카탈로그 **전체**에서
+      등급·카테고리 우선순위로 정렬해 고르므로, 좁혀 조회하면 선택 결과가 달라진다(동작 변경). 캐시로 DB 왕복이
+      사라진 지금은 실익도 작다.
 
 변경 범위:
 
 ```text
-text
-파일 수정   recommendation.service.ts, product.service.ts
-DB 변경     Product 인덱스 추가
-migration 필요   예 (인덱스만, 데이터 마이그레이션 없음)
+파일 추가   product-catalog.service.ts(+spec), product-catalog.module.ts
+파일 수정   product.service.ts, recommendation.service.ts, recommendation.repository.ts,
+            product.module.ts, recommendation.module.ts, admin.module.ts,
+            admin.controller.ts, admin.service.ts, 두 spec 파일
+DB 변경     없음 (인덱스는 R33에서 완료)
 ```
 
-위험: POTENTIAL BEHAVIOR CHANGE. . 캐시 도입으로 관리자가 상품을 수정한 뒤 최대 TTL만큼 반영이 지연된다. 무효화 훅을 admin 경로에 반드시 붙여야 한다.
+위험: POTENTIAL BEHAVIOR CHANGE — 시드 변경이 최대 10분 늦게 보인다. 즉시 반영은 위 관리자 엔드포인트로 한다.
+사용자에게 보이는 응답 형태는 그대로다(유닛 441개 + 관련 e2e 통과).
 
-완료 기준: R9 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다.
+완료 기준: R9 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다. → 완료.
 
 ## R10. AsyncJob.payload JSON 경로 조회에 인덱스가 없다
 
@@ -772,19 +811,20 @@ text
 
 작업:
 
-- [ ] `recommendations/content/fallback-content.ts`(혹은 [7]의 `RecommendationFallbackPolicy`)로 문구를 분리한다. 지금 단계에서 i18n 프레임워크까지 도입할 필요는 없다 — **상수 파일 하나로 충분하다.**
+- [x] `recommendations/content/fallback-content.ts`로 문구를 분리했다(R7과 함께 진행). i18n 프레임워크는 도입하지 않았다 — **상수 파일 하나로 충분하다.**
+- [x] 옮긴 것: `B_GRADE_SOURCE_LABEL`, `FALLBACK_SOURCE_LABEL`, 슬롯 3개의 `title`/`body`, 설명문 조립(`fallbackExplanation`), 점수·날씨 문구, 측정 불가 표기.
+- [x] 슬롯의 **카테고리 우선순위는 문구가 아니라 선택 규칙**이라 `recommendation.fallback.ts`에 남겼다. content 파일은 문자열만 가진다.
 
 변경 범위:
 
 ```text
-text
 파일 추가   backend/src/modules/recommendations/content/fallback-content.ts
-파일 수정   recommendation.service.ts
+파일 수정   recommendation.service.ts → recommendation.fallback.ts로 이동
 ```
 
-위험: SAFE REFACTOR. . 문자열을 옮기기만 하므로 위험 없음. [7]과 함께 진행하는 것이 효율적이다.
+위험: SAFE REFACTOR — 문자열을 옮기기만 했다. 문구가 바뀌지 않았음은 기존 spec(문자열 리터럴 단언)과 e2e가 확인한다.
 
-완료 기준: R24 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다.
+완료 기준: R24 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다. → 완료.
 
 ## R25. AirStatus 라벨/색상 매핑이 프론트 5곳에 중복돼 있다
 
@@ -936,7 +976,10 @@ API 변경    가능 — 미사용 엔드포인트 제거 시
 
 작업:
 
-- [ ] 지수 백오프 + 지터로 429/5xx만 2회 재시도한다(4xx 나머지는 즉시 실패). 연속 실패 임계(예: 1분 내 10회) 초과 시 30초간 호출을 건너뛰고 즉시 fallback을 반환하는 간단한 서킷브레이커를 둔다 — 라이브러리 도입 없이 카운터와 타임스탬프 두 필드로 충분하다. 타임아웃은 환경변수(`GEMINI_TIMEOUT_MS`)로 노출한다.
+- [x] 지수 백오프(400ms 기준, 2배) + 지터(0~50%)로 **429/5xx만** 2회 재시도한다. 나머지 4xx는 즉시 실패한다.
+- [x] 타임아웃·네트워크 오류는 재시도하지 않는다. 재시도하면 최악 지연이 타임아웃의 배수가 되는데 `POST /recommendations`는 동기 경로라 그 지연이 그대로 사용자 대기가 된다. 429/5xx는 대개 즉시 돌아오므로 예산을 거의 쓰지 않고, 그래도 전체 예산 30초(`GEMINI_TOTAL_BUDGET_MS`)로 한 번 더 막는다 — 위험란의 "최악 45초"는 발생하지 않는다.
+- [x] 카운터 + 타임스탬프 두 필드로 서킷브레이커를 뒀다. 1분 창 안에 10회 연속 실패하면 30초간 호출을 건너뛰고 즉시 `GeminiUnavailable`을 던져 호출부가 fallback으로 넘어가게 한다(워커 슬롯이 묶이지 않는다). HTTP 200이라도 본문 파싱이 실패하면 실패로 센다.
+- [x] 타임아웃을 `GEMINI_TIMEOUT_MS`(기본 15000, 1000~60000)로 env registry에 등록하고 `.env.example`에 문서화했다.
 
 변경 범위:
 
@@ -1072,7 +1115,11 @@ text
 
 작업:
 
-- [ ] `guardDuplicate`를 제거하고 트랜잭션 내부 검사만 남긴다. 남는 검사에 `notDeletedWhere`를 적용해 파일 내 다른 조회와 규칙을 통일한다. 프로젝트 전반의 soft-delete 조건 적용 방식을 `notDeletedWhere` 헬퍼 하나로 통일한다(`auth.service.ts`의 `getMe`/`login`이 수동 `deletedAt` 검사를 하고 `linkPhone`은 헬퍼를 쓰는 불일치도 함께 정리).
+- [x] **결정: `guardDuplicate`는 남긴다.** 사전 검사는 추론 호출 *앞*, 트랜잭션 검사는 추론 *뒤*에 있다. 제거하면 60초 내 재제출이 비싼 추론을 끝까지 돌린 뒤에야 거부된다(사용자 대기 + 추론 비용 낭비). "idempotency 예약이 이미 막는다"는 전제는 **동시** 요청에만 맞고, 앞 요청이 끝난 뒤의 순차 재제출은 이 창(window)만 막는다. DB 왕복 1회는 추론 대비 무시할 수준이다.
+- [x] 두 검사가 같은 기준을 쓰도록 조건을 `recentDiagnosisWhere()` 한 곳으로 모으고 `notDeletedWhere`를 적용했다. 삭제된 진단은 더 이상 중복 판정에 포함되지 않는다 — "삭제 후 재촬영"이 막히지 않고, 파일 내 다른 조회와 규칙이 같아진다.
+- [x] `auth.service.ts`의 수동 `deletedAt` 검사를 `notDeletedWhere`로 통일했다(`login`, `linkPhone`, `refresh`, `getMe`, `updateMe`, `socialLogin`).
+- [x] `login`/`linkPhone`의 '탈퇴한 계정입니다'(409) 분기는 **도달 불가 코드였다** — 탈퇴 시 `anonymizedPhone`으로 번호를 스크럽하므로 원래 번호로는 조회 자체가 안 된다. 제거해도 실제 응답은 바뀌지 않는다.
+- [x] `socialLogin`은 409를 유지한다. `SocialAccount`는 탈퇴 후에도 남아(unique(provider, providerUserId)) 탈퇴 계정의 재로그인이 실제로 도달하고, 새 계정 생성도 불가능한 상태라 '없음'이 아니라 '탈퇴함'으로 알려야 한다.
 
 변경 범위:
 

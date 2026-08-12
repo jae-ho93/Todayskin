@@ -81,6 +81,15 @@ export class AdminController {
     return this.adminService.retryImageDeletes(user.sub);
   }
 
+  @Post('products/cache/invalidate')
+  @ApiOperation({
+    summary: '제품 카탈로그 캐시 무효화 (ADMIN, R9 — 시드 직후 즉시 반영용)',
+  })
+  @HttpCode(200)
+  async invalidateProductCatalogCache(@CurrentUser() user: JwtPayload) {
+    return this.adminService.invalidateProductCatalogCache(user.sub);
+  }
+
   @Post('images/reconcile-orphans')
   @ApiOperation({
     summary: 'orphan 이미지 객체 탐지/정리 (ADMIN, N10, 기본 dry-run)',

@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { errorName } from '../../../common/errors/error-name.util';
+import { fetchWithTimeout } from './fetch-with-timeout';
 
 /** 기상청 생활기상지수(자외선) V5 endpoint */
 const KMA_UV_ENDPOINT =
@@ -186,16 +188,3 @@ function parseKmaTime(yyyyMMddHH: string): Date | null {
   return new Date(utcMs);
 }
 
-function errorName(e: unknown): string {
-  return e instanceof Error ? e.name : String(e);
-}
-
-async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms);
-  try {
-    return await fetch(url, { signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-}
