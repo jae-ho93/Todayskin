@@ -479,20 +479,38 @@ Task 브랜치를 동시에 연쇄적으로 개발하지 않습니다. 선행 Ta
 
 ### 브랜치 규칙
 
-- `main`: 배포 가능한 상태
+기준 문서는 [`CONTRIBUTING.md`](../CONTRIBUTING.md)다. 아래는 백엔드 작업에 적용되는 요약이며, 두 문서가 다르면 `CONTRIBUTING.md`를 따른다.
+
+- `main`: 배포 가능한 상태. **`main`에서 직접 작업·커밋·push 금지.**
 - `feature/<name>`: 기능
 - `fix/<name>`: 버그
 - `refactor/<name>`: 구조 개선
 - `test/<name>`: 테스트
 - `chore/<name>`: 설정
+- `docs/<name>`: 문서
 
-작업 시작:
+작업 하나에 브랜치 하나, PR 하나에 주제 하나다. 최신 `main`을 받은 뒤 새 브랜치를 만든다.
 
 ```bash
-git switch main
-git pull origin main
-git switch -c feature/<작업명>
+git switch main && git pull --ff-only origin main
+git switch -c <task-branch>
 ```
+
+**merge 후 브랜치를 삭제하지 않는다.** `gh pr merge --delete-branch`와 GitHub의 Delete branch 버튼을 사용하지 않는다.
+merge 후에는 로컬 `main`을 동기화(`git pull --ff-only origin main`)한 뒤 다음 작업으로 넘어간다.
+
+비공개 저장소 플랜이라 branch protection이 강제되지 않으므로, `main` 직접 push 금지와 브랜치 보존은 팀 규칙으로 지킨다.
+
+### AI 에이전트 규칙 (2026-08-12)
+
+AI 코딩 보조로 백엔드를 작업할 때도 위 브랜치 규칙이 그대로 적용된다.
+
+- 작업마다 새 브랜치를 만들고, 끝나면 **커밋 → 푸시 → 머지 → 로컬 `main` 동기화** 순서로 진행한다.
+- **CI 기준**: 배포 관련 CI(Deploy ECS 등)는 실패해도 진행할 수 있다.
+  단 **백엔드 빌드/테스트와 프론트엔드 빌드(타입체크)는 반드시 성공**해야 머지한다.
+- **CI가 실패하면** 실패 이유를 찾아 원인을 수정한다. 그대로 두지 않는다.
+  수정도 같은 규칙을 따른다 — 기존 브랜치에 이어서 커밋하지 않고 **새 `fix/` 브랜치**를 만들어
+  커밋 → 푸시 → 머지 → 로컬 동기화 순서로 진행한다.
 
 ### 커밋 규칙
 
