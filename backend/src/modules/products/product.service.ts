@@ -16,8 +16,10 @@ import { ProductCategory } from './enums/product-category.enum';
 import { EvidenceGrade } from '../recommendations/enums/evidence-grade.enum';
 import { ProductDto, ProductTiming } from './dto/product.dto';
 import { WeatherProductsResponseDto } from './dto/weather-products-response.dto';
-import { Prisma, Product, WeatherSnapshot, AsyncJobType } from '@prisma/client';
+import { Prisma, Product, WeatherSnapshot } from '@prisma/client';
 import { JobService } from '../jobs/job.service';
+import { JobStateService } from '../jobs/job-state.service';
+import { jobDedupeKeyOf } from '../jobs/job-dedupe';
 import { JobType } from '../jobs/enums/job-type.enum';
 import { JobStatus } from '../jobs/enums/job-status.enum';
 import { IdempotencyService } from '../idempotency/idempotency.service';
@@ -69,6 +71,7 @@ export class ProductService {
     private readonly weatherService: WeatherService,
     private readonly redis: RedisService,
     private readonly jobService: JobService,
+    private readonly jobState: JobStateService,
     private readonly idempotency: IdempotencyService,
   ) {}
 
@@ -252,19 +255,16 @@ export class ProductService {
 
   // ── N32 빠른 경로 헬퍼 ──────────────────────────
 
-  /** 같은 지역키의 최근 PENDING/COMPLETED/FAILED job 조회 (중복 enqueue 방지). */
+  /**
+   * 같은 지역키의 최근 job 조회 (중복 enqueue 방지).
+   * R10: payload JSON 경로 비교 → `dedupeKey` 컬럼 조회로 바꿔 인덱스를 타게 했다.
+   */
   private async findWeatherProductsJob(userId: number, regionKey: string) {
-    return this.prisma.asyncJob.findFirst({
-      where: {
-        userId,
-        type: AsyncJobType.WEATHER_PRODUCTS_GENERATE,
-        status: {
-          in: [JobStatus.PENDING, JobStatus.COMPLETED, JobStatus.FAILED],
-        },
-        createdAt: { gte: new Date(Date.now() - ProductService.FAST_JOB_DEDUP_WINDOW_MS) },
-        payload: { path: ['regionKey'], equals: regionKey },
-      },
-      orderBy: { createdAt: 'desc' },
+    return this.jobState.findRecentByDedupeKey({
+      userId,
+      type: JobType.WEATHER_PRODUCTS_GENERATE,
+      dedupeKey: jobDedupeKeyOf('regionKey', regionKey),
+      withinMs: ProductService.FAST_JOB_DEDUP_WINDOW_MS,
     });
   }
 

@@ -14,6 +14,8 @@ import { ConsentService } from '../consent/consent.service';
 import { ConsentPurpose } from '../consent/enums/consent-purpose.enum';
 import { IdempotencyService } from '../idempotency/idempotency.service';
 import { JobService } from '../jobs/job.service';
+import { JobStateService } from '../jobs/job-state.service';
+import { jobDedupeKeyOf } from '../jobs/job-dedupe';
 import { JobType } from '../jobs/enums/job-type.enum';
 import { JobStatus } from '../jobs/enums/job-status.enum';
 import { EvidenceGrade } from './enums/evidence-grade.enum';
@@ -24,7 +26,6 @@ import {
   Product,
   RecommendationTemplate,
   Recommendation as RecommendationModel,
-  AsyncJobType,
 } from '@prisma/client';
 import { createHash, randomUUID } from 'node:crypto';
 import {
@@ -84,6 +85,7 @@ export class RecommendationService {
     private readonly idempotency: IdempotencyService,
     private readonly redis: RedisService,
     private readonly jobService: JobService,
+    private readonly jobState: JobStateService,
   ) {}
 
   /**
@@ -364,12 +366,7 @@ export class RecommendationService {
 
       // 2) job dedup — 같은 진단의 진행 중/완료/최근 실패 job을 재사용한다.
       //    (FAILED도 cooldown 안이면 같은 jobId로 재사용해 job 스팸을 막는다 — N32)
-      const job = await this.findRecentJob(
-        userId,
-        AsyncJobType.RECOMMENDATION_GENERATE,
-        'diagnosisId',
-        diagnosisId,
-      );
+      const job = await this.findRecentJob(userId, 'diagnosisId', diagnosisId);
       if (job) {
         if (job.status === JobStatus.COMPLETED) {
           const result = job.result as { recommendations?: RecommendationDto[] } | null;
@@ -546,24 +543,16 @@ export class RecommendationService {
     };
   }
 
-  /** 같은 payload JSON 경로 키를 가진 최근 PENDING/COMPLETED/FAILED job 조회 (중복 enqueue 방지). */
-  private async findRecentJob(
-    userId: number,
-    type: AsyncJobType,
-    key: string,
-    value: string,
-  ) {
-    return this.prisma.asyncJob.findFirst({
-      where: {
-        userId,
-        type,
-        status: {
-          in: [JobStatus.PENDING, JobStatus.COMPLETED, JobStatus.FAILED],
-        },
-        createdAt: { gte: new Date(Date.now() - FAST_JOB_DEDUP_WINDOW_MS) },
-        payload: { path: [key], equals: value },
-      },
-      orderBy: { createdAt: 'desc' },
+  /**
+   * 같은 dedupe 키를 가진 최근 job 조회 (중복 enqueue 방지).
+   * R10: payload JSON 경로 비교 → `dedupeKey` 컬럼 조회로 바꿔 인덱스를 타게 했다.
+   */
+  private async findRecentJob(userId: number, payloadKey: string, value: string) {
+    return this.jobState.findRecentByDedupeKey({
+      userId,
+      type: JobType.RECOMMENDATION_GENERATE,
+      dedupeKey: jobDedupeKeyOf(payloadKey, value),
+      withinMs: FAST_JOB_DEDUP_WINDOW_MS,
     });
   }
 

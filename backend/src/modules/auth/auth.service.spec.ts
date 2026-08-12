@@ -349,4 +349,87 @@ describeWithDb('AuthService', () => {
       UnauthorizedException,
     );
   });
+
+  // ── R21: 회전 계열(familyId) + 트랜잭션 회전 ────────────────
+  describe('R21 refresh 회전', () => {
+    /** 세션이 정확히 1개인 상태를 만든다 (signup만 — login을 더 하면 세션이 2개가 된다). */
+    async function freshLogin(): Promise<{ userId: number; refreshToken: string }> {
+      const signupRes = await service.signup({
+        phoneNumber: testPhone,
+        name: '테스터',
+        birthDate: '2000-01-01',
+      });
+      return { userId: signupRes.id, refreshToken: signupRes.refreshToken! };
+    }
+
+    it('회전한 세션은 같은 familyId를 물려받는다', async () => {
+      const { userId, refreshToken } = await freshLogin();
+      const root = await prisma.refreshSession.findFirstOrThrow({ where: { userId } });
+      // 새 로그인의 계열 뿌리는 자기 자신이다.
+      expect(root.familyId).toBe(root.id);
+
+      await service.refresh(refreshToken);
+
+      const rotated = await prisma.refreshSession.findFirstOrThrow({
+        where: { userId, revokedAt: null },
+      });
+      expect(rotated.id).not.toBe(root.id);
+      expect(rotated.familyId).toBe(root.familyId);
+    });
+
+    it('폐기와 신규 발급이 한 트랜잭션이다 — 회전 후 유효 세션은 정확히 1개', async () => {
+      const { userId, refreshToken } = await freshLogin();
+      await service.refresh(refreshToken);
+
+      const active = await prisma.refreshSession.count({
+        where: { userId, revokedAt: null },
+      });
+      expect(active).toBe(1);
+    });
+
+    it('유예 시간 안의 재사용은 재시도로 보고 계열을 유지한다', async () => {
+      const { userId, refreshToken } = await freshLogin();
+      await service.refresh(refreshToken);
+
+      // 방금 폐기된 토큰 재전송(네트워크 재시도) → 401이지만 계열은 살아 있다.
+      await expect(service.refresh(refreshToken)).rejects.toThrow(UnauthorizedException);
+      const active = await prisma.refreshSession.count({
+        where: { userId, revokedAt: null },
+      });
+      expect(active).toBe(1);
+    });
+
+    it('유예를 지난 폐기 토큰이 다시 오면 계열 전체를 폐기한다 (재사용 탐지)', async () => {
+      const { userId, refreshToken } = await freshLogin();
+      await service.refresh(refreshToken);
+
+      // 유예(기본 10초)를 넘긴 상태를 만든다 — 폐기 시각을 과거로 되돌린다.
+      await prisma.refreshSession.updateMany({
+        where: { userId, revokedAt: { not: null } },
+        data: { revokedAt: new Date(Date.now() - 60_000) },
+      });
+
+      await expect(service.refresh(refreshToken)).rejects.toThrow(UnauthorizedException);
+      const active = await prisma.refreshSession.count({
+        where: { userId, revokedAt: null },
+      });
+      expect(active).toBe(0);
+    });
+
+    it('같은 토큰의 동시 회전은 하나만 성공한다 (원자적 소비 유지)', async () => {
+      const { userId, refreshToken } = await freshLogin();
+
+      const results = await Promise.allSettled([
+        service.refresh(refreshToken),
+        service.refresh(refreshToken),
+      ]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+
+      // 실패한 쪽이 세션을 만들지 않았다 — 트랜잭션이 롤백된다.
+      const active = await prisma.refreshSession.count({
+        where: { userId, revokedAt: null },
+      });
+      expect(active).toBe(1);
+    });
+  });
 });

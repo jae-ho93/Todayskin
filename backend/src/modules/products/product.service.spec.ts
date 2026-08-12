@@ -5,6 +5,7 @@ import { GeminiClient, GeminiUnavailable } from '../gemini/gemini.client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisService } from '../../redis/redis.service';
 import { JobService } from '../jobs/job.service';
+import { JobStateService } from '../jobs/job-state.service';
 import { JobStatus } from '../jobs/enums/job-status.enum';
 import { IdempotencyService } from '../idempotency/idempotency.service';
 import { WeatherService } from '../weather/weather.service';
@@ -24,6 +25,7 @@ describe('ProductService', () => {
   let weatherService: { getCurrentWeather: jest.Mock };
   let redis: { getJson: jest.Mock; setJson: jest.Mock };
   let jobService: { enqueue: jest.Mock };
+  let jobState: { findRecentByDedupeKey: jest.Mock };
   let idempotency: {
     acquire: jest.Mock;
     complete: jest.Mock;
@@ -55,15 +57,14 @@ describe('ProductService', () => {
       complete: jest.fn().mockResolvedValue(undefined),
       release: jest.fn().mockResolvedValue(undefined),
     };
+    // R10: dedupe 조회는 JobStateService 파사드를 거친다(async_jobs 직접 쿼리 금지).
+    jobState = { findRecentByDedupeKey: jest.fn().mockResolvedValue(null) };
     prisma = {
       product: {
         findMany: jest.fn(),
       },
       weatherSnapshot: {
         findFirst: jest.fn(),
-      },
-      asyncJob: {
-        findFirst: jest.fn().mockResolvedValue(null),
       },
     };
 
@@ -75,6 +76,7 @@ describe('ProductService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: RedisService, useValue: redis },
         { provide: JobService, useValue: jobService },
+        { provide: JobStateService, useValue: jobState },
         { provide: IdempotencyService, useValue: idempotency },
       ],
     }).compile();
@@ -363,7 +365,7 @@ describe('ProductService', () => {
     beforeEach(() => {
       weatherService.getCurrentWeather.mockResolvedValue(liveWeather());
       prisma.product.findMany.mockResolvedValue(catalogRows());
-      prisma.asyncJob.findFirst.mockResolvedValue(null);
+      jobState.findRecentByDedupeKey.mockResolvedValue(null);
       redis.getJson.mockResolvedValue(null);
     });
 
@@ -424,7 +426,7 @@ describe('ProductService', () => {
     });
 
     it('진행 중 job이 있으면 재사용 — 같은 jobId + FALLBACK (중복 enqueue 방지)', async () => {
-      prisma.asyncJob.findFirst.mockResolvedValue({
+      jobState.findRecentByDedupeKey.mockResolvedValue({
         id: 'job-pending',
         status: JobStatus.PENDING,
         result: null,
@@ -435,18 +437,18 @@ describe('ProductService', () => {
       expect(result.source).toBe('FALLBACK');
       expect(result.jobId).toBe('job-pending');
       expect(jobService.enqueue).not.toHaveBeenCalled();
-      expect(prisma.asyncJob.findFirst).toHaveBeenCalledWith(
+      // R10: payload JSON 경로 대신 dedupeKey 컬럼으로 조회한다.
+      expect(jobState.findRecentByDedupeKey).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({
-            type: 'WEATHER_PRODUCTS_GENERATE',
-            payload: { path: ['regionKey'], equals: '서울특별시' },
-          }),
+          userId: 1,
+          type: 'WEATHER_PRODUCTS_GENERATE',
+          dedupeKey: 'regionKey:서울특별시',
         }),
       );
     });
 
     it('FAILED job이 cooldown 안이면 같은 jobId 재사용 (job 스팸 방지)', async () => {
-      prisma.asyncJob.findFirst.mockResolvedValue({
+      jobState.findRecentByDedupeKey.mockResolvedValue({
         id: 'job-failed',
         status: JobStatus.FAILED,
         finishedAt: new Date(),
@@ -461,7 +463,7 @@ describe('ProductService', () => {
 
     it('FAILED가 cooldown(5분)을 지나면 새 job을 enqueue한다', async () => {
       // dedup 창(10분) 안이면서 cooldown(5분)을 지난 6분 전 FAILED job → 새 enqueue.
-      prisma.asyncJob.findFirst.mockResolvedValue({
+      jobState.findRecentByDedupeKey.mockResolvedValue({
         id: 'job-old-failed',
         status: JobStatus.FAILED,
         finishedAt: new Date(Date.now() - 6 * 60 * 1000),
@@ -475,7 +477,7 @@ describe('ProductService', () => {
     });
 
     it('COMPLETED job 결과가 있으면 source: LIVE로 반환', async () => {
-      prisma.asyncJob.findFirst.mockResolvedValue({
+      jobState.findRecentByDedupeKey.mockResolvedValue({
         id: 'job-done',
         status: JobStatus.COMPLETED,
         finishedAt: new Date('2026-08-16T02:00:00Z'),

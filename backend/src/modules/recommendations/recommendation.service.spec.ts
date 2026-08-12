@@ -12,6 +12,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { IdempotencyService } from '../idempotency/idempotency.service';
 import { RedisService } from '../../redis/redis.service';
 import { JobService } from '../jobs/job.service';
+import { JobStateService } from '../jobs/job-state.service';
 import { JobStatus } from '../jobs/enums/job-status.enum';
 import { EvidenceGrade } from './enums/evidence-grade.enum';
 import { RecommendationDto } from './dto/recommendation.dto';
@@ -33,6 +34,8 @@ describe('RecommendationService', () => {
   // N32: Redis SWR 캐시 + LIVE job enqueue mock.
   let redis: { getJson: jest.Mock; setJson: jest.Mock };
   let jobService: { enqueue: jest.Mock };
+  // R10: dedupe 조회는 JobStateService 파사드를 거친다(async_jobs 직접 쿼리 금지).
+  let jobState: { findRecentByDedupeKey: jest.Mock };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let prisma: Record<string, any>;
 
@@ -81,12 +84,10 @@ describe('RecommendationService', () => {
         findUnique: jest.fn(),
         findFirst: jest.fn(),
       },
-      // N32: 빠른 경로 job dedup 조회.
-      asyncJob: {
-        findFirst: jest.fn().mockResolvedValue(null),
-      },
       $transaction: jest.fn(),
     };
+    // N32/R10: 빠른 경로 job dedup 조회.
+    jobState = { findRecentByDedupeKey: jest.fn().mockResolvedValue(null) };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -97,6 +98,7 @@ describe('RecommendationService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: RedisService, useValue: redis },
         { provide: JobService, useValue: jobService },
+        { provide: JobStateService, useValue: jobState },
       ],
     }).compile();
 
@@ -423,7 +425,7 @@ describe('RecommendationService', () => {
 
     beforeEach(() => {
       prisma.diagnosis.findFirst.mockResolvedValue(diagnosisRow());
-      prisma.asyncJob.findFirst.mockResolvedValue(null);
+      jobState.findRecentByDedupeKey.mockResolvedValue(null);
       redis.getJson.mockResolvedValue(null);
     });
 
@@ -511,7 +513,7 @@ describe('RecommendationService', () => {
 
     it('진행 중 job이 있으면 재사용 — 같은 jobId + FALLBACK (중복 enqueue 방지)', async () => {
       prisma.recommendation.findMany.mockResolvedValue([]);
-      prisma.asyncJob.findFirst.mockResolvedValue({
+      jobState.findRecentByDedupeKey.mockResolvedValue({
         id: 'job-pending',
         status: JobStatus.PENDING,
         result: null,
@@ -522,20 +524,19 @@ describe('RecommendationService', () => {
       expect(result.source).toBe('FALLBACK');
       expect(result.jobId).toBe('job-pending');
       expect(jobService.enqueue).not.toHaveBeenCalled();
-      // 같은 진단 키로 조회한다.
-      expect(prisma.asyncJob.findFirst).toHaveBeenCalledWith(
+      // R10: 같은 진단 dedupe 키로 조회한다(payload JSON 경로 → dedupeKey 컬럼).
+      expect(jobState.findRecentByDedupeKey).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({
-            type: 'RECOMMENDATION_GENERATE',
-            payload: { path: ['diagnosisId'], equals: 'diag-fast' },
-          }),
+          userId: 1,
+          type: 'RECOMMENDATION_GENERATE',
+          dedupeKey: 'diagnosisId:diag-fast',
         }),
       );
     });
 
     it('FAILED job이 cooldown 안이면 같은 jobId 재사용 (job 스팸 방지)', async () => {
       prisma.recommendation.findMany.mockResolvedValue([]);
-      prisma.asyncJob.findFirst.mockResolvedValue({
+      jobState.findRecentByDedupeKey.mockResolvedValue({
         id: 'job-failed',
         status: JobStatus.FAILED,
         finishedAt: new Date(),
@@ -550,7 +551,7 @@ describe('RecommendationService', () => {
 
     it('COMPLETED job 결과가 있으면 source: LIVE로 반환하고 캐시에 기록한다', async () => {
       prisma.recommendation.findMany.mockResolvedValue([]);
-      prisma.asyncJob.findFirst.mockResolvedValue({
+      jobState.findRecentByDedupeKey.mockResolvedValue({
         id: 'job-done',
         status: JobStatus.COMPLETED,
         finishedAt: new Date('2026-08-16T02:00:00Z'),
