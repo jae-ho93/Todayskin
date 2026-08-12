@@ -774,6 +774,82 @@ purge 경로에도 진단 삭제를 남겨 뒀다. 정상 흐름에서는 0건�
 
 완료 기준: 화면에 뜨는 출처가 검증 가능한 실제 참조를 가리키거나, 참조가 없는 경우 생성물임을 명확히 밝힌다. 없는 인용을 만들지 않는다. → 충족
 
+### Fable5 리뷰 대응 (2026-08-13, PR #158~#162)
+
+프로젝트 리뷰([`Fable5_ProjectReview.md`](Fable5_ProjectReview.md))에서 등록한 코드 태스크
+5건을 하루에 반영했다. 해커톤 재조정(같은 날)으로 N52(API 버저닝)는 제외, N50·N51은
+N16(AWS) 이후로 미뤘다.
+
+### N46. 소셜 로그인 토큰 검증 강화 — Kakao 앱 바인딩 + Apple nonce (PR #158)
+
+브랜치: `fix/social-token-binding`
+
+카카오 provider가 `/v2/user/me`만 호출해 **어느 앱에 발급된 토큰인지 검증하지 않았다** —
+다른 카카오 연동 앱이 수집한 토큰으로 Todayskin 계정에 로그인할 수 있었다. Apple은
+aud·서명은 검증했지만 nonce가 없어 id_token 리플레이 여지가 있었다.
+
+- [x] Kakao: `/v1/user/access_token_info`로 `app_id`가 `KAKAO_APP_ID`와 일치하는지 검증, 불일치 시 401. **fail-closed** — 미설정이면 카카오 로그인 자체를 거부한다
+- [x] Apple: FE(`expo-crypto`)가 nonce 생성 → `signInAsync`와 서버에 함께 전달 → id_token의 `nonce` 클레임 대조, 불일치·누락 시 401
+- [x] 성공·실패(타 앱 토큰, nonce 불일치) 테스트 — kakao/apple provider spec 신설 + FE 계약 테스트
+
+완료 기준: 타 앱에서 발급된 카카오 토큰과 nonce 불일치 Apple 토큰이 401로 거부되고, 기존 소셜 로그인 e2e가 통과한다. → 충족
+
+### N47. 인증·OTP 라우트 rate limit fail-closed 전환 (PR #159)
+
+브랜치: `fix/auth-throttle-fail-closed`
+
+`RedisThrottlerStorage`가 Redis 장애 시 요청을 통과시켰다(fail-open). 가용성 트레이드오프로
+의도된 설계지만 **로그인·OTP는 브루트포스 표적**이라 이 경로만은 장애 중에도 막아야 했다.
+
+- [x] `@SensitiveThrottle()` 데코레이터 + `SENSITIVE_THROTTLER` 이름의 별도 스로틀러 — auth(가입·로그인·소셜·전화연결)·otp 전체에 적용, Redis 오류 시 503 (나머지 라우트는 fail-open 유지)
+- [x] 한도는 `THROTTLE_SENSITIVE_LIMIT`(기본 10)·`THROTTLE_SENSITIVE_TTL_MS`(기본 60s)로 분리
+- [x] Redis 단절 테스트 — 민감 라우트 503 / 일반 라우트 통과를 각각 고정
+
+완료 기준: Redis를 내린 상태에서 OTP 발송·로그인 시도가 제한되고, 일반 조회 API는 계속 동작한다. → 충족
+
+### N48. AuditLog metadata 마스킹 강제 (PR #160)
+
+브랜치: `fix/audit-metadata-masking`
+
+`AuditLogService` 주석은 "metadata에 민감정보 저장 금지"를 선언하지만 강제 장치가 없어,
+호출자가 전화번호 등을 넣으면 감사 테이블에 평문으로 남았다.
+
+- [x] `maskMetadataDeep()` — metadata를 재귀 순회하며 민감 키(전화·생일·토큰 등 `SENSITIVE_KEY_PATTERN`)와 전화번호 패턴 문자열을 마스킹 후 저장
+- [x] 민감 키·중첩 객체·배열이 들어와도 마스킹되는 단위 테스트 (redact.logger + audit-log.service spec)
+
+완료 기준: 감사 로그에 전화번호·토큰이 평문으로 저장될 수 없다. → 충족
+
+### N49. 추론 이미지 품질 게이트 — blur·휘도·최소 해상도 (PR #161, F78 동반)
+
+브랜치: `feature/inference-quality-gate`
+
+클라이언트·NestJS·FastAPI 어디에도 사진 품질 검사가 없어(MIME·10MB·얼굴 존재만)
+어둡거나 흔들린 사진도 점수가 나왔다 — 첫 결과의 신뢰를 운에 맡기는 구조였다.
+품질 검증은 추론 전처리의 일부로 **FastAPI**에 뒀다(`ARCHITECTURE.md`에 명시).
+
+- [x] FastAPI `quality.py`: 최소 해상도(짧은 변 480px)·평균 휘도(55)·Laplacian 분산(장변 640px 정규화 후 40) 검사 → 422 + `{code, message}` (`TOO_SMALL`/`TOO_DARK`/`BLURRY`, `NO_FACE`도 동일 포맷으로 통일)
+- [x] NestJS: `InferenceRejectedError` → `UnprocessableEntityException`(사용자 카피 + code 필드) 매핑, `HttpExceptionFilter`가 code를 응답에 통과시킴 (OpenAPI 반영)
+- [x] 임계값 환경변수화 (`QUALITY_MIN_EDGE_PX`·`QUALITY_MIN_MEAN_LUMA`·`QUALITY_MIN_LAPLACIAN_VAR`, 0이면 개별 비활성)
+- [x] FE 후속(F78): 사유별 재촬영 모달 — 같은 PR로 반영
+
+완료 기준: 어두운/흔들린/저해상도 샘플이 422와 사유 코드로 거부되고, 정상 샘플은 기존과 동일하게 통과한다. → 충족 (pytest 합성 이미지 검증)
+
+### N53. WeatherSnapshot 기온·습도 수집 확장 (PR #162)
+
+브랜치: `feat/n53-weather-temp-humidity`
+
+스냅샷이 자외선·대기질만 수집하고 **피부 건조와 가장 직접 연관된 기온·습도가 없었다**
+(리뷰 16장). 기상청 초단기실황(기온 `T1H`·습도 `REH`)을 수집해 저장하고 앱에 노출한다.
+실패 시 가짜값 금지·`UNAVAILABLE` 정책은 기존과 동일.
+
+- [x] Prisma: `WeatherSnapshot`에 `temperature`·`humidity`·`nowcastCollectionFailed` 컬럼 (expand 마이그레이션 `20260813070000_n53_weather_temp_humidity`)
+- [x] KMA 초단기실황 연동 — `fetchNowcast` + 위경도→격자(LCC) 변환 `latLonToGrid` + base time 계산 (서울·부산·제주 격자 테스트 고정)
+- [x] 날씨 응답 DTO·OpenAPI 반영 + FE 생성 타입 재생성
+- [x] FE: 날씨 상세 기온·습도 카드(+습도 40% 미만 보습 팁), 홈 카드·진단 상세 요약 라인 (수집실패 구분 유지)
+- [x] 성공·실패(외부 API 다운) 테스트 + e2e KmaClient 스텁 보강
+
+완료 기준: 새 진단의 날씨 스냅샷에 기온·습도가 저장되고, 상세 화면에서 값 또는 "측정 불가"로 표시된다. → 충족
+
 
 > **N16 (AWS 첫 배포)는 Open** — [`docs/BACKEND_TASKS.md`](BACKEND_TASKS.md) 참고.
 > 프론트 범위 완료 기록(N15/N18/N19)은 [`docs/FRONTEND_TASKS.md`](FRONTEND_TASKS.md)에 있다.
