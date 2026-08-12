@@ -58,3 +58,16 @@ export function formatDateKo(iso: string): string {
   const [, month, day] = iso.split('-').map(Number);
   return `${month}월 ${day}일`;
 }
+
+/**
+ * F66: 촬영 시각(instant) → '2026.08.13' (Asia/Seoul).
+ *
+ * 기록 화면에는 `2026년 8월 13일 오전 3:41 촬영`처럼 떴다. 한 줄이 길어 여러 기록을
+ * 훑을 때 날짜만 빨리 비교하기 어려웠다. 0을 채워 자리수를 고정해야 목록에서 세로가
+ * 맞으므로 `formatKstDate`(en-CA, 2-digit)를 그대로 쓰고 구분자만 바꾼다.
+ *
+ * 화면 파일에 있던 표기 함수를 여기로 옮겼다. 화면마다 따로 두면 표기가 갈라진다.
+ */
+export function formatCapturedDate(iso: string): string {
+  return formatKstDate(new Date(iso)).replace(/-/g, '.');
+}

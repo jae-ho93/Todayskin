@@ -10,7 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
+import { LandmarkOverlay } from '../../src/components/LandmarkOverlay';
 import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { EvidenceBadge } from '../../src/components/EvidenceBadge';
@@ -22,6 +22,7 @@ import {
   UV_LEVEL_LABEL,
   UV_LEVEL_TEXT_COLOR,
 } from '../../src/lib/air-status';
+import { formatCapturedDate } from '../../src/lib/kst-date';
 import { gradeToColor } from '../../src/lib/skinGrade';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type {
@@ -233,18 +234,6 @@ export default function DiagnosisDetailScreen() {
 
 // ── 하위 컴포넌트 ──────────────────────────
 
-function formatCapturedAt(iso: string): string {
-  const kst = new Date(new Date(iso).getTime() + 9 * 3600 * 1000);
-  const year = kst.getUTCFullYear();
-  const month = kst.getUTCMonth() + 1;
-  const day = kst.getUTCDate();
-  const hour = kst.getUTCHours();
-  const minute = String(kst.getUTCMinutes()).padStart(2, '0');
-  const period = hour < 12 ? '오전' : '오후';
-  const h12 = hour % 12 === 0 ? 12 : hour % 12;
-  return `${year}년 ${month}월 ${day}일 ${period} ${h12}:${minute}`;
-}
-
 function WeatherCard({ weather: w, capturedAt }: { weather: CalendarWeather; capturedAt: string }) {
   const source = w.source === 'UNAVAILABLE' ? '측정 불가' : w.source;
   return (
@@ -257,7 +246,7 @@ function WeatherCard({ weather: w, capturedAt }: { weather: CalendarWeather; cap
           <Text style={styles.sourceText}>{source}</Text>
         </View>
       </View>
-      <Text style={styles.weatherTime}>{formatCapturedAt(capturedAt)} 촬영</Text>
+      <Text style={styles.weatherTime}>{formatCapturedDate(capturedAt)}</Text>
       <View style={styles.weatherMetrics}>
         <WeatherMetric
           scale="uv"
@@ -325,28 +314,25 @@ function WeatherMetric(
 // 이미지 + 랜드마크 오버레이 — 원본 비율 유지, 최대 높이 제한.
 function MediaBlock({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
   const [boxWidth, setBoxWidth] = useState(0);
-  const [imageRatio, setImageRatio] = useState<number | null>(null);
+  const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
 
   const img = d.image;
   const landmarks = d.landmarks;
   const expired = img ? new Date(img.expiresAt).getTime() <= Date.now() : false;
 
-  const overlay = landmarks ? (
-    <Svg
-      style={StyleSheet.absoluteFill}
-      width="100%"
-      height="100%"
-      viewBox="0 0 1 1"
-      preserveAspectRatio="none"
-    >
-      {landmarks.points.map(([x, y], i) => (
-        <Circle key={i} cx={x} cy={y} r={0.008} fill="rgba(107,181,164,0.9)" />
-      ))}
-    </Svg>
-  ) : null;
-
-  const ratio = imageRatio ?? (landmarks ? 1 : 4 / 3);
+  const ratio = imageSize ? imageSize.height / imageSize.width : landmarks ? 1 : 4 / 3;
   const height = Math.min(320, Math.max(160, (boxWidth || 300) * ratio));
+
+  // F65: 상세는 최대 320px이라 478점을 다 그려도 얼굴 윤곽이 읽힌다.
+  const overlay = landmarks ? (
+    <LandmarkOverlay
+      points={landmarks.points}
+      box={{ width: boxWidth, height }}
+      imageSize={img && !expired ? imageSize : null}
+      dotRadius={1.8}
+      maxPoints={landmarks.points.length}
+    />
+  ) : null;
 
   if (!img && !landmarks) {
     return (
@@ -371,7 +357,9 @@ function MediaBlock({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
           resizeMode="cover"
           onLoad={(e) => {
             const { width, height: h } = e.nativeEvent.source;
-            if (width > 0 && h > 0) setImageRatio(h / width);
+            // F65: 오버레이가 사진과 같은 cover 계산을 하려면 비율이 아니라
+            // 원본 크기가 필요하다.
+            if (width > 0 && h > 0) setImageSize({ width, height: h });
           }}
         />
       ) : (

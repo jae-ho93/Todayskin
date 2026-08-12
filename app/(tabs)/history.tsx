@@ -11,10 +11,11 @@ import {
   Text,
   View,
 } from 'react-native';
-import Svg, { Circle, Polyline } from 'react-native-svg';
+import Svg, { Polyline } from 'react-native-svg';
 import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { EvidenceBadge } from '../../src/components/EvidenceBadge';
+import { LandmarkOverlay } from '../../src/components/LandmarkOverlay';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { AIR_STATUS_COLOR, UV_LEVEL_COLOR } from '../../src/lib/air-status';
 import { formatDateKo, monthBounds, todayKst } from '../../src/lib/kst-date';
@@ -407,10 +408,22 @@ function WeatherSummaryGrid({ weather }: { weather: CalendarWeather }) {
 }
 
 // 썸네일 — 이미지(가능 시) + 랜드마크 오버레이. 랜드마크만 있으면 점만 표시.
+/**
+ * F65: 썸네일에서는 478점을 다 그리지 않는다.
+ *
+ * 140×160 박스에서는 점이 뭉쳐 덩어리로만 보이고, 카드마다 478개 SVG 노드가 생겨
+ * 목록 스크롤이 무거워진다. 고르게 솎으면 얼굴 윤곽은 그대로 읽힌다.
+ */
+const THUMB_MAX_POINTS = 80;
+
 function MediaThumb({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
+  const [box, setBox] = useState({ width: 0, height: 0 });
+  const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
+
   const img = d.image;
   const landmarks = d.landmarks;
   const expired = img ? new Date(img.expiresAt).getTime() <= Date.now() : false;
+  const hasImage = Boolean(img) && !expired;
 
   if (!img && !landmarks) {
     return (
@@ -420,34 +433,37 @@ function MediaThumb({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
     );
   }
 
-  const overlay = landmarks ? (
-    <Svg
-      style={StyleSheet.absoluteFill}
-      width="100%"
-      height="100%"
-      viewBox="0 0 1 1"
-      preserveAspectRatio="none"
-    >
-      {landmarks.points.map(([x, y], i) => (
-        <Circle key={i} cx={x} cy={y} r={0.01} fill="rgba(107,181,164,0.9)" />
-      ))}
-    </Svg>
-  ) : null;
-
-  if (img && !expired) {
-    return (
-      <View style={styles.thumbBox}>
-        <Image source={{ uri: img.url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-        {overlay}
-      </View>
-    );
-  }
-
-  // 이미지 만료 or 이미지만 없고 랜드마크만 있는 경우 — 회색 배경에 점 표시
   return (
-    <View style={styles.thumbBox}>
-      <Ionicons name="scan-outline" size={20} color={colors.textTertiary} />
-      {overlay}
+    <View
+      style={styles.thumbBox}
+      onLayout={(e) => {
+        const { width, height } = e.nativeEvent.layout;
+        setBox({ width, height });
+      }}
+    >
+      {img && !expired ? (
+        <Image
+          source={{ uri: img.url }}
+          style={StyleSheet.absoluteFill}
+          resizeMode="cover"
+          onLoad={(e) => {
+            const { width, height } = e.nativeEvent.source;
+            if (width > 0 && height > 0) setImageSize({ width, height });
+          }}
+        />
+      ) : (
+        // 이미지 만료 or 랜드마크만 있는 경우 — 회색 배경에 점만 표시
+        <Ionicons name="scan-outline" size={20} color={colors.textTertiary} />
+      )}
+      {landmarks && (
+        <LandmarkOverlay
+          points={landmarks.points}
+          box={box}
+          imageSize={hasImage ? imageSize : null}
+          dotRadius={1.5}
+          maxPoints={THUMB_MAX_POINTS}
+        />
+      )}
     </View>
   );
 }
