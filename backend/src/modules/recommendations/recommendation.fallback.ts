@@ -111,6 +111,8 @@ export function buildRuleRecommendations(
       title: FALLBACK_SLOT_CONTENT[timing].title,
       grade: EvidenceGrade.B,
       sourceLabel: FALLBACK_SOURCE_LABEL,
+      // 규칙 기반 자리표시자라 인용할 문헌이 없다.
+      sources: [],
       explanation: fallbackExplanation({
         body: FALLBACK_SLOT_CONTENT[timing].body,
         scorePhrase: overallScore !== null ? scorePhrase(overallScore) : '',

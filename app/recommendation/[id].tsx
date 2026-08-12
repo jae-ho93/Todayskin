@@ -5,10 +5,12 @@ import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'r
 import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { EvidenceBadge } from '../../src/components/EvidenceBadge';
+import { EvidenceSourceList } from '../../src/components/EvidenceSourceList';
 import { IngredientChip } from '../../src/components/IngredientChip';
 import { RetryButton } from '../../src/components/RetryButton';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { useToast } from '../../src/components/Toast';
+import { GRADE_CRITERIA, MEDICAL_DISCLAIMER } from '../../src/lib/evidence';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type { Product, Recommendation } from '../../src/types';
 
@@ -119,9 +121,18 @@ export default function RecommendationDetailScreen() {
           </Pressable>
         </View>
 
-        {showExplanation && <Text style={styles.explanation}>{recommendation.explanation}</Text>}
+        {showExplanation && (
+          <>
+            <Text style={styles.explanation}>{recommendation.explanation}</Text>
+            <Text style={styles.criteria}>{GRADE_CRITERIA[recommendation.grade]}</Text>
+          </>
+        )}
 
-        <Text style={styles.source}>출처: {recommendation.sourceLabel}</Text>
+        <EvidenceSourceList
+          sources={recommendation.sources}
+          fallbackLabel={recommendation.sourceLabel}
+          onOpenFailed={() => showToast('원문 링크를 열 수 없어요', { type: 'error' })}
+        />
 
         {recommendation.grade === 'C' && recommendation.observationalNote && (
           <View style={styles.noteBox}>
@@ -187,6 +198,9 @@ export default function RecommendationDetailScreen() {
           </>
         ) : null}
       </View>
+
+      {/* F69: 고지가 약관에만 있어서 추천 화면에서는 보이지 않았다. */}
+      <Text style={styles.disclaimer}>{MEDICAL_DISCLAIMER}</Text>
     </ScreenContainer>
   );
 }
@@ -209,7 +223,13 @@ const styles = StyleSheet.create({
   gradeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   toggle: { ...typography.bodySm, color: colors.sageDark, fontWeight: '600' },
   explanation: { ...typography.body, color: colors.textSecondary },
-  source: { ...typography.caption, color: colors.textTertiary },
+  criteria: { ...typography.caption, color: colors.textTertiary },
+  disclaimer: {
+    ...typography.caption,
+    color: colors.textTertiary,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+  },
   noteBox: {
     flexDirection: 'row',
     alignItems: 'center',

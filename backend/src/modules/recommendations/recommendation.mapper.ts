@@ -4,6 +4,7 @@ import {
 } from '@prisma/client';
 import { EvidenceGrade } from './enums/evidence-grade.enum';
 import { RecommendationDto, RecommendationTiming } from './dto/recommendation.dto';
+import { resolveEvidenceSources } from './content/evidence-sources';
 import {
   metricsFromSnapshot,
   PrismaWeatherMetrics,
@@ -25,6 +26,7 @@ export function templateToDto(
     title: t.title,
     grade: t.grade as EvidenceGrade,
     sourceLabel: t.sourceLabel,
+    sources: resolveEvidenceSources(t.sourceIds),
     explanation: t.explanation,
     observationalNote: t.observationalNote,
     ingredientTags: t.ingredientTags,
@@ -42,6 +44,8 @@ export function modelToDto(
     title: r.title,
     grade: r.grade as EvidenceGrade,
     sourceLabel: r.sourceLabel,
+    // 사용자별 생성 추천(B·C)은 참조 문서가 없다. 빈 배열이 "인용 없음"의 표현이다.
+    sources: [],
     explanation: r.explanation,
     observationalNote: r.observationalNote,
     ingredientTags: r.ingredientTags,

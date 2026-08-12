@@ -11,8 +11,15 @@ import { RecommendationTiming } from '../dto/recommendation.dto';
  * 알리는 표기라 LLM이 정하지 않고 서버가 고정한다(허위 인용 방지).
  */
 
-/** B등급(사진+날씨 매칭) 추천의 출처 표기. LLM이 만들어내지 않는다. */
-export const B_GRADE_SOURCE_LABEL = 'AI 종합 분석 · 피부과학 일반 지식 기반';
+/**
+ * B등급(사진+날씨 매칭) 추천의 출처 표기. LLM이 만들어내지 않는다.
+ *
+ * N45: 기존 문구는 '피부과학 일반 지식 기반'이었다. 인용할 문헌이 없다는 말을
+ * 출처 칸에 완곡하게 적은 것이라, 근거가 있는 것처럼 읽혔다. 이 추천은 사용자
+ * 사진과 그날 날씨로 LLM이 만든 문장이므로 붙일 수 있는 인용이 없다.
+ * 없는 출처를 적기보다 생성물임을 밝힌다.
+ */
+export const B_GRADE_SOURCE_LABEL = 'AI 생성 · 내 진단 결과 기반';
 
 /** 규칙 기반 빠른 응답(FALLBACK)의 출처 표기 — AI 결과가 아님을 명시한다. */
 export const FALLBACK_SOURCE_LABEL = '규칙 기반 빠른 응답 · AI 분석 전';
