@@ -31,12 +31,17 @@ import { WithdrawResponseDto } from './dto/withdraw-response.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../../common/strategies/jwt.strategy';
+import { SensitiveThrottle } from '../../common/rate-limit/sensitive-throttle';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  // N47: 가입·로그인·소셜 라우트는 브루트포스/스터핑 표적 — 낮은 한도 +
+  // Redis 장애 시 fail-closed. refresh/logout/me는 가용성 우선(fail-open 유지,
+  // refresh token은 256-bit 난수라 무차별 대입이 비현실적).
+  @SensitiveThrottle()
   @Post('signup')
   @ApiOperation({ summary: '회원가입 (전화번호/이름/생년월일, 비밀번호 없음 — MVP)' })
   @ApiCreatedResponse({ type: UserResponseDto })
@@ -45,6 +50,7 @@ export class AuthController {
     return this.authService.signup(dto);
   }
 
+  @SensitiveThrottle()
   @Post('login')
   @ApiOperation({ summary: '로그인 (전화번호만, 비밀번호 없음 — MVP)' })
   @ApiOkResponse({ type: UserResponseDto })
@@ -55,6 +61,7 @@ export class AuthController {
     return this.authService.login(dto);
   }
 
+  @SensitiveThrottle()
   @Post('social')
   @ApiOperation({
     summary: '소셜 로그인 (Kakao·Google·Apple) — N33',
@@ -71,6 +78,7 @@ export class AuthController {
     return this.authService.socialLogin(dto);
   }
 
+  @SensitiveThrottle()
   @Post('social/link-phone')
   @ApiOperation({
     summary: '소셜 계정 전화번호 연결 (N33 온보딩)',

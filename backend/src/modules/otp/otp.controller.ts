@@ -8,6 +8,7 @@ import { SendOtpResponseDto } from './dto/send-otp-response.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { OTP_PROVIDER } from './providers/otp-provider.interface';
 import type { OtpProvider } from './providers/otp-provider.interface';
+import { SensitiveThrottle } from '../../common/rate-limit/sensitive-throttle';
 
 /**
  * OTP 컨트롤러 (MO — Mobile Originated).
@@ -22,6 +23,8 @@ import type { OtpProvider } from './providers/otp-provider.interface';
  */
 @ApiTags('otp')
 @Controller('otp')
+// N47: OTP는 브루트포스 표적 — 낮은 한도 + Redis 장애 시 fail-closed.
+@SensitiveThrottle()
 export class OtpController {
   constructor(
     private readonly otpService: OtpService,
