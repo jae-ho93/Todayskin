@@ -329,8 +329,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 회원 탈퇴 Soft Delete (N6)
-         * @description PII 즉시 스크럽, 원본 이미지 물리 삭제, 진단 결과 익명 보존. purgeAfter 이후 최종 물리 삭제.
+         * 회원 탈퇴 (N6, N44)
+         * @description PII 즉시 스크럽, 원본 이미지·진단 결과·추천 즉시 물리 삭제(N44 — 익명 보존하지 않는다). 계정 껍데기는 purgeAfter 이후 물리 삭제.
          */
         post: operations["AuthController_withdraw"];
         delete?: never;
@@ -1032,7 +1032,7 @@ export interface components {
             /** @example 2026-08-12T12:00:00.000Z */
             deletedAt: string;
             /**
-             * @description 이 시각 이후 purge 배치가 물리 삭제한다
+             * @description 이 시각 이후 purge 배치가 계정 row를 물리 삭제한다
              * @example 2026-11-10T12:00:00.000Z
              */
             purgeAfter: string;

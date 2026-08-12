@@ -136,9 +136,9 @@ export class AuthController {
 
   @Post('withdraw')
   @ApiOperation({
-    summary: '회원 탈퇴 Soft Delete (N6)',
+    summary: '회원 탈퇴 (N6, N44)',
     description:
-      'PII 즉시 스크럽, 원본 이미지 물리 삭제, 진단 결과 익명 보존. purgeAfter 이후 최종 물리 삭제.',
+      'PII 즉시 스크럽, 원본 이미지·진단 결과·추천 즉시 물리 삭제(N44 — 익명 보존하지 않는다). 계정 껍데기는 purgeAfter 이후 물리 삭제.',
   })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)

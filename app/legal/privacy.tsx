@@ -13,7 +13,7 @@ export default function PrivacyScreen() {
         <Ionicons name="close" size={24} color={colors.textSecondary} onPress={() => router.back()} />
       </View>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        <Text style={styles.effective}>시행일: 2026년 8월 12일</Text>
+        <Text style={styles.effective}>시행일: 2026년 8월 13일</Text>
         {PRIVACY_SECTIONS.map((section) => (
           <View key={section.title} style={styles.section}>
             <Text style={styles.sectionTitle}>{section.title}</Text>
