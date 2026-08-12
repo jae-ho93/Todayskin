@@ -1,18 +1,13 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JOB_DISPATCHER } from './jobs.constants';
 import { JobController } from './job.controller';
 import { JobService } from './job.service';
 import { JobStateService } from './job-state.service';
 import { JobHandlerRegistry } from './handlers/job-handler.registry';
-import { DomainJobHandlers } from './handlers/domain-job.handlers';
 import { InlineJobDispatcher } from './dispatchers/inline.job-dispatcher';
 import { BullMqJobDispatcher } from './dispatchers/bullmq.job-dispatcher';
 import { JobMetricsScheduler } from './job-metrics.scheduler';
-import { RecommendationModule } from '../recommendations/recommendation.module';
-import { ProductModule } from '../products/product.module';
-import { PatternModule } from '../pattern/pattern.module';
-import { NotificationModule } from '../notifications/notification.module';
 
 /**
  * JobsModule — N4 BullMQ 비동기 처리.
@@ -22,21 +17,16 @@ import { NotificationModule } from '../notifications/notification.module';
  * JOB_DISPATCHER=bullmq: REDIS_URL 필수.
  * 테스트 환경(NODE_ENV=test)은 항상 Inline.
  *
- * Domain 모듈과의 순환 의존은 forwardRef로 해소한다.
+ * R12: 도메인 모듈을 import하지 않는다. 인프라인 이 모듈이 도메인을 알면 의존이
+ * 역방향이 되고, 잡 타입이 늘 때마다 forwardRef가 하나씩 붙는다. 비어 있는
+ * `JobHandlerRegistry`만 노출하고 각 도메인 모듈이 자기 핸들러를 등록한다.
  */
 @Module({
-  imports: [
-    ConfigModule,
-    forwardRef(() => RecommendationModule),
-    forwardRef(() => ProductModule),
-    forwardRef(() => PatternModule),
-    forwardRef(() => NotificationModule),
-  ],
+  imports: [ConfigModule],
   controllers: [JobController],
   providers: [
     JobStateService,
     JobHandlerRegistry,
-    DomainJobHandlers,
     InlineJobDispatcher,
     BullMqJobDispatcher,
     {
@@ -65,6 +55,7 @@ import { NotificationModule } from '../notifications/notification.module';
   ],
   // R10: dedupe 조회를 위해 JobStateService도 노출한다. 도메인 서비스가
   // async_jobs를 직접 쿼리하지 않고 이 파사드만 쓰게 해 dedupe 키 규칙을 한곳에 묶는다.
-  exports: [JobService, JobStateService],
+  // R12: 도메인 모듈이 자기 핸들러를 등록할 수 있도록 레지스트리를 노출한다.
+  exports: [JobService, JobStateService, JobHandlerRegistry],
 })
 export class JobsModule {}
