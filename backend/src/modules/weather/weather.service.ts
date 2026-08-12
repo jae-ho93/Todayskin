@@ -41,6 +41,12 @@ interface CollectedWeather {
   lat: number | null;
   lon: number | null;
   cityName: string | null;
+  /**
+   * N41: 근접측정소 조회가 실패해 대표 측정소로 대체됐는지. 이 결과는 구 이름이
+   * 비어 있고 대기질도 다른 동네 값일 수 있어, 캐시에 오래 두면 그 지역 사용자
+   * 전원이 같은 오답을 본다(캐시 키가 좌표를 소수 2자리로 뭉치기 때문).
+   */
+  stationLookupFailed: boolean;
 }
 
 /**
@@ -53,6 +59,8 @@ export interface RegionMeta {
   stationName: string;
   regionName: string;
   cityName: string | null;
+  /** 표시용 시/군/구. 광역 단위라 특정할 수 없으면 null (N41). */
+  districtName: string | null;
 }
 
 /**
@@ -125,7 +133,7 @@ export class WeatherService {
 
     // LIVE 수집 결과를 캐시에 기록. UNAVAILABLE도 캐싱해 짧은 시간 내
     // 외부 API 연쇄 실패 시 동일 응답을 반환한다(외부 API 보호).
-    await this.saveCache(cacheKey, dto);
+    await this.saveCache(cacheKey, dto, collected.stationLookupFailed);
     return dto;
   }
 
@@ -179,65 +187,81 @@ export class WeatherService {
     lon?: number,
     meta?: RegionMeta,
   ): Promise<CollectedWeather> {
-    const hasCoords = lat !== undefined && lon !== undefined;
-    const latOut: number | null = lat ?? null;
-    const lonOut: number | null = lon ?? null;
-
-    let areaNo: string;
-    let stationName: string;
-    let regionName: string;
-    let districtName: string | null = null;
-    let cityName: string | null = null;
-    let uv: UvForecastWithTime;
-    let air: AirQualityDataWithTime;
+    // N41: 세 분기가 각자 완전한 객체를 반환한다. 예전에는 `let`에 나눠 대입해서
+    // 한 분기가 `districtName`을 빠뜨려도 컴파일러가 잡지 못했고, 실제로 스케줄러
+    // 경로 스냅샷의 구 이름이 전부 null이었다.
+    const location = { lat: lat ?? null, lon: lon ?? null };
 
     if (meta) {
-      areaNo = meta.areaNo;
-      stationName = meta.stationName;
-      regionName = meta.regionName;
-      cityName = meta.cityName ?? null;
-      [uv, air] = await Promise.all([
-        this.kmaClient.fetchUvIndex(areaNo),
-        this.airKoreaClient.fetchAirQuality(stationName),
+      const [uv, air] = await Promise.all([
+        this.kmaClient.fetchUvIndex(meta.areaNo),
+        this.airKoreaClient.fetchAirQuality(meta.stationName),
       ]);
-    } else if (hasCoords) {
-      const region = findNearestRegion(lat!, lon!);
-      areaNo = region.kmaAreaNo;
-      // 자외선지수 조회는 근접측정소 조회 결과와 무관(areaNo만 필요)하므로
-      // 순차 대기하지 않고 병렬로 실행해 두 정부 API 모두 느릴 때의 왕복 시간을 줄인다.
-      const [nearest, uvResult] = await Promise.all([
-        this.stationClient.fetchNearestStation(lat!, lon!),
-        this.kmaClient.fetchUvIndex(areaNo),
-      ]);
-      stationName = nearest?.stationName ?? region.airkoreaStationName;
-      // F56: 시/도는 근사표의 정식 명칭(예: '부산광역시'), 구/군은 최인접 측정소 주소
-      // 토큰(예: '해운대구'). 측정소 조회 실패 시 근사표 대표 구로 폴백한다.
-      regionName = region.cityName;
-      cityName = nearest?.cityName ?? null;
-      districtName = nearest?.districtName ?? region.airkoreaStationName;
-      uv = uvResult;
-      air = await this.airKoreaClient.fetchAirQuality(stationName);
-    } else {
-      areaNo = this.defaultKmaAreaNo;
-      stationName = this.defaultStationName;
-      regionName = DEFAULT_REGION.cityName;
-      // N25: 기본 지역은 두 외부 API가 서로 독립이므로 병렬 호출한다.
-      [uv, air] = await Promise.all([
-        this.kmaClient.fetchUvIndex(areaNo),
-        this.airKoreaClient.fetchAirQuality(stationName),
-      ]);
+      return {
+        uv,
+        air,
+        regionName: meta.regionName,
+        districtName: meta.districtName,
+        kmaAreaNo: meta.areaNo,
+        airkoreaStation: meta.stationName,
+        ...location,
+        cityName: meta.cityName ?? null,
+        stationLookupFailed: false,
+      };
     }
 
+    if (lat !== undefined && lon !== undefined) {
+      const region = findNearestRegion(lat, lon);
+      // 자외선지수 조회는 근접측정소 조회 결과와 무관(areaNo만 필요)하므로
+      // 순차 대기하지 않고 병렬로 실행해 두 정부 API 모두 느릴 때의 왕복 시간을 줄인다.
+      const [nearest, uv] = await Promise.all([
+        this.stationClient.fetchNearestStation(lat, lon),
+        this.kmaClient.fetchUvIndex(region.kmaAreaNo),
+      ]);
+
+      // 측정소 조회가 실패하면 근사표의 대표 측정소로 대기질을 조회한다. 이건
+      // 데이터 출처의 폴백이라 타당하다. 반면 **구 이름은 폴백하지 않는다** —
+      // 측정소명은 행정구역이 아니고('인계동' 같은 동 이름도 있다), 실제로
+      // 해운대구가 부산 대표 측정소명인 '중구'로 표시됐다. 모르면 비운다.
+      const stationName = nearest?.stationName ?? region.airkoreaStationName;
+      if (!nearest) {
+        this.logger.warn(
+          `Nearest station lookup failed (lat=${lat}, lon=${lon}); ` +
+            `falling back to station "${stationName}", district left empty`,
+        );
+      }
+
+      return {
+        uv,
+        air: await this.airKoreaClient.fetchAirQuality(stationName),
+        // F56: 시/도는 근사표의 정식 명칭(예: '부산광역시'), 구/군은 최인접 측정소
+        // 주소 토큰(예: '해운대구').
+        regionName: region.cityName,
+        districtName: nearest?.districtName ?? null,
+        kmaAreaNo: region.kmaAreaNo,
+        airkoreaStation: stationName,
+        ...location,
+        cityName: nearest?.cityName ?? null,
+        stationLookupFailed: !nearest,
+      };
+    }
+
+    // N25: 기본 지역은 두 외부 API가 서로 독립이므로 병렬 호출한다.
+    const [uv, air] = await Promise.all([
+      this.kmaClient.fetchUvIndex(this.defaultKmaAreaNo),
+      this.airKoreaClient.fetchAirQuality(this.defaultStationName),
+    ]);
     return {
       uv,
       air,
-      regionName,
-      districtName,
-      kmaAreaNo: areaNo,
-      airkoreaStation: stationName,
-      lat: latOut,
-      lon: lonOut,
-      cityName,
+      regionName: DEFAULT_REGION.cityName,
+      // 위치 권한이 없어 기본 지역으로 조회한 것이므로 사용자의 구를 알 수 없다.
+      districtName: null,
+      kmaAreaNo: this.defaultKmaAreaNo,
+      airkoreaStation: this.defaultStationName,
+      ...location,
+      cityName: null,
+      stationLookupFailed: false,
     };
   }
 
@@ -294,14 +318,23 @@ export class WeatherService {
    * 지표가 하나라도 null(예: 에어코리아만 일시적으로 504)인 결과는 기본 TTL(5분) 대신 짧은 TTL로
    * 캐싱한다 — 그대로 두면 잠깐의 외부 API 오류 하나가 "측정 불가"를 5분 내내 그대로 재생시킨다.
    * 완전히 성공한 결과만 기본 TTL을 그대로 쓴다.
+   *
+   * N41: 측정소 조회 실패도 degraded로 본다. 지표는 다 채워졌더라도 그 값은 대표 측정소의
+   * 것이라 사용자 동네와 다를 수 있다. 캐시 키가 좌표를 소수 2자리로 뭉치기 때문에
+   * 이런 결과가 기본 TTL로 들어가면 그 일대 사용자 전원이 5분간 같은 오답을 본다.
    */
-  private async saveCache(key: string, dto: WeatherSnapshotDto): Promise<void> {
+  private async saveCache(
+    key: string,
+    dto: WeatherSnapshotDto,
+    stationLookupFailed = false,
+  ): Promise<void> {
     if (!this.redisService.isAvailable()) return;
     const payload: CachedWeatherPayload = {
       dto: { ...dto },
       cachedAt: new Date().toISOString(),
     };
-    const ttl = this.isDegraded(dto) ? DEGRADED_CACHE_TTL_SECONDS : undefined;
+    const degraded = stationLookupFailed || this.isDegraded(dto);
+    const ttl = degraded ? DEGRADED_CACHE_TTL_SECONDS : undefined;
     await this.redisService.setJson(key, payload, ttl);
   }
 
