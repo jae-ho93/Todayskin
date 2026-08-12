@@ -382,11 +382,17 @@ model WeatherSnapshot {
   so2Value       Float?      @map("so2_value")
   coValue        Float?      @map("co_value")
 
+  /// N53: 기상청 초단기실황(T1H/REH). 피부 건조와 가장 직접 연관된 지표.
+  temperature Float?
+  humidity    Float?
+
   /// N42: 값이 비어 있는 이유가 "수집 실패"인지 "측정값 없음"인지 구분한다.
   /// 둘 다 null이면 화면이 똑같이 `-`로 그려서, 사용자는 일시적 장애인지
   /// 원래 값이 없었는지 알 수 없다. 외부 API 단위로 나눠 둔다.
   uvCollectionFailed  Boolean @default(false) @map("uv_collection_failed")
   airCollectionFailed Boolean @default(false) @map("air_collection_failed")
+  /// N53: 초단기실황(기온·습도) 수집 실패 여부.
+  nowcastCollectionFailed Boolean @default(false) @map("nowcast_collection_failed")
 
   source WeatherSource @default(LIVE)
 

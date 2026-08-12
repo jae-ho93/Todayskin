@@ -64,6 +64,13 @@ export class WeatherSnapshotDto {
   airCollectionFailed?: boolean;
 
   @ApiPropertyOptional({
+    description: 'N53: 기온·습도(초단기실황) 수집이 실패했는지.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  nowcastCollectionFailed?: boolean;
+
+  @ApiPropertyOptional({
     type: Number,
     description: '자외선 지수(현재 시점 예보)',
     nullable: true,
@@ -208,6 +215,24 @@ export class WeatherSnapshotDto {
   @IsOptional()
   @IsNumber()
   coValue?: number | null;
+
+  @ApiPropertyOptional({
+    type: Number,
+    description: 'N53: 기온(°C, 기상청 초단기실황 T1H)',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsNumber()
+  temperature?: number | null;
+
+  @ApiPropertyOptional({
+    type: Number,
+    description: 'N53: 상대습도(%, 기상청 초단기실황 REH)',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsNumber()
+  humidity?: number | null;
 }
 
 /**

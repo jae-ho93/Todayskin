@@ -17,7 +17,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 describe('WeatherSnapshot 영구 저장 (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
-  let kmaClient: { fetchUvIndex: jest.Mock };
+  let kmaClient: { fetchUvIndex: jest.Mock; fetchNowcast: jest.Mock };
   let airKoreaClient: { fetchAirQuality: jest.Mock };
   let stationClient: { fetchNearestStation: jest.Mock };
 
@@ -27,7 +27,16 @@ describe('WeatherSnapshot 영구 저장 (e2e)', () => {
   beforeAll(async () => {
     if (!hasDb) return;
 
-    kmaClient = { fetchUvIndex: jest.fn() };
+    kmaClient = {
+      fetchUvIndex: jest.fn(),
+      // N53: 실황(기온·습도)은 이 suite의 관심사가 아니므로 빈 값으로 고정.
+      fetchNowcast: jest.fn().mockResolvedValue({
+        temperature: null,
+        humidity: null,
+        observedAt: null,
+        failed: false,
+      }),
+    };
     airKoreaClient = { fetchAirQuality: jest.fn() };
     stationClient = {
       fetchNearestStation: jest.fn().mockResolvedValue({

@@ -51,7 +51,16 @@ describe('API Response Contract (e2e)', () => {
       imports: [AppModule],
     })
       .overrideProvider(KmaClient)
-      .useValue({ fetchUvIndex: jest.fn() })
+      .useValue({
+        fetchUvIndex: jest.fn(),
+        // N53: 기본은 빈 실황 — 각 테스트가 필요 시 덮어쓴다.
+        fetchNowcast: jest.fn().mockResolvedValue({
+          temperature: null,
+          humidity: null,
+          observedAt: null,
+          failed: false,
+        }),
+      })
       .overrideProvider(AirKoreaClient)
       .useValue({ fetchAirQuality: jest.fn() })
       .overrideProvider(StationClient)

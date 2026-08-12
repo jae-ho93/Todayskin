@@ -27,6 +27,7 @@ const NON_METRIC_FIELDS = new Set([
   // N42: 지표가 아니라 "그 지표를 왜 못 받았는가"를 말하는 메타 컬럼.
   'uvCollectionFailed',
   'airCollectionFailed',
+  'nowcastCollectionFailed',
 ]);
 
 const snapshotRow = (over: Partial<WeatherSnapshot> = {}): WeatherSnapshot =>
@@ -57,6 +58,8 @@ const snapshotRow = (over: Partial<WeatherSnapshot> = {}): WeatherSnapshot =>
     no2Value: 0.02,
     so2Value: 0.005,
     coValue: 0.4,
+    temperature: 27.3,
+    humidity: 68,
     source: 'LIVE',
     ...over,
   }) as WeatherSnapshot;
@@ -107,6 +110,7 @@ describe('weather-snapshot.mapper (R22)', () => {
       {
         uv: { current: 8, peak: 9, peakHour: 13 },
         air: { ozone: 0.05, pm25: 20, pm10: 45, cai: 60, no2: 0.02, so2: 0.005, co: 0.4 },
+        nowcast: { temperature: 27.3, humidity: 68 },
       },
       new WeatherStatusPolicy(),
     );
@@ -116,6 +120,9 @@ describe('weather-snapshot.mapper (R22)', () => {
     // PM2.5 20 = 15 초과 35 이하 → 보통
     expect(metrics.pm25Status).toBe(AirStatus.MODERATE);
     expect(metrics.pm10Status).toBe(AirStatus.MODERATE);
+    // N53: 기온·습도는 등급 없이 원값 그대로.
+    expect(metrics.temperature).toBe(27.3);
+    expect(metrics.humidity).toBe(68);
     expect(Object.keys(metrics).sort()).toEqual([...WEATHER_METRIC_KEYS].sort());
   });
 
@@ -124,6 +131,7 @@ describe('weather-snapshot.mapper (R22)', () => {
       {
         uv: { current: null, peak: null, peakHour: null },
         air: { ozone: null, pm25: null, pm10: null, cai: null, no2: null, so2: null, co: null },
+        nowcast: { temperature: null, humidity: null },
       },
       new WeatherStatusPolicy(),
     );

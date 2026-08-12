@@ -84,6 +84,12 @@ describe('Recommendation & Product (e2e)', () => {
           peakHour: 13,
           observedAt: new Date(),
         }),
+        fetchNowcast: jest.fn().mockResolvedValue({
+          temperature: 24.5,
+          humidity: 55,
+          observedAt: new Date(),
+          failed: false,
+        }),
       })
       .overrideProvider(AirKoreaClient)
       .useValue({

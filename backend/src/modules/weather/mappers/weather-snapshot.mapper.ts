@@ -33,6 +33,8 @@ export const WEATHER_METRIC_KEYS = [
   'no2Value',
   'so2Value',
   'coValue',
+  'temperature',
+  'humidity',
 ] as const;
 
 export type WeatherMetricKey = (typeof WEATHER_METRIC_KEYS)[number];
@@ -55,6 +57,9 @@ export type WeatherMetrics = {
   no2Value: number | null;
   so2Value: number | null;
   coValue: number | null;
+  /** N53: 초단기실황 기온(°C)·습도(%). 등급 없이 원값만 노출한다. */
+  temperature: number | null;
+  humidity: number | null;
 };
 
 /**
@@ -86,6 +91,8 @@ export interface CollectedMetrics {
     so2: number | null;
     co: number | null;
   };
+  /** N53: 초단기실황(기온·습도). */
+  nowcast: { temperature: number | null; humidity: number | null };
 }
 
 /** 수집 원본 → 지표 묶음. 등급 계산 규칙이 여기 한 곳에만 있다. */
@@ -110,6 +117,9 @@ export function metricsFromCollected(
     no2Value: c.air.no2,
     so2Value: c.air.so2,
     coValue: c.air.co,
+    // N53: 기온·습도는 공식 등급 체계가 없어 원값만 저장한다.
+    temperature: c.nowcast.temperature,
+    humidity: c.nowcast.humidity,
   };
 }
 

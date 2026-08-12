@@ -60,6 +60,12 @@ describe('Consent & Image Storage (e2e)', () => {
           peakHour: null,
           observedAt: null,
         }),
+        fetchNowcast: jest.fn().mockResolvedValue({
+          temperature: null,
+          humidity: null,
+          observedAt: null,
+          failed: false,
+        }),
       })
       .overrideProvider(AirKoreaClient)
       .useValue({

@@ -16,6 +16,22 @@ export function WeatherCard({ weather }: { weather: WeatherSnapshot }) {
           </Text>
           <Text style={styles.moreLink}>자세히 보기 →</Text>
         </View>
+        {/* N53: 기온·습도 실황 요약 — 값이 하나라도 있으면 보여준다 */}
+        {(typeof weather.temperature === 'number' ||
+          typeof weather.humidity === 'number') && (
+          <Text style={styles.nowcastLine}>
+            {[
+              typeof weather.temperature === 'number'
+                ? `기온 ${weather.temperature}°C`
+                : null,
+              typeof weather.humidity === 'number'
+                ? `습도 ${weather.humidity}%`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </Text>
+        )}
         {weather.caiStatus && (
           <Text style={styles.caiLine}>
             오늘 종합 대기질: {AIR_STATUS_LABEL[weather.caiStatus]}
@@ -50,6 +66,12 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.sageDark,
     fontWeight: '600',
+  },
+  nowcastLine: {
+    ...typography.bodySm,
+    color: colors.textPrimary,
+    fontWeight: '600',
+    marginTop: spacing.xs,
   },
   caiLine: {
     ...typography.bodySm,
