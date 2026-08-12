@@ -10,6 +10,7 @@ import {
   SocialProvider,
   SocialProviderError,
   SocialProviderName,
+  SocialVerifyContext,
 } from './social-provider.interface';
 import { KakaoSocialProvider } from './kakao.social-provider';
 import { GoogleSocialProvider } from './google.social-provider';
@@ -56,6 +57,7 @@ export class SocialAuthService {
   async verify(
     provider: SocialProviderName,
     accessToken: string,
+    context?: SocialVerifyContext,
   ): Promise<SocialProfile> {
     const impl = this.providers.get(provider);
     if (!impl) {
@@ -64,7 +66,7 @@ export class SocialAuthService {
       );
     }
     try {
-      return await impl.verify(accessToken);
+      return await impl.verify(accessToken, context);
     } catch (e) {
       if (e instanceof SocialProviderError) {
         throw new UnauthorizedException(e.message);

@@ -20,7 +20,7 @@ describe('SocialAuthService', () => {
   const realProviders = (
     config: ConfigService,
   ): [KakaoSocialProvider, GoogleSocialProvider, AppleSocialProvider] => [
-    new KakaoSocialProvider(),
+    new KakaoSocialProvider(config),
     new GoogleSocialProvider(config),
     new AppleSocialProvider(config),
   ];
@@ -70,10 +70,8 @@ describe('SocialAuthService', () => {
   });
 
   it('MOCK_SOCIAL 미설정이면 실제 제공자를 라우팅한다 (kakao는 검증 시 네트워크 실패 → 401)', async () => {
-    const service = new SocialAuthService(
-      configMock(),
-      ...realProviders(configMock()),
-    );
+    const config = configMock({ KAKAO_APP_ID: '123456' });
+    const service = new SocialAuthService(config, ...realProviders(config));
     // 실제 KakaoSocialProvider는 kapi.kakao.com을 호출한다 — 테스트에서는
     // 네트워크 실패도 401 매핑으로 이어지는지만 확인한다.
     const originalFetch = globalThis.fetch;
@@ -93,6 +91,16 @@ describe('SocialAuthService', () => {
       ...realProviders(configMock({ GOOGLE_CLIENT_ID: '' })),
     );
     await expect(service.verify('google', 'any-id-token')).rejects.toThrow(
+      UnauthorizedException,
+    );
+  });
+
+  it('kakao 제공자는 KAKAO_APP_ID가 없으면 명시적 401 (서버 설정 누락, N46)', async () => {
+    const service = new SocialAuthService(
+      configMock(),
+      ...realProviders(configMock()),
+    );
+    await expect(service.verify('kakao', 'any-token')).rejects.toThrow(
       UnauthorizedException,
     );
   });

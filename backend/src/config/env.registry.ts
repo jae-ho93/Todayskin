@@ -478,6 +478,16 @@ export const ENV_REGISTRY: EnvVarDefinition[] = [
     schema: Joi.string().allow('').default(''),
   },
   {
+    // N46: 카카오 토큰 앱 바인딩 검증 — access_token_info의 app_id와 비교.
+    key: 'KAKAO_APP_ID',
+    owner: 'auth',
+    description: '카카오 앱 id (타 앱 발급 토큰 차단, access_token_info 검증)',
+    requiredIn: 'never',
+    safeDefault: '',
+    secret: false,
+    schema: Joi.string().allow('').pattern(/^\d*$/).default(''),
+  },
+  {
     key: 'MOCK_SOCIAL',
     owner: 'auth',
     description: '소셜 토큰 검증 mock (dev/test only)',

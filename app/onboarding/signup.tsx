@@ -152,11 +152,11 @@ export default function SignupScreen() {
     }
   };
 
-  const handleSocialToken = useCallback(async (provider: SocialProvider, token: string) => {
+  const handleSocialToken = useCallback(async (provider: SocialProvider, token: string, extra?: { nonce?: string }) => {
     setBusyProvider(provider);
     setError(null);
     try {
-      const user = await api.socialLogin(provider, token);
+      const user = await api.socialLogin(provider, token, extra?.nonce);
       await saveSession(user);
       router.replace(user.isNewUser ? '/onboarding/consent?social=1' : '/(tabs)');
     } catch (e) {

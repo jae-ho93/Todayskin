@@ -272,6 +272,43 @@ describe('설정·프로필 응답 계약', () => {
   });
 });
 
+describe('POST /auth/social 계약 (N46)', () => {
+  const socialUser = {
+    id: 1,
+    phoneNumber: null,
+    name: '애플 회원',
+    birthDate: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    accessToken: 'access-1',
+    isNewUser: true,
+  };
+
+  it('apple은 리플레이 방지 nonce를 body에 함께 보낸다', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, socialUser));
+
+    await api.socialLogin('apple', 'identity-token', 'nonce-abc');
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(init?.body as string)).toEqual({
+      provider: 'apple',
+      accessToken: 'identity-token',
+      nonce: 'nonce-abc',
+    });
+  });
+
+  it('nonce가 없는 제공자(kakao)는 body에 nonce 키를 넣지 않는다', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, socialUser));
+
+    await api.socialLogin('kakao', 'kakao-access-token');
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(init?.body as string)).toEqual({
+      provider: 'kakao',
+      accessToken: 'kakao-access-token',
+    });
+  });
+});
+
 describe('진단 제출 오류 카피 (F74)', () => {
   it('45초 타임아웃(abort)은 기술 문구 대신 원인 카피로 바꿔 던진다', async () => {
     fetchMock.mockRejectedValueOnce(Object.assign(new Error('Aborted'), { name: 'AbortError' }));

@@ -941,6 +941,11 @@ export interface components {
              * @example eyJhbGciOiJSUzI1NiIs...
              */
             accessToken: string;
+            /**
+             * @description apple 전용(필수): 클라이언트가 로그인 요청마다 생성한 리플레이 방지 nonce (N46)
+             * @example b1c2d3e4-...
+             */
+            nonce?: string;
         };
         SocialLoginResponseDto: {
             /** @example 1 */
