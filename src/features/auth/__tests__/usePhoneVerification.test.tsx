@@ -42,13 +42,12 @@ describe('usePhoneVerification', () => {
 
     expect(result.current.state).toEqual({
       step: 'sent',
-      code: '123456',
-      recipient: '01012345678',
+      issued: { code: '123456', recipient: '01012345678' },
     });
     expect(result.current.codeIssued).toBe(true);
   });
 
-  it('발송이 실패하면 idle로 돌아가고 오류를 알린다', async () => {
+  it('첫 발송이 실패하면 idle로 돌아가고 오류를 알린다', async () => {
     jest.spyOn(api, 'sendOtp').mockRejectedValue(new Error('발송 실패'));
     const { result, onError } = setup();
 
@@ -57,7 +56,50 @@ describe('usePhoneVerification', () => {
     });
 
     expect(result.current.state.step).toBe('idle');
+    expect(result.current.codeIssued).toBe(false);
     expect(onError).toHaveBeenCalledWith('발송 실패');
+  });
+
+  // 재발송이 실패해도 앞서 받은 코드는 서버에서 아직 유효하므로 버리지 않는다.
+  it('재발송이 실패하면 직전 코드를 유지한다', async () => {
+    const { result, onError } = setup();
+
+    await act(async () => {
+      await result.current.sendCode('01012345678');
+    });
+
+    jest.spyOn(api, 'sendOtp').mockRejectedValue(new Error('발송 실패'));
+    await act(async () => {
+      await result.current.sendCode('01012345678');
+    });
+
+    expect(result.current.state).toEqual({
+      step: 'sent',
+      issued: { code: '123456', recipient: '01012345678' },
+    });
+    expect(result.current.codeIssued).toBe(true);
+    expect(onError).toHaveBeenCalledWith('발송 실패');
+  });
+
+  it('새 시도를 시작하면 직전 오류 문구를 지운다', async () => {
+    jest.spyOn(api, 'verifyOtp').mockRejectedValue(new Error('코드가 달라요'));
+    const { result, onError } = setup();
+
+    await act(async () => {
+      await result.current.sendCode('01012345678');
+    });
+    await act(async () => {
+      await result.current.verify();
+    });
+    expect(onError).toHaveBeenCalledWith('코드가 달라요');
+
+    jest.spyOn(api, 'verifyOtp').mockResolvedValue(undefined as never);
+    await act(async () => {
+      await result.current.verify();
+    });
+
+    expect(result.current.verified).toBe(true);
+    expect(onError).toHaveBeenLastCalledWith(null);
   });
 
   it('검증에 성공하면 verified로 가고 완료를 알린다', async () => {

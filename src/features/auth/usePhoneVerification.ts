@@ -10,17 +10,33 @@ import type { OtpPurpose } from '../../types';
  * `verifyingOtp` 여섯 개를 따로 들고 있었다. "발송 중인데 이미 인증됨" 같은 불가능한
  * 조합이 표현 가능했고, 번호를 고칠 때 여섯 개를 모두 되돌려야 했다.
  */
+/** 서버가 발급한 코드와 그 코드를 문자로 보낼 번호. */
+interface IssuedCode {
+  code: string;
+  recipient: string;
+}
+
 export type PhoneVerificationState =
   | { step: 'idle' }
-  | { step: 'sending' }
-  | { step: 'sent'; code: string; recipient: string }
-  | { step: 'verifying'; code: string; recipient: string }
-  | { step: 'verified'; code: string; recipient: string };
+  // 재발송 중에도 직전 코드를 들고 있는다. 발송이 실패하면 그 코드는 서버에서 아직
+  // 유효하므로 버리지 않고, 화면의 "인증하기" 버튼도 사라지지 않는다.
+  | { step: 'sending'; issued: IssuedCode | null }
+  | { step: 'sent'; issued: IssuedCode }
+  | { step: 'verifying'; issued: IssuedCode }
+  | { step: 'verified'; issued: IssuedCode };
+
+/** 지금 쓸 수 있는 코드가 있으면 반환한다. */
+function issuedOf(state: PhoneVerificationState): IssuedCode | null {
+  return state.step === 'idle' ? null : state.issued;
+}
 
 interface UsePhoneVerificationOptions {
   purpose: OtpPurpose;
-  /** 발송·검증 실패 메시지. 화면이 자기 에러 표시 방식(문구/토스트)을 정한다. */
-  onError: (message: string) => void;
+  /**
+   * 발송·검증 실패 메시지. 화면이 자기 에러 표시 방식(문구/토스트)을 정한다.
+   * 새 시도를 시작할 때 `null`로 불러 직전 실패 문구를 지운다.
+   */
+  onError: (message: string | null) => void;
   onVerified?: () => void;
 }
 
@@ -52,17 +68,21 @@ export function usePhoneVerification({
 
   const sendCode = useCallback(
     async (phoneDigits: string) => {
-      setState((prev) => (prev.step === 'sending' ? prev : { step: 'sending' }));
+      onErrorRef.current(null);
+      setState((prev) => ({ step: 'sending', issued: issuedOf(prev) }));
       phoneRef.current = phoneDigits;
       try {
         const response = await api.sendOtp(phoneDigits, purpose);
         setState({
           step: 'sent',
-          code: response.code,
-          recipient: response.recipientNumber,
+          issued: { code: response.code, recipient: response.recipientNumber },
         });
       } catch (e) {
-        setState({ step: 'idle' });
+        // 재발송이 실패했으면 직전 코드로 되돌린다 — 그 코드는 아직 유효하다.
+        setState((prev) => {
+          const issued = issuedOf(prev);
+          return issued ? { step: 'sent', issued } : { step: 'idle' };
+        });
         onErrorRef.current(
           e instanceof Error ? e.message : '인증번호 발송에 실패했습니다.',
         );
@@ -72,13 +92,14 @@ export function usePhoneVerification({
   );
 
   const openSms = useCallback(async () => {
-    if (state.step === 'idle' || state.step === 'sending') return;
+    const issued = issuedOf(state);
+    if (!issued) return;
     try {
       smsOpenedRef.current = true;
       // iOS는 `?body=` 대신 `&body=`를 요구한다 — 문자 시트가 본문 채워진 채 열린다.
       const sep = Platform.OS === 'ios' ? '&' : '?';
       await Linking.openURL(
-        `sms:${state.recipient}${sep}body=${encodeURIComponent(`인증코드 ${state.code}`)}`,
+        `sms:${issued.recipient}${sep}body=${encodeURIComponent(`인증코드 ${issued.code}`)}`,
       );
     } catch {
       onErrorRef.current('문자 앱을 열 수 없어요. 다시 시도해주세요.');
@@ -86,16 +107,17 @@ export function usePhoneVerification({
   }, [state]);
 
   const verify = useCallback(async () => {
-    if (state.step !== 'sent' || state.code.length !== 6) return;
-    const { code, recipient } = state;
-    setState({ step: 'verifying', code, recipient });
+    if (state.step !== 'sent' || state.issued.code.length !== 6) return;
+    const { issued } = state;
+    onErrorRef.current(null);
+    setState({ step: 'verifying', issued });
     try {
-      await api.verifyOtp(phoneRef.current, code, purpose);
-      setState({ step: 'verified', code, recipient });
+      await api.verifyOtp(phoneRef.current, issued.code, purpose);
+      setState({ step: 'verified', issued });
       Keyboard.dismiss();
       onVerifiedRef.current?.();
     } catch (e) {
-      setState({ step: 'sent', code, recipient });
+      setState({ step: 'sent', issued });
       onErrorRef.current(
         e instanceof Error ? e.message : '인증을 확인하지 못했어요. 다시 시도해주세요.',
       );
@@ -118,8 +140,8 @@ export function usePhoneVerification({
   return {
     state,
     verified: state.step === 'verified',
-    /** 코드를 받은 뒤(문자 발송 가능) */
-    codeIssued: state.step !== 'idle' && state.step !== 'sending',
+    /** 문자로 보낼 코드를 갖고 있는지 — 재발송 중에도 유지된다 */
+    codeIssued: issuedOf(state) !== null,
     sending: state.step === 'sending',
     verifying: state.step === 'verifying',
     sendCode,
