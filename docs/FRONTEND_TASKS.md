@@ -11,7 +11,7 @@ Expo SDK 54 기준. 백엔드 규칙은 `docs/BACKEND_TASKS.md`, 협업은 `CONT
 - `backend/` 수정 금지. API를 새로 만들지 말 것. 이 문서·Swagger에 적힌 계약만 사용.
 - 리뷰어 1명 강제 없음. **일하는 FE(또는 FE AI)가 자기 PR을 squash merge.**
 - 비밀번호·아이디/비번 찾기·이름+생일 찾기 UI **신설 금지**.
-- 품질 다듬기·구조 정리 = 나중 **총리팩** 웨이브.
+- 품질 다듬기·구조 정리 = **총리팩 웨이브(R1~R35, 2026-08-12 완료).** 남긴 3건은 F63.
 - 가상 제품·가짜 구독 가격 카드·목업 성공 로그인 금지.
 
 ## FE 구현 순서 (사이클 반복)
@@ -764,6 +764,18 @@ F0 → F1 → F2 → F3 → F6 → F4 → F16 → F8 → F10 → F15 → F13 →
 
 - [x] `app/onboarding/login.tsx` — ScrollView + flex-start
 - [x] `app/onboarding/signup.tsx` — ScrollView + flex-start (phone/profile 두 단계)
+
+### F63. 리팩토링 B6 잔여 3건 — 보류 (2026-08-12)
+
+리팩토링 R1~R35(묶음 B1~B6)를 마치면서 **판단해서 남긴** 프론트 항목이다. 미완성 방치가 아니라
+지금 하면 이득보다 diff가 큰 것들이다. 근거는 [`REFACTORING_BACKLOG.md`](REFACTORING_BACKLOG.md)의
+해당 R 상세에 있다. 셋 다 서로 독립이므로 필요해지는 것만 꺼내 쓴다.
+
+- [ ] `usePhoneVerification`을 `app/onboarding/login.tsx` · `social-phone.tsx`에도 적용한다. 두 화면이 가입과 같은 문자 인증 상태 클러스터를 갖고 있다. **셋 중 가장 실익이 크다** — 인증 흐름을 고칠 때 세 화면을 따로 고치지 않아도 된다 (R27 후속)
+- [ ] 수기 타입(`src/types/index.ts`)을 생성 타입(`src/types/api.generated.ts`)으로 전면 재export한다. 지금은 컴파일 타임 적합성 테스트 + CI 드리프트 검사로 어긋남을 막고 있어 급하지 않다 (R28 후반)
+- [ ] `StyleSheet`를 `*.styles.ts`로 분리한다. 중복 제거가 아니라 파일 분할이라 이득이 가장 작다 (R27 3번)
+
+착수 조건: 해당 화면을 다른 이유로 열게 될 때 함께 처리한다. 이것만을 위한 PR은 만들지 않는다.
 
 ## 프론트 범위 완료 기록 (백엔드 보드에서 이동, 2026-08-12)
 
