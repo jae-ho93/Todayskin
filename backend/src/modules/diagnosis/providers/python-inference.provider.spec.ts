@@ -24,6 +24,14 @@ describe('PythonInferenceProvider', () => {
     ],
   };
 
+  // provider가 채워 넣는 선택 필드까지 포함한 최종 형태.
+  // 응답에 acneReport/diseaseClassification이 없으면 null로 정규화된다.
+  const normalizedResponse = {
+    ...validResponse,
+    acneReport: null,
+    diseaseClassification: null,
+  };
+
   afterEach(() => {
     jest.restoreAllMocks();
   });
@@ -37,8 +45,7 @@ describe('PythonInferenceProvider', () => {
     const provider = new PythonInferenceProvider('http://127.0.0.1:8000', 'test-shared-secret');
     const result = await provider.infer(images);
 
-    // acneReport/diseaseClassification: inference-service 응답에 없으면 null로 채워진다.
-    expect(result).toEqual({ ...validResponse, acneReport: null, diseaseClassification: null });
+    expect(result).toEqual(normalizedResponse);
     expect(global.fetch).toHaveBeenCalledWith(
       'http://127.0.0.1:8000/infer',
       expect.objectContaining({
@@ -111,7 +118,7 @@ describe('PythonInferenceProvider', () => {
         .mockName('fetch') as unknown as typeof fetch;
 
       const provider = new PythonInferenceProvider('http://127.0.0.1:8000', 'secret');
-      await expect(provider.infer(images)).resolves.toEqual(validResponse);
+      await expect(provider.infer(images)).resolves.toEqual(normalizedResponse);
       expect(global.fetch).toHaveBeenCalledTimes(2);
     });
 
