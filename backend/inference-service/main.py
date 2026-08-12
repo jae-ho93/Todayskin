@@ -13,6 +13,8 @@ N13 internal boundary hardening:
   동작해 익명 트래픽을 받지 않는다. ``/health``만 무인증(ECS 헬스체크용)이다.
 - upload content-type and size are capped to match the NestJS contract
   (jpeg/png/webp, 10MB) before any model work.
+- N49: 품질 게이트(quality.evaluate_quality) — 어두움/흔들림/저해상도 사진은
+  추론 슬롯을 잡기 전에 422 + 사유 코드(TOO_DARK/BLURRY/TOO_SMALL)로 거부한다.
 - slot wait / execution time, in-flight concurrency and status counters are
   exported via ``GET /metrics`` (Prometheus text).
 - a wall-clock inference timeout returns 503 (kept shorter than the NestJS
@@ -42,6 +44,7 @@ from starlette.responses import PlainTextResponse
 from analyzer import NoFaceDetected, SkinAnalyzer
 from metrics import Metrics
 from part_mapping import map_to_app_schema
+from quality import evaluate_quality
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("inference-service")
@@ -162,6 +165,15 @@ async def infer(front: UploadFile = File(...)):
         if not image_bytes:
             raise HTTPException(status_code=400, detail="빈 이미지입니다")
 
+        # 2.5. N49: 품질 게이트 — 어두움/흔들림/저해상도는 모델 비용을 쓰기 전에
+        #      422 + 사유 코드로 거부한다. FE가 코드별 재촬영 안내를 띄운다(F78).
+        issue = evaluate_quality(image_bytes)
+        if issue is not None:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": issue.code, "message": issue.message},
+            )
+
         # 3. 추론 슬롯 확보 — 대기 시간과 실행 시간을 분리 측정한다.
         #    대기가 상한을 넘으면 429로 즉시 거부해 NestJS가 클라이언트 타임아웃까지
         #    붙잡히지 않고 fallback할 수 있게 한다.
@@ -216,7 +228,11 @@ async def infer(front: UploadFile = File(...)):
         raise
     except NoFaceDetected:
         status = "422"
-        raise HTTPException(status_code=422, detail="이미지에서 얼굴을 인식할 수 없습니다")
+        # N49: 품질 게이트와 같은 구조화 detail — FE가 code로 재촬영 안내를 분기한다.
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "NO_FACE", "message": "이미지에서 얼굴을 인식할 수 없습니다"},
+        )
     except ValueError as e:
         status = "400"
         raise HTTPException(status_code=400, detail=str(e))

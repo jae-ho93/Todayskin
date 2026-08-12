@@ -1,5 +1,6 @@
 import {
   InferenceBusyError,
+  InferenceRejectedError,
   PythonInferenceProvider,
 } from './python-inference.provider';
 import { InferenceImages } from './inference-provider.interface';
@@ -76,12 +77,65 @@ describe('PythonInferenceProvider', () => {
   it('HTTP 오류 응답 시 예외', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: false,
-      status: 422,
-      text: async () => '얼굴을 인식할 수 없습니다',
+      status: 500,
+      text: async () => 'internal error',
     }) as unknown as typeof fetch;
 
     const provider = new PythonInferenceProvider('http://127.0.0.1:8000', 'test-shared-secret');
-    await expect(provider.infer(images)).rejects.toThrow(/HTTP 422/);
+    await expect(provider.infer(images)).rejects.toThrow(/HTTP 500/);
+  });
+
+  // N49: 품질 게이트/얼굴 미인식(422) — 입력 문제로 구분해 던진다.
+  describe('422 입력 거부 (N49)', () => {
+    const rejected = (detail: unknown) => ({
+      ok: false,
+      status: 422,
+      json: async () => ({ detail }),
+    });
+
+    it('구조화 detail({code, message})을 InferenceRejectedError로 변환한다', async () => {
+      global.fetch = jest
+        .fn()
+        .mockResolvedValue(
+          rejected({ code: 'TOO_DARK', message: '사진이 너무 어둡습니다' }),
+        ) as unknown as typeof fetch;
+
+      const provider = new PythonInferenceProvider('http://127.0.0.1:8000', 'secret');
+      const error = await provider.infer(images).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(InferenceRejectedError);
+      expect((error as InferenceRejectedError).code).toBe('TOO_DARK');
+      expect((error as InferenceRejectedError).message).toContain('어둡');
+    });
+
+    it('문자열 detail(구버전 형식)도 기본 코드로 감싼다', async () => {
+      global.fetch = jest
+        .fn()
+        .mockResolvedValue(rejected('얼굴을 인식할 수 없습니다')) as unknown as typeof fetch;
+
+      const provider = new PythonInferenceProvider('http://127.0.0.1:8000', 'secret');
+      const error = await provider.infer(images).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(InferenceRejectedError);
+      expect((error as InferenceRejectedError).code).toBe('REJECTED');
+      expect((error as InferenceRejectedError).message).toContain('얼굴');
+    });
+
+    it('body 파싱에 실패해도 기본 코드/메시지로 던진다', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 422,
+        json: async () => {
+          throw new Error('invalid json');
+        },
+      }) as unknown as typeof fetch;
+
+      const provider = new PythonInferenceProvider('http://127.0.0.1:8000', 'secret');
+      const error = await provider.infer(images).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(InferenceRejectedError);
+      expect((error as InferenceRejectedError).code).toBe('REJECTED');
+    });
   });
 
   it('네트워크 오류 시 예외', async () => {

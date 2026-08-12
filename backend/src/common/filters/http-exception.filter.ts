@@ -35,7 +35,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
-    const { status, message, error } = this.toErrorDetails(exception);
+    const { status, message, error, code } = this.toErrorDetails(exception);
 
     const correlationId = (request as unknown as { id?: string }).id;
     const logContext = {
@@ -77,6 +77,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
       body.correlationId = correlationId;
     }
 
+    // N49: 기계 판독용 사유 코드(TOO_DARK 등) — FE가 코드별 안내를 분기한다.
+    if (code) {
+      body.code = code;
+    }
+
     // 기존 FastAPI 에러 응답 호환: 프론트(src/api/client.ts extractErrorMessage)는
     // { detail: "메시지" } 형태에서 에러 메시지를 추출한다. NestJS 표준 필드와 함께
     // detail을 같이 제공해 프론트 변경 없이 사용자 친화적 메시지가 노출되도록 한다.
@@ -91,6 +96,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     status: number;
     message: string | string[];
     error: string;
+    code?: string;
   } {
     if (exception instanceof HttpException) {
       const raw = exception.getResponse();
@@ -107,6 +113,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
           typeof response?.error === 'string'
             ? response.error
             : exception.name,
+        code:
+          typeof response?.code === 'string' ? response.code : undefined,
       };
     }
 

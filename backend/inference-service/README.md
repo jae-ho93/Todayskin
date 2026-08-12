@@ -62,6 +62,22 @@ compose 통합 시 URL은 `http://inference:8000`이다.
 `PythonInferenceProvider`가 한 번만 짧게 재시도하고, 그래도 혼잡하면
 `InferenceBusyError`로 실패한다.
 
+## 품질 게이트 (N49)
+
+어둡거나 흔들리거나 너무 작은 사진은 모델이 점수를 내더라도 신뢰할 수 없다.
+추론 슬롯을 잡기 전에 `422 + {code, message}`로 거부하고, 앱이 코드별
+재촬영 안내를 띄운다(F78). 코드: `TOO_SMALL` / `TOO_DARK` / `BLURRY`
+(+ 얼굴 미인식 `NO_FACE`).
+
+| 환경변수 | 기본값 | 설명 |
+|---|---|---|
+| `QUALITY_MIN_EDGE_PX` | `480` | 짧은 변 최소 픽셀. 미만이면 `TOO_SMALL` |
+| `QUALITY_MIN_MEAN_LUMA` | `55` | 그레이스케일 평균 휘도(0~255) 하한. 미만이면 `TOO_DARK` |
+| `QUALITY_MIN_LAPLACIAN_VAR` | `40` | 라플라시안 분산 하한(장변 640px 정규화 후). 미만이면 `BLURRY` |
+
+값을 `0`으로 두면 해당 검사를 끈다. 기본값은 보수적이다 — 데모에서 정상
+사진을 오탐으로 거부하는 것이 미검출보다 나쁘기 때문이다.
+
 ## 인증 (N13/R32)
 
 `/infer`와 `/metrics`는 `X-Inference-Key: {INFERENCE_SHARED_SECRET}`을 요구한다.

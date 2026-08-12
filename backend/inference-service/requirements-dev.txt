@@ -1,8 +1,11 @@
 # N13 계약 테스트 전용 (런타임 이미지에 포함하지 않는다).
-# 테스트는 analyzer/part_mapping을 stub하므로 torch/mediapipe가 필요 없다.
+# 테스트는 analyzer/part_mapping/quality를 stub하므로 torch/mediapipe가 필요 없다.
 # fastapi/python-multipart는 requirements.txt와 같은 버전으로 고정한다.
+# N49: 품질 게이트 실로직 테스트(test_quality.py)만 numpy/opencv를 쓴다.
 # 실행: pip install -r requirements-dev.txt && pytest tests/
 pytest==8.3.4
 httpx==0.28.1
 fastapi==0.118.3
 python-multipart==0.0.20
+numpy==2.2.6
+opencv-python-headless==5.0.0.93

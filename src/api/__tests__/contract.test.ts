@@ -1,4 +1,4 @@
-import { api } from '../client';
+import { api, DiagnosisQualityError } from '../client';
 import * as session from '../../lib/session';
 import type {
   NotificationPreferences,
@@ -324,5 +324,54 @@ describe('진단 제출 오류 카피 (F74)', () => {
     await expect(
       api.submitDiagnosis({ front: 'file://front.jpg', wentOutside: false }),
     ).rejects.toThrow('Network request failed');
+  });
+});
+
+describe('진단 제출 품질 게이트 계약 (N49/F78)', () => {
+  it('422 + code는 DiagnosisQualityError로 던진다 (재촬영 안내 분기)', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(422, {
+        statusCode: 422,
+        code: 'TOO_DARK',
+        detail: '사진이 너무 어두워요. 밝은 곳에서 다시 촬영해주세요.',
+      }),
+    );
+
+    const error = await api
+      .submitDiagnosis({ front: 'file://front.jpg', wentOutside: false })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(DiagnosisQualityError);
+    expect((error as DiagnosisQualityError).code).toBe('TOO_DARK');
+    expect((error as DiagnosisQualityError).message).toContain('어두워요');
+  });
+
+  it('code가 없는 422는 일반 Error로 유지한다 (하위 호환)', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(422, { statusCode: 422, detail: '요청을 처리할 수 없습니다' }),
+    );
+
+    const error = await api
+      .submitDiagnosis({ front: 'file://front.jpg', wentOutside: false })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(DiagnosisQualityError);
+  });
+
+  it('알 수 없는 코드의 422도 일반 Error로 처리한다', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(422, {
+        statusCode: 422,
+        code: 'SOMETHING_NEW',
+        detail: '이미지를 분석할 수 없습니다',
+      }),
+    );
+
+    const error = await api
+      .submitDiagnosis({ front: 'file://front.jpg', wentOutside: false })
+      .catch((e: unknown) => e);
+
+    expect(error).not.toBeInstanceOf(DiagnosisQualityError);
   });
 });

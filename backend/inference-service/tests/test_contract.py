@@ -68,7 +68,36 @@ def test_422_no_face_detected(client):
     main.analyzer.behavior = {"raise": "no_face"}
     res = client.post("/infer", files=_files(_png(100)), headers=AUTH)
     assert res.status_code == 422
-    assert "얼굴" in res.json()["detail"]
+    # N49: 422 detail은 {code, message} 구조 — FE가 code로 재촬영 안내를 분기한다.
+    detail = res.json()["detail"]
+    assert detail["code"] == "NO_FACE"
+    assert "얼굴" in detail["message"]
+
+
+# ── N49: 품질 게이트 (전처리 검증) ─────────────────────────────────────
+
+
+def test_422_quality_gate_rejects_with_reason_code(client):
+    import quality
+
+    main.analyzer.behavior = {}
+    quality.quality_issue = quality.QualityIssue(
+        "TOO_DARK", "사진이 너무 어둡습니다. 밝은 곳에서 다시 촬영해주세요"
+    )
+    res = client.post("/infer", files=_files(_png(100)), headers=AUTH)
+    assert res.status_code == 422
+    detail = res.json()["detail"]
+    assert detail["code"] == "TOO_DARK"
+    assert "어둡" in detail["message"]
+
+
+def test_quality_gate_pass_reaches_inference(client):
+    import quality
+
+    main.analyzer.behavior = {}
+    quality.quality_issue = None
+    res = client.post("/infer", files=_files(_png(100)), headers=AUTH)
+    assert res.status_code == 200
 
 
 def test_500_inference_error(client):

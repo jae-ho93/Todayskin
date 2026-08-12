@@ -30,6 +30,21 @@ export class InferenceBusyError extends Error {
   }
 }
 
+/**
+ * N49: 추론 서버가 입력 이미지를 의도적으로 거부(422)한 경우.
+ * 서버 장애(503 재시도 대상)가 아니라 사용자가 사진을 다시 찍어야 하는
+ * 입력 문제다. code는 FastAPI의 사유 코드(TOO_DARK/BLURRY/TOO_SMALL/NO_FACE).
+ */
+export class InferenceRejectedError extends Error {
+  constructor(
+    public readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'InferenceRejectedError';
+  }
+}
+
 /** 429 재시도 대기 상한 — 클라이언트 타임아웃(30s) 예산을 넘기지 않게 짧게 잡는다. */
 const MAX_RETRY_DELAY_MS = 2000;
 
@@ -65,6 +80,11 @@ export class PythonInferenceProvider implements InferenceProvider {
           'Inference service is saturated (HTTP 429 after retry)',
         );
       }
+    }
+
+    // N49: 422는 품질 게이트/얼굴 미인식 — 사용자 입력 문제로 구분해 던진다.
+    if (res.status === 422) {
+      throw await this.toRejectedError(res);
     }
 
     if (!res.ok) {
@@ -109,6 +129,29 @@ export class PythonInferenceProvider implements InferenceProvider {
       this.logger.warn(`Inference service request failed: ${message}`);
       throw new Error(`Inference service request failed: ${message}`);
     }
+  }
+
+  /** 422 body({detail: {code, message}})를 InferenceRejectedError로 변환한다. */
+  private async toRejectedError(res: Response): Promise<InferenceRejectedError> {
+    let code = 'REJECTED';
+    let message = '이미지를 분석할 수 없습니다';
+    try {
+      const parsed = (await res.json()) as {
+        detail?: { code?: unknown; message?: unknown } | string;
+      };
+      if (typeof parsed.detail === 'string') {
+        message = parsed.detail;
+      } else if (parsed.detail && typeof parsed.detail === 'object') {
+        if (typeof parsed.detail.code === 'string') code = parsed.detail.code;
+        if (typeof parsed.detail.message === 'string') {
+          message = parsed.detail.message;
+        }
+      }
+    } catch {
+      // body 파싱 실패 시 기본 코드/메시지 유지
+    }
+    this.logger.warn(`Inference rejected input (422 ${code}): ${message}`);
+    return new InferenceRejectedError(code, message);
   }
 
   private retryDelayMs(retryAfter: string | null): number {
