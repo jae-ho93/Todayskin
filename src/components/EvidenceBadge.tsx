@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 import type { EvidenceGrade } from '../types';
-import { colors, radius, spacing, typography } from '../theme';
+import { colors, MAX_FONT_SCALE, radius, spacing, typography } from '../theme';
 
 /**
  * N45/F69: B를 '임상 관찰 연구'라고 적어 왔는데, B는 사진과 날씨로 AI가 만든
@@ -31,9 +31,18 @@ export function EvidenceBadge({ grade, size = 'sm', showLabel = false }: Evidenc
         isLarge && styles.pillLg,
       ]}
     >
-      <Text style={[styles.letter, { color: style.text }, isLarge && styles.letterLg]}>{grade}</Text>
+      <Text
+        style={[styles.letter, { color: style.text }, isLarge && styles.letterLg]}
+        maxFontSizeMultiplier={MAX_FONT_SCALE}
+      >
+        {grade}
+      </Text>
       {showLabel && (
-        <Text style={[styles.label, { color: style.text }]} numberOfLines={1}>
+        <Text
+          style={[styles.label, { color: style.text }]}
+          numberOfLines={1}
+          maxFontSizeMultiplier={MAX_FONT_SCALE}
+        >
           {style.label.split(' · ')[1]}
         </Text>
       )}

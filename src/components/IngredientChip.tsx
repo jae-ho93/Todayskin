@@ -1,10 +1,12 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { colors, radius, spacing, typography } from '../theme';
+import { colors, MAX_FONT_SCALE, radius, spacing, typography } from '../theme';
 
 export function IngredientChip({ label }: { label: string }) {
   return (
     <View style={styles.chip}>
-      <Text style={styles.text}>{label}</Text>
+      <Text style={styles.text} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+        {label}
+      </Text>
     </View>
   );
 }

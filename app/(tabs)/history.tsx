@@ -20,7 +20,7 @@ import { RetryButton } from '../../src/components/RetryButton';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { AIR_STATUS_COLOR, UV_LEVEL_COLOR } from '../../src/lib/air-status';
 import { formatDateKo, monthBounds, todayKst } from '../../src/lib/kst-date';
-import { colors, radius, spacing, typography } from '../../src/theme';
+import { colors, MAX_FONT_SCALE, radius, spacing, typography } from '../../src/theme';
 import type {
   AirStatus,
   CalendarDayHistory,
@@ -234,7 +234,8 @@ export default function HistoryScreen() {
           <Text style={styles.calendarTitle}>{currentMonth.slice(0, 4)}년 {Number(currentMonth.slice(5, 7))}월</Text>
           <Pressable onPress={() => slideInMonth(1)} hitSlop={10}><Ionicons name="chevron-forward" size={20} color={colors.textSecondary} /></Pressable>
         </View>
-        <View style={styles.weekRow}>{WEEKDAYS.map((day) => <Text key={day} style={styles.weekday}>{day}</Text>)}</View>
+        {/* F76: 캘린더 셀은 고정 크기(1/7 폭, 40px)라 큰 글꼴에서 겹치지 않게 상한을 건다 */}
+        <View style={styles.weekRow}>{WEEKDAYS.map((day) => <Text key={day} style={styles.weekday} maxFontSizeMultiplier={MAX_FONT_SCALE}>{day}</Text>)}</View>
         <View style={styles.calendarGrid}>
         {calendarDays.map((date, index) => {
           if (!date) return <View key={`empty-${index}`} style={styles.calendarDay} />;
@@ -245,7 +246,10 @@ export default function HistoryScreen() {
               onPress={() => selectDay(date)}
               style={[styles.calendarDay, active && styles.dateChipActive]}
             >
-              <Text style={[styles.dateNum, active && styles.dateTextActive]}>
+              <Text
+                style={[styles.dateNum, active && styles.dateTextActive]}
+                maxFontSizeMultiplier={MAX_FONT_SCALE}
+              >
                 {Number(date.slice(-2))}
               </Text>
               {recordedDates.has(date) && <View style={[styles.recordDot, active && styles.recordDotActive]} />}
@@ -408,10 +412,11 @@ function WeatherSummaryGrid({ weather }: { weather: CalendarWeather }) {
               <Ionicons name={it.icon} size={14} color={it.color} />
             </View>
             <View style={styles.weatherCellText}>
-              <Text style={styles.weatherValue} numberOfLines={1}>
+              {/* F76: 2×2 고정 그리드 셀 — 큰 글꼴에서 수치가 잘리지 않게 상한을 건다 */}
+              <Text style={styles.weatherValue} numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE}>
                 {it.value}
               </Text>
-              <Text style={styles.weatherLabel} numberOfLines={1}>
+              <Text style={styles.weatherLabel} numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE}>
                 {it.label}
               </Text>
             </View>

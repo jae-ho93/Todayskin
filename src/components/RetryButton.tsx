@@ -1,5 +1,5 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
-import { colors, radius, spacing, typography } from '../theme';
+import { colors, MAX_FONT_SCALE, radius, spacing, typography } from '../theme';
 
 interface RetryButtonProps {
   onPress: () => void;
@@ -28,7 +28,9 @@ export function RetryButton({ onPress, disabled = false, label = '다시 시도'
       {disabled ? (
         <ActivityIndicator size="small" color={colors.textInverse} />
       ) : (
-        <Text style={styles.text}>{label}</Text>
+        <Text style={styles.text} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+          {label}
+        </Text>
       )}
     </Pressable>
   );

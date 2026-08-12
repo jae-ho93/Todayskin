@@ -14,6 +14,8 @@ export default function TabsLayout() {
           borderTopColor: colors.border,
         },
         tabBarLabelStyle: { ...typography.caption, fontWeight: '600' },
+        // F76: 탭바는 높이가 고정이라 OS 큰 글꼴에서 라벨이 잘린다 — 시스템 배율을 따르지 않는다.
+        tabBarAllowFontScaling: false,
       }}
     >
       <Tabs.Screen
