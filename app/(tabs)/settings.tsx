@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -20,6 +21,11 @@ import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { useToast } from '../../src/components/Toast';
 import { useConsents } from '../../src/features/settings/useConsents';
 import { useNotificationPreferences } from '../../src/features/settings/useNotificationPreferences';
+import {
+  formatReminderTime,
+  REMINDER_TIME_OPTIONS,
+} from '../../src/features/settings/reminder';
+import { useSkinReminder } from '../../src/features/settings/useSkinReminder';
 import { clearSession } from '../../src/lib/session';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type { ConsentPurpose, User } from '../../src/types';
@@ -71,6 +77,14 @@ export default function SettingsScreen() {
   // ── 알림 설정 (서버 NotificationPreference 연동) ──
   const { state: prefsState, toggle: togglePreference } = useNotificationPreferences();
   const prefs = prefsState.status === 'ready' ? prefsState.prefs : null;
+
+  // ── 피부 체크 리마인더 (F73: 로컬 알림 + 서버 morningReminder 동기) ──
+  const {
+    state: reminderState,
+    setEnabled: setReminderEnabled,
+    setTime: setReminderTime,
+  } = useSkinReminder();
+  const reminder = reminderState.status === 'ready' ? reminderState : null;
 
   // ── 동의/처리방침 모달 ──
   const [consentModalOpen, setConsentModalOpen] = useState(false);
@@ -176,12 +190,53 @@ export default function SettingsScreen() {
       <View>
         <Text style={styles.sectionTitle}>알림 설정</Text>
         <Card style={styles.listCard}>
-          {prefsState.status === 'loading' ? (
+          {prefsState.status === 'loading' || reminderState.status === 'loading' ? (
             <View style={styles.prefsLoading}>
               <ActivityIndicator color={colors.sage} size="small" />
             </View>
           ) : (
             <>
+              {reminder && (
+                <>
+                  <SettingsRow
+                    icon="moon-outline"
+                    label="피부 체크 리마인더"
+                    right={
+                      <Switch
+                        value={reminder.enabled}
+                        onValueChange={(value) => void setReminderEnabled(value)}
+                        trackColor={{ true: colors.sage, false: colors.gray200 }}
+                      />
+                    }
+                  />
+                  {reminder.enabled && (
+                    <View style={styles.reminderTimeRow}>
+                      {REMINDER_TIME_OPTIONS.map((option) => {
+                        const selected =
+                          option.hour === reminder.time.hour &&
+                          option.minute === reminder.time.minute;
+                        return (
+                          <Pressable
+                            key={formatReminderTime(option)}
+                            onPress={() => void setReminderTime(option)}
+                            style={[styles.reminderChip, selected && styles.reminderChipSelected]}
+                          >
+                            <Text
+                              style={[
+                                styles.reminderChipText,
+                                selected && styles.reminderChipTextSelected,
+                              ]}
+                            >
+                              {formatReminderTime(option)}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  )}
+                  <View style={styles.divider} />
+                </>
+              )}
               <SettingsRow
                 icon="thunderstorm-outline"
                 label="날씨 경보 알림"
@@ -210,6 +265,14 @@ export default function SettingsScreen() {
             </>
           )}
         </Card>
+        {reminder?.permissionDenied && (
+          <Pressable onPress={() => void Linking.openSettings()}>
+            <Text style={styles.errorText}>
+              알림 권한이 꺼져 있어요. 여기를 눌러 기기 설정에서 허용해주세요.
+            </Text>
+          </Pressable>
+        )}
+        {reminder?.saveError && <Text style={styles.errorText}>{reminder.saveError}</Text>}
         {prefsState.status === 'ready' && !prefs?.pushDeliveryAvailable && (
           <Text style={styles.readyText}>푸시 알림은 준비 중이에요. 현재 설정은 변경할 수 없어요.</Text>
         )}
@@ -387,6 +450,24 @@ const styles = StyleSheet.create({
   rowLabelDestructive: { ...typography.body, color: colors.coralDark },
   divider: { height: 1, backgroundColor: colors.border },
   prefsLoading: { paddingVertical: spacing.lg, alignItems: 'center' },
+  // F73: 리마인더 시간 프리셋 칩
+  reminderTimeRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingBottom: spacing.md,
+    paddingHorizontal: spacing.xs,
+  },
+  reminderChip: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  reminderChipSelected: { borderColor: colors.sage, backgroundColor: colors.sageLight },
+  reminderChipText: { ...typography.bodySm, color: colors.textSecondary },
+  reminderChipTextSelected: { color: colors.sageDark, fontWeight: '700' },
   errorText: { ...typography.caption, color: colors.coralDark, marginTop: spacing.sm },
   readyText: { ...typography.caption, color: colors.textTertiary, marginTop: spacing.sm },
   versionText: { ...typography.bodySm, color: colors.textSecondary },
