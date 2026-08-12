@@ -24,6 +24,7 @@ import {
   FastPathCoordinator,
   FAST_PATH_JOB_DEDUPE_WINDOW_MS,
 } from '../jobs/fast-path.coordinator';
+import { ProductCatalogService } from './product-catalog.service';
 import { IdempotencyService } from '../idempotency/idempotency.service';
 import { todayKst } from '../diagnosis/calendar-date.util';
 import { WeatherService } from '../weather/weather.service';
@@ -63,6 +64,7 @@ export class ProductService {
     private readonly jobState: JobStateService,
     private readonly idempotency: IdempotencyService,
     private readonly fastPath: FastPathCoordinator,
+    private readonly catalog: ProductCatalogService,
   ) {}
 
   /**
@@ -118,7 +120,7 @@ export class ProductService {
     const weather = await this.resolveServerWeather(opts?.lat, opts?.lon);
 
     // N27: 실제 카탈로그만 사용. 카탈로그가 비어 있으면 가상 제품을 만들 수 없으므로 503.
-    const catalog = await this.prisma.product.findMany();
+    const catalog = await this.catalog.load();
     if (catalog.length === 0) {
       throw new ServiceUnavailableException(
         '추천할 실제 제품이 아직 준비되지 않았어요. 잠시 후 다시 시도해주세요.',
@@ -177,7 +179,7 @@ export class ProductService {
     const regionKey = weather.regionName ?? 'base';
 
     // N27: 실제 카탈로그만 사용. 카탈로그가 비어 있으면 가상 제품을 만들 수 없으므로 503.
-    const catalog = await this.prisma.product.findMany();
+    const catalog = await this.catalog.load();
     if (catalog.length === 0) {
       throw new ServiceUnavailableException(
         '추천할 실제 제품이 아직 준비되지 않았어요. 잠시 후 다시 시도해주세요.',

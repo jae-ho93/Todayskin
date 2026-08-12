@@ -7,7 +7,7 @@ import {
   ForbiddenException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { Prisma, Recommendation as RecommendationModel } from '@prisma/client';
+import { Prisma, Product, Recommendation as RecommendationModel } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { GeminiClient, GeminiUnavailable } from '../gemini/gemini.client';
 import { ConsentService } from '../consent/consent.service';
@@ -38,6 +38,7 @@ import {
   shortId,
 } from './recommendation.fallback';
 import { B_GRADE_SOURCE_LABEL } from './content/fallback-content';
+import { ProductCatalogService } from '../products/product-catalog.service';
 
 /**
  * RecommendationService — 전역 추천 템플릿 목록, B등급 생성, 빠른 경로, 상세 조회.
@@ -69,6 +70,7 @@ export class RecommendationService {
     private readonly idempotency: IdempotencyService,
     private readonly jobService: JobService,
     private readonly fastPath: FastPathCoordinator,
+    private readonly catalog: ProductCatalogService,
   ) {}
 
   /**
@@ -174,7 +176,7 @@ export class RecommendationService {
       // N20: 추천의 성분 태그와 제품의 matchedIngredients 교집합으로 연결한다.
       // 카탈로그는 seed/관리자만 바꾸는 정적 데이터라 트랜잭션 밖 조회와 저장 사이의
       // 경쟁은 무시할 만하다. (제품 수가 적어 메모리 매칭)
-      const catalog = await this.repo.loadCatalog();
+      const catalog = await this.catalog.load();
       const links = this.buildProductLinks(
         rows,
         items.map((i) => i.ingredientTags ?? []),
@@ -262,11 +264,7 @@ export class RecommendationService {
           (result as { recommendations?: RecommendationDto[] } | null)
             ?.recommendations ?? [],
         loadFallback: async () =>
-          buildRuleRecommendations(
-            await this.repo.loadCatalog(),
-            skinInput,
-            weatherInput,
-          ),
+          buildRuleRecommendations(await this.catalog.load(), skinInput, weatherInput),
         enqueue: () => this.enqueueLiveJob(userId, diagnosisId, skinInput, weatherInput),
         cacheLiveResult: true,
       });
@@ -362,7 +360,7 @@ export class RecommendationService {
   private buildProductLinks(
     rows: GeneratedRecommendationRow[],
     tagsPerRow: string[][],
-    catalog: Awaited<ReturnType<RecommendationRepository['loadCatalog']>>,
+    catalog: Product[],
   ): RecommendationProductLink[] {
     const links: RecommendationProductLink[] = [];
     const used = new Set<string>();

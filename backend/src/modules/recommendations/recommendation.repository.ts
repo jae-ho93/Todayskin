@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
   Prisma,
-  Product,
   RecommendationTemplate,
   Recommendation as RecommendationModel,
 } from '@prisma/client';
@@ -154,11 +153,6 @@ export class RecommendationRepository {
   }
 
   // ── 입력 해석에 필요한 조회 ──────────────────────
-
-  /** 제품 카탈로그 전체 (성분 매칭·규칙 fallback용). */
-  loadCatalog(): Promise<Product[]> {
-    return this.prisma.product.findMany();
-  }
 
   /** 추천 입력 해석용 진단 — 소유권 검사는 호출처가 한다. */
   findDiagnosisForInput(diagnosisId: string) {

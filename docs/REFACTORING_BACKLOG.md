@@ -355,22 +355,37 @@ API 변경   429 응답 코드 추가 (NestJS provider의 재시도/fallback 처
 
 작업:
 
-- [ ] 카탈로그를 `RedisService`에 TTL 캐시(예: 10~30분)로 올리고, 관리자 상품 변경 시 `invalidate`한다. Redis 미가용 시 프로세스 내 TTL 캐시로 폴백한다.
-- [ ] `pickRuleProduct` 같이 특정 카테고리/등급만 필요한 경로는 `where: { category, evidenceGrade }`로 좁혀 조회한다.
-- [ ] 함께 `Product`에 `@@index([category])`와 커서 페이지네이션용 `@@index([createdAt, id])`를 추가한다(제안 [33]에 포함).
+- [x] `ProductCatalogService`(신설, `ProductCatalogModule`로 노출)가 카탈로그 읽기를 전담한다. Redis TTL **10분**.
+- [x] Redis 미가용이면 프로세스 내 TTL 캐시로 폴백한다(같은 TTL). 인스턴스마다 스냅샷이 최대 TTL만큼 다를 수 있으나 시드로만 바뀌는 데이터라 감수한다.
+- [x] 캐시에서 읽은 `createdAt`을 Date로 되돌린다 — hit/miss에 따라 타입이 달라지면 정렬·커서가 조용히 문자열 비교가 된다.
+- [x] 호출처 3곳(`product.service` 2곳, 추천 생성/규칙 fallback)을 이 서비스로 모았다. `GET /products` 목록은 여전히 DB 직접 조회다(카테고리 필터 + 커서 페이지네이션이라 캐시 대상이 아니다).
+- [x] `Product` 인덱스(`category`, `createdAt,id`)는 R33에서 이미 추가돼 있었다 — 추가 마이그레이션 없음.
+
+**무효화 결정:** 백로그는 "관리자 상품 변경 시 invalidate"를 전제했지만, **백엔드에 상품 쓰기 경로가 아예 없다.**
+카탈로그는 `prisma db seed`(CLI)로만 바뀐다. 그래서 훅을 걸 지점이 없어 다음 둘로 갈음했다.
+
+1. TTL 10분 자동 만료 — 시드를 바꿔도 최대 10분이면 반영된다.
+2. `POST /admin/products/cache/invalidate` (ADMIN, 감사 로그 기록) — 시드 직후 즉시 반영이 필요할 때 쓴다.
+   데이터를 새로 노출하지 않고 캐시만 비우는 엔드포인트다.
+
+- [ ] (보류) 특정 카테고리/등급만 필요한 경로를 `where`로 좁히는 건 하지 않았다. 현재 규칙 선택은 카탈로그 **전체**에서
+      등급·카테고리 우선순위로 정렬해 고르므로, 좁혀 조회하면 선택 결과가 달라진다(동작 변경). 캐시로 DB 왕복이
+      사라진 지금은 실익도 작다.
 
 변경 범위:
 
 ```text
-text
-파일 수정   recommendation.service.ts, product.service.ts
-DB 변경     Product 인덱스 추가
-migration 필요   예 (인덱스만, 데이터 마이그레이션 없음)
+파일 추가   product-catalog.service.ts(+spec), product-catalog.module.ts
+파일 수정   product.service.ts, recommendation.service.ts, recommendation.repository.ts,
+            product.module.ts, recommendation.module.ts, admin.module.ts,
+            admin.controller.ts, admin.service.ts, 두 spec 파일
+DB 변경     없음 (인덱스는 R33에서 완료)
 ```
 
-위험: POTENTIAL BEHAVIOR CHANGE. . 캐시 도입으로 관리자가 상품을 수정한 뒤 최대 TTL만큼 반영이 지연된다. 무효화 훅을 admin 경로에 반드시 붙여야 한다.
+위험: POTENTIAL BEHAVIOR CHANGE — 시드 변경이 최대 10분 늦게 보인다. 즉시 반영은 위 관리자 엔드포인트로 한다.
+사용자에게 보이는 응답 형태는 그대로다(유닛 441개 + 관련 e2e 통과).
 
-완료 기준: R9 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다.
+완료 기준: R9 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다. → 완료.
 
 ## R10. AsyncJob.payload JSON 경로 조회에 인덱스가 없다
 

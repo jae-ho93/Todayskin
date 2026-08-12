@@ -6,6 +6,7 @@ import { GeminiModule } from '../gemini/gemini.module';
 import { WeatherModule } from '../weather/weather.module';
 import { JobsModule } from '../jobs/jobs.module';
 import { IdempotencyModule } from '../idempotency/idempotency.module';
+import { ProductCatalogModule } from './product-catalog.module';
 
 /**
  * ProductModule — T7/N12.
@@ -16,7 +17,13 @@ import { IdempotencyModule } from '../idempotency/idempotency.module';
  * R12: JobsModule 의존은 단방향이다(forwardRef 불필요). 잡 핸들러는 이 모듈이 등록한다.
  */
 @Module({
-  imports: [GeminiModule, WeatherModule, JobsModule, IdempotencyModule],
+  imports: [
+    GeminiModule,
+    WeatherModule,
+    JobsModule,
+    IdempotencyModule,
+    ProductCatalogModule,
+  ],
   controllers: [ProductController],
   providers: [ProductService, ProductJobHandler],
   exports: [ProductService],
