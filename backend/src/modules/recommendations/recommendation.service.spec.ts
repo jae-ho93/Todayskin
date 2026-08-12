@@ -13,6 +13,7 @@ import { IdempotencyService } from '../idempotency/idempotency.service';
 import { RedisService } from '../../redis/redis.service';
 import { JobService } from '../jobs/job.service';
 import { JobStateService } from '../jobs/job-state.service';
+import { FastPathCoordinator } from '../jobs/fast-path.coordinator';
 import { JobStatus } from '../jobs/enums/job-status.enum';
 import { EvidenceGrade } from './enums/evidence-grade.enum';
 import { RecommendationDto } from './dto/recommendation.dto';
@@ -99,6 +100,9 @@ describe('RecommendationService', () => {
         { provide: RedisService, useValue: redis },
         { provide: JobService, useValue: jobService },
         { provide: JobStateService, useValue: jobState },
+        // R8: SWR 절차 자체를 검증 대상으로 남기려고 실제 코디네이터를 쓴다
+        // (redis/jobState 목 위에서 돈다).
+        FastPathCoordinator,
       ],
     }).compile();
 
@@ -480,7 +484,7 @@ describe('RecommendationService', () => {
     it('Redis SWR hit → source: CACHED (신선하면 재검증 job 없음)', async () => {
       prisma.recommendation.findMany.mockResolvedValue([]);
       redis.getJson.mockResolvedValue({
-        recommendations: [
+        items: [
           {
             id: 'gemini-cached', userId: 1, diagnosisId: 'diag-fast',
             title: '캐시 추천', grade: 'B', sourceLabel: 'AI',
@@ -501,7 +505,7 @@ describe('RecommendationService', () => {
     it('CACHED가 stale이면 재검증 job을 enqueue하고 jobId를 함께 반환한다 (SWR)', async () => {
       prisma.recommendation.findMany.mockResolvedValue([]);
       redis.getJson.mockResolvedValue({
-        recommendations: [],
+        items: [],
         generatedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
       });
 
@@ -575,7 +579,7 @@ describe('RecommendationService', () => {
       // LIVE 결과가 Redis SWR에 기록된다.
       expect(redis.setJson).toHaveBeenCalledWith(
         'rec:fast:1:diag-fast',
-        expect.objectContaining({ recommendations: expect.any(Array) }),
+        expect.objectContaining({ items: expect.any(Array) }),
         expect.any(Number),
       );
     });

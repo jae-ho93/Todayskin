@@ -85,7 +85,7 @@
 ## 승인 시 방향 결정이 필요한 항목
 
 - **R5** UV 6~7 등급 정본 — 서버(`bad`) vs 화면(`moderate`)
-- **R8** fast-path SWR 두 구현 중 정본 선택
+- ~~**R8** fast-path SWR 두 구현 중 정본 선택~~ — 두 구현의 상수·조건이 실제로는 동일해 결정 불필요(R8 항목 참조)
 - **R11** 테이블별 보존 기간 (특히 `WeatherSnapshot`)
 - **R13** ECS worker 서비스 신설 여부 (비용·리소스)
 - **R14/R29** 미사용 API 제거·인증 강제 (구버전 앱 영향)
@@ -301,24 +301,40 @@ text
 
 작업:
 
-- [ ] `FastPathCoordinator`(또는 `SwrJobCoordinator`) 하나를 만들어 제네릭 시그니처로 노출한다.
-- [ ] cacheKey, freshTtl, staleTtl,
-- [ ] jobType, jobPayload, dedupeWindow, failureBackoff,
-- [ ] loadFallback,          // 캐시 미스 시 DB에서 뭘 보여줄지
-- [ ] }) → { data, jobId | null, source }
-- [ ] 두 서비스는 도메인별 파라미터만 넘긴다. 이것은 "미래 확장을 위한 추상화"가 아니라 **이미 두 번 복제된 알고리즘을 한 번으로 되돌리는** 작업이다.
+- [x] `FastPathCoordinator`를 만들어 제네릭 `resolve<T>()` 하나로 노출한다(`jobs/fast-path.coordinator.ts`, `JobsModule`이 export).
+- [x] 도메인은 파라미터만 넘긴다 — `cacheKey`, `dedupeKey`, `jobType`, `readJobResult`, `loadFallback`, `enqueue`.
+- [x] 신선도·중복 억제·실패 억제 상수 4개(TTL 6h / 재검증 30m / dedupe 창 10m / FAILED cooldown 5m)를 코디네이터에 한 번만 둔다.
+- [x] `recommendation.service` / `product.service`의 SWR·dedupe·캐시 헬퍼를 삭제하고 코디네이터 호출로 대체한다.
+
+**정본 선택 결정 — 선택할 것이 없었다.** 착수 전 두 구현의 상수·분기를 표로 비교했더니 네 상수가 모두 같은 값이었고
+(6h / 30m / 10m / 5m), 응답 우선순위와 FAILED cooldown 조건도 동일했다. "상수가 이미 다르다"는 백로그 기술은
+사실이 아니었다(작성 시점 이후 한쪽이 맞춰진 것으로 보인다). 따라서 한쪽 동작을 바꾸는 선택 없이 그대로 합쳤다.
+
+남은 차이는 도메인 고유라 코디네이터 밖에 남겼다:
+
+| 항목 | 추천 | 날씨 제품 |
+|---|---|---|
+| 코디네이터 앞 단계 | 저장된 추천이 있으면 DB에서 바로 LIVE | 카탈로그가 비면 503 |
+| dedupeKey | `diagnosisId:*` (호환 모드는 키 없음 → job 재사용 생략) | `regionKey:*` |
+| enqueue | 단순 enqueue | N14 예약 가드 경유 |
+| COMPLETED 결과 캐시 적재 | 함(`cacheLiveResult: true`) | 안 함(LIVE 생성 경로에서 이미 적재) |
+
+- [x] **캐시 봉투 통일:** 추천이 `{ recommendations }`, 제품이 `{ items }`로 서로 달랐다 → `{ items, generatedAt }`으로 맞췄다.
+      배포 시점에 남아 있는 예전 형식 값은 코디네이터가 **miss로 처리**한다(빈 배열로 오해해 빈 화면을 보여주지 않는다).
+      키는 그대로라 TTL(6h) 안에 자연 교체된다. Redis는 최적화 계층이므로 이 miss는 FALLBACK + 재생성으로 흡수된다.
+- [x] 코디네이터 자체 spec 12개를 추가했다 — 두 화면이 공유하는 정책이라 도메인 없이 우선순위를 직접 검증한다.
 
 변경 범위:
 
 ```text
-text
-파일 추가   backend/src/modules/jobs/fast-path.coordinator.ts
-파일 수정   recommendation.service.ts, product.service.ts, 두 모듈 파일, 두 spec 파일
+파일 추가   backend/src/modules/jobs/fast-path.coordinator.ts(+spec)
+파일 수정   recommendation.service.ts, product.service.ts, jobs.module.ts, 두 spec 파일
 ```
 
-위험: BEHAVIOR-PRESERVING REFACTOR. . 두 구현의 상수/조건이 현재 다르므로 통합하면 **한쪽 동작이 바뀐다.** 통합 전에 두 구현의 차이를 표로 정리해 어느 쪽을 정본으로 삼을지 먼저 결정해야 한다. 이 결정은 승인 대상이다.
+위험: BEHAVIOR-PRESERVING REFACTOR. 상수가 동일해 통합으로 바뀌는 동작은 없다. 유일한 관찰 가능한 변화는
+배포 직후 남은 추천 캐시가 한 번 miss가 되는 것(→ FALLBACK 후 재생성)이다.
 
-완료 기준: R8 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다.
+완료 기준: R8 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다. → 유닛 425개 통과, typecheck·lint 통과.
 
 ## R9. 요청마다 상품 카탈로그 전체를 메모리로 로드한다
 

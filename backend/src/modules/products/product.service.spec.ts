@@ -6,6 +6,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { RedisService } from '../../redis/redis.service';
 import { JobService } from '../jobs/job.service';
 import { JobStateService } from '../jobs/job-state.service';
+import { FastPathCoordinator } from '../jobs/fast-path.coordinator';
 import { JobStatus } from '../jobs/enums/job-status.enum';
 import { IdempotencyService } from '../idempotency/idempotency.service';
 import { WeatherService } from '../weather/weather.service';
@@ -77,6 +78,9 @@ describe('ProductService', () => {
         { provide: JobService, useValue: jobService },
         { provide: JobStateService, useValue: jobState },
         { provide: IdempotencyService, useValue: idempotency },
+        // R8: SWR 절차 자체를 검증 대상으로 남기려고 실제 코디네이터를 쓴다
+        // (redis/jobState 목 위에서 돈다).
+        FastPathCoordinator,
       ],
     }).compile();
 

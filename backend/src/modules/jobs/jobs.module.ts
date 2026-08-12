@@ -8,6 +8,7 @@ import { JobHandlerRegistry } from './handlers/job-handler.registry';
 import { InlineJobDispatcher } from './dispatchers/inline.job-dispatcher';
 import { BullMqJobDispatcher } from './dispatchers/bullmq.job-dispatcher';
 import { JobMetricsScheduler } from './job-metrics.scheduler';
+import { FastPathCoordinator } from './fast-path.coordinator';
 
 /**
  * JobsModule — N4 BullMQ 비동기 처리.
@@ -52,10 +53,12 @@ import { JobMetricsScheduler } from './job-metrics.scheduler';
     },
     JobService,
     JobMetricsScheduler,
+    FastPathCoordinator,
   ],
   // R10: dedupe 조회를 위해 JobStateService도 노출한다. 도메인 서비스가
   // async_jobs를 직접 쿼리하지 않고 이 파사드만 쓰게 해 dedupe 키 규칙을 한곳에 묶는다.
   // R12: 도메인 모듈이 자기 핸들러를 등록할 수 있도록 레지스트리를 노출한다.
-  exports: [JobService, JobStateService, JobHandlerRegistry],
+  // R8: fast-path SWR 절차도 도메인이 복제하지 않고 이 코디네이터를 쓴다.
+  exports: [JobService, JobStateService, JobHandlerRegistry, FastPathCoordinator],
 })
 export class JobsModule {}

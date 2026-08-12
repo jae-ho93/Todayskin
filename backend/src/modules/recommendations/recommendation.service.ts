@@ -8,16 +8,14 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { RedisService } from '../../redis/redis.service';
 import { GeminiClient, GeminiUnavailable } from '../gemini/gemini.client';
 import { ConsentService } from '../consent/consent.service';
 import { ConsentPurpose } from '../consent/enums/consent-purpose.enum';
 import { IdempotencyService } from '../idempotency/idempotency.service';
 import { JobService } from '../jobs/job.service';
-import { JobStateService } from '../jobs/job-state.service';
 import { jobDedupeKeyOf } from '../jobs/job-dedupe';
 import { JobType } from '../jobs/enums/job-type.enum';
-import { JobStatus } from '../jobs/enums/job-status.enum';
+import { FastPathCoordinator } from '../jobs/fast-path.coordinator';
 import { EvidenceGrade } from './enums/evidence-grade.enum';
 import { RecommendationDto, RecommendationTiming } from './dto/recommendation.dto';
 import { RecommendationFastResponseDto } from './dto/recommendation-fast-response.dto';
@@ -51,18 +49,6 @@ const B_GRADE_SOURCE_LABEL = 'AI 종합 분석 · 피부과학 일반 지식 기
  */
 const FALLBACK_SOURCE_LABEL = '규칙 기반 빠른 응답 · AI 분석 전';
 
-/** N32: Redis SWR 캐시 TTL(초). */
-const REC_FAST_CACHE_TTL_S = 6 * 60 * 60;
-
-/** N32: CACHED 항목이 이 시간보다 오래되면 재검증(LIVE) job을 enqueue한다(SWR). */
-const REC_FAST_REVALIDATE_MS = 30 * 60 * 1000;
-
-/** N32: 중복 enqueue 방지 job 조회 창 — 이 시간 안의 PENDING/COMPLETED/FAILED job을 재사용 후보로 본다. */
-const FAST_JOB_DEDUP_WINDOW_MS = 10 * 60 * 1000;
-
-/** N32: FAILED job이 이 시간 안이면 재사용(FALLBACK + 같은 jobId)하고, 지나면 새 job을 enqueue한다. */
-const FAST_FAILED_COOLDOWN_MS = 5 * 60 * 1000;
-
 /**
  * RecommendationService — 전역 추천 템플릿 목록, B등급 생성, 빠른 경로, 상세 조회.
  *
@@ -87,9 +73,8 @@ export class RecommendationService {
     private readonly geminiClient: GeminiClient,
     private readonly consentService: ConsentService,
     private readonly idempotency: IdempotencyService,
-    private readonly redis: RedisService,
     private readonly jobService: JobService,
-    private readonly jobState: JobStateService,
+    private readonly fastPath: FastPathCoordinator,
   ) {}
 
   /**
@@ -367,77 +352,29 @@ export class RecommendationService {
           recommendations: await this.attachProductIds(existing),
         };
       }
-
-      // 2) job dedup — 같은 진단의 진행 중/완료/최근 실패 job을 재사용한다.
-      //    (FAILED도 cooldown 안이면 같은 jobId로 재사용해 job 스팸을 막는다 — N32)
-      const job = await this.findRecentJob(userId, 'diagnosisId', diagnosisId);
-      if (job) {
-        if (job.status === JobStatus.COMPLETED) {
-          const result = job.result as { recommendations?: RecommendationDto[] } | null;
-          const recs = result?.recommendations ?? [];
-          if (recs.length > 0) {
-            await this.cacheFastRecommendations(userId, diagnosisId, recs);
-            return {
-              source: 'LIVE',
-              jobId: job.id,
-              generatedAt: job.finishedAt?.toISOString(),
-              recommendations: recs,
-            };
-          }
-        } else if (this.isRecentlyFailed(job)) {
-          // Gemini 실패 직후 — 같은 jobId(FE가 FAILED를 볼 수 있게) + FALLBACK 유지.
-          return {
-            source: 'FALLBACK',
-            jobId: job.id,
-            recommendations: await this.buildRuleRecommendations(
-              skinInput,
-              weatherInput,
-            ),
-          };
-        } else if (job.status === JobStatus.PENDING) {
-          // PENDING — 같은 job을 그대로 알려주고 규칙 FALLBACK을 먼저 보여준다.
-          return {
-            source: 'FALLBACK',
-            jobId: job.id,
-            recommendations: await this.buildRuleRecommendations(
-              skinInput,
-              weatherInput,
-            ),
-          };
-        }
-        // FAILED가 cooldown을 지났으면 아래로 내려가 새 job을 enqueue한다.
-      }
     }
 
-    // 3) Redis SWR hit → CACHED.
-    const cacheKey = this.fastCacheKey(userId, diagnosisId, skinInput, weatherInput);
-    const cached = await this.readFastCache(cacheKey);
-    if (cached) {
-      const stale =
-        Date.now() - new Date(cached.generatedAt).getTime() >
-        REC_FAST_REVALIDATE_MS;
-      let jobId: string | undefined;
-      if (stale) {
-        // SWR: 낡은 데이터를 먼저 보여주고, 뒤에서 LIVE로 재검증한다.
-        jobId = await this.enqueueLiveJob(userId, diagnosisId, skinInput, weatherInput);
-      }
-      return {
-        source: 'CACHED',
-        jobId,
-        generatedAt: cached.generatedAt,
-        recommendations: cached.recommendations,
-      };
-    }
+    // R8: job 재사용 → Redis SWR → 규칙 fallback 순서는 FastPathCoordinator가 정한다.
+    // 호환 모드(diagnosisId 없음)는 dedupeKey가 없어 job 재사용 단계를 건너뛴다 —
+    // 이 경로의 job payload는 진단 id로 묶이지 않아 같은 대상인지 판별할 수 없다.
+    const { source, jobId, generatedAt, items } =
+      await this.fastPath.resolve<RecommendationDto>({
+        userId,
+        jobType: JobType.RECOMMENDATION_GENERATE,
+        dedupeKey: diagnosisId
+          ? jobDedupeKeyOf('diagnosisId', diagnosisId)
+          : undefined,
+        cacheKey: this.fastCacheKey(userId, diagnosisId, skinInput, weatherInput),
+        readJobResult: (result) =>
+          (result as { recommendations?: RecommendationDto[] } | null)
+            ?.recommendations ?? [],
+        loadFallback: () => this.buildRuleRecommendations(skinInput, weatherInput),
+        enqueue: () =>
+          this.enqueueLiveJob(userId, diagnosisId, skinInput, weatherInput),
+        cacheLiveResult: true,
+      });
 
-    // 4) miss → 규칙 기반 실제품 FALLBACK 즉시 반환 + LIVE job enqueue.
-    const fallback = await this.buildRuleRecommendations(skinInput, weatherInput);
-    const jobId = await this.enqueueLiveJob(
-      userId,
-      diagnosisId,
-      skinInput,
-      weatherInput,
-    );
-    return { source: 'FALLBACK', jobId, recommendations: fallback };
+    return { source, jobId, generatedAt, recommendations: items };
   }
 
   /**
@@ -548,28 +485,6 @@ export class RecommendationService {
   }
 
   /**
-   * 같은 dedupe 키를 가진 최근 job 조회 (중복 enqueue 방지).
-   * R10: payload JSON 경로 비교 → `dedupeKey` 컬럼 조회로 바꿔 인덱스를 타게 했다.
-   */
-  private async findRecentJob(userId: number, payloadKey: string, value: string) {
-    return this.jobState.findRecentByDedupeKey({
-      userId,
-      type: JobType.RECOMMENDATION_GENERATE,
-      dedupeKey: jobDedupeKeyOf(payloadKey, value),
-      withinMs: FAST_JOB_DEDUP_WINDOW_MS,
-    });
-  }
-
-  /** FAILED가 cooldown 안이면 같은 jobId를 재사용한다 (job 스팸 방지). */
-  private isRecentlyFailed(job: { status: string; finishedAt: Date | null }): boolean {
-    return (
-      job.status === JobStatus.FAILED &&
-      !!job.finishedAt &&
-      Date.now() - job.finishedAt.getTime() < FAST_FAILED_COOLDOWN_MS
-    );
-  }
-
-  /**
    * FALLBACK/CACHED 응답과 함께 LIVE 교체 job을 enqueue한다. 실패해도 FALLBACK은 반환한다.
    * diagnosisId 모드에서는 payload를 { diagnosisId }만 담아 AsyncJob.payload를 가볍게 유지한다
    * (handler는 진단 모드에서 skinScore/weather를 무시한다).
@@ -615,27 +530,13 @@ export class RecommendationService {
     return `rec:fast:${userId}:compat:${fingerprint}`;
   }
 
-  private async readFastCache(
-    key: string,
-  ): Promise<{ recommendations: RecommendationDto[]; generatedAt: string } | null> {
-    return this.redis.getJson<{
-      recommendations: RecommendationDto[];
-      generatedAt: string;
-    }>(key);
-  }
-
   /** LIVE 생성 결과를 Redis SWR에 저장 (진단 모드). Redis 장애 시 조용히 실패. */
   private async cacheFastRecommendations(
     userId: number,
     diagnosisId: string,
     recommendations: RecommendationDto[],
   ): Promise<void> {
-    const key = `rec:fast:${userId}:${diagnosisId}`;
-    await this.redis.setJson(
-      key,
-      { recommendations, generatedAt: new Date().toISOString() },
-      REC_FAST_CACHE_TTL_S,
-    );
+    await this.fastPath.writeCache(`rec:fast:${userId}:${diagnosisId}`, recommendations);
   }
 
   /**
