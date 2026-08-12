@@ -56,6 +56,23 @@ B6 머지 후 원본 화면과 1:1 대조 + 독립 검증(게이트 8종 재실�
 만료 토큰으로 401 → refresh 실패 → `clearSession()` 경로가 열려 공개 조회 한 번이 조용한 로그아웃이 된다.
 그때는 `authFetch`에 refresh를 타지 않는 옵션을 둔다.
 
+## 남은 항목 (2026-08-12 기준)
+
+R1~R35 전부 `main`에 반영됐다. 아래는 **하지 않기로 판단한** 것들이며 미완성 상태로 방치된 작업이 아니다.
+각 항목의 판단 근거는 해당 R 상세에 적혀 있다.
+
+| 항목 | 판단 |
+|---|---|
+| R6 2단계 — 추론 서버 vCPU·워커 증설 | 실측 선행. 슬롯 수는 `INFERENCE_CONCURRENCY`로 이미 환경변수화했으므로 부하 테스트 후 값만 올린다 |
+| R9 일부 — 상품 조회를 카테고리·등급으로 좁히기 | 현재 규칙 선택이 카탈로그 전체를 봐야 성립한다. 비용은 TTL 캐시로 이미 잡았다 |
+| R27 3번 — `StyleSheet`를 `*.styles.ts`로 분리 | 중복 제거가 아닌 파일 분할이라 diff를 키우는 만큼의 이득이 없다 |
+| R28 후반 — 수기 타입 → 생성 타입 전면 재export | 화면 전체를 건드린다. 드리프트는 CI가 막고 있으므로 급하지 않다 |
+| `login.tsx` · `social-phone.tsx`에 `usePhoneVerification` 적용 | B6 범위(설정·가입) 밖. 같은 훅을 그대로 쓸 수 있다 |
+
+코드 밖 작업(AWS·운영)은 위 [진행 상황](#진행-상황) 표의 "남은 일" 열에 묶음별로 적혀 있다.
+특히 B3(워커 서비스 생성 → `JOB_ROLE=api` 추가)과 B4(dry-run 확인 → 스냅샷 → `delete` 전환)는
+**순서를 뒤집으면 안 된다.**
+
 ## 선후관계 (순서가 중요한 것)
 
 | 선행 | 후행 | 이유 |
@@ -496,11 +513,16 @@ migration 필요   예 (인덱스)
 
 작업:
 
-- [ ] 의존 방향을 뒤집는다. `JobsModule`은 `JobHandlerRegistry`(빈 레지스트리)만 제공하고, **각 도메인 모듈이 자기 `OnModuleInit`에서 자기 핸들러를 등록**한다.
-- [ ] 현재:  JobsModule ──forwardRef──► Recommendation/Product/Pattern/Notification
-- [ ] 변경:  Recommendation/Product/Pattern/Notification ──► JobsModule (단방향)
-- [ ] └─ onModuleInit: registry.register(JobType.X, handler)
-- [ ] `domain-job.handlers.ts`는 삭제된다. 동시에 각 핸들러 진입점에서 payload를 `class-validator` DTO나 좁은 타입 가드로 검증하고, 실패 시 명시적으로 잡을 FAILED 처리한다.
+- [x] 의존 방향을 뒤집는다. `JobsModule`은 `JobHandlerRegistry`(빈 레지스트리)만 제공하고, **각 도메인 모듈이 자기 `OnModuleInit`에서 자기 핸들러를 등록**한다.
+
+```text
+현재:  JobsModule ──forwardRef──► Recommendation/Product/Pattern/Notification
+변경:  Recommendation/Product/Pattern/Notification ──► JobsModule (단방향)
+       └─ onModuleInit: registry.register(JobType.X, handler)
+```
+
+- [x] `domain-job.handlers.ts`는 삭제된다. 동시에 각 핸들러 진입점에서 payload를 `class-validator` DTO나 좁은 타입 가드로 검증하고, 실패 시 명시적으로 잡을 FAILED 처리한다.
+- [x] 도메인별 `*.job-handler.ts` 4개(recommendation/product/pattern/notification)가 각자 등록한다. payload는 `job-error.ts`의 좁은 타입 가드(`optionalString`/`optionalObject`)로 읽고, 예외는 `toJobError`로 정규화해 잡이 FAILED로 남는다.
 
 변경 범위:
 
@@ -622,7 +644,7 @@ dependency 변경   eslint, eslint-config-expo, eslint-plugin-react-hooks 추가
 
 - [x] `jest-expo` + `@testing-library/react-native`를 도입하고 다음 세 가지에 집중한다(전면 커버리지가 목표가 아니다).
 - [x] `client.ts` 단위 테스트 — 401 → 재발급 → 재시도, 동시 401 시 재발급 1회, 재발급 실패 시 세션 정리. **이 테스트가 실제 버그를 잡았다**: `refreshInFlight` 해제가 refresh 토큰 부재 경로에서 누락돼, 한 번 실패하면 프로세스 수명 동안 재발급이 영구히 막혔다. `finally`로 항상 해제하도록 고쳤다. `src/lib/session.ts`(R1 SecureStore 이관)도 함께 덮었다.
-- [ ] 2. `useAsyncJob`(제안 [27]로 추출 후) 단위 테스트 — PENDING → COMPLETED, 타임아웃, 언마운트 시 abort. **B6(R27)에서 훅을 추출한 뒤 추가한다.**
+- [x] 2. `useAsyncJob`(제안 [27]로 추출 후) 단위 테스트 — PENDING → COMPLETED, 타임아웃, 언마운트 시 abort. **B6(R27)에서 훅을 추출한 뒤 `src/hooks/__tests__/useAsyncJob.test.tsx`로 추가했다.** LIVE 단축 경로·취소된 잡 결과 폐기·잡 실패 시 기존 결과 유지를 각각 고정했고, 사후 검증에서 뮤테이션으로 실효성을 확인했다.
 - [x] 3. 백엔드 e2e에 존재하는 `api-contract.e2e-spec.ts`와 짝을 이루는 프론트 계약 테스트 — 응답 타입이 맞는지.
 - [x] CI `frontend-typecheck` 잡에 `npm test`를 추가한다.
 
@@ -732,7 +754,8 @@ text
 
 작업:
 
-- [ ] presign에 필요한 데이터(S3 key, mimetype 등)를 상위 쿼리에서 `include`로 한 번에 가져오고, `ImageStorageService`에 `presignMany(keys: string[])`를 추가해 DB 왕복 없이 URL만 배치 생성한다. presign 자체는 순수 서명 연산이므로 네트워크 호출이 필요 없다.
+- [x] presign에 필요한 데이터(S3 key, mimetype 등)를 상위 쿼리에서 `include`로 한 번에 가져오고, `ImageStorageService`에 `presignMany(keys: string[])`를 추가해 DB 왕복 없이 URL만 배치 생성한다. presign 자체는 순수 서명 연산이므로 네트워크 호출이 필요 없다.
+- [x] 메서드 이름은 `presignImages`로 뒀다(`image-storage.service.ts:236`). `diagnosis.service.ts`의 `presignCalendarImages`가 노출 대상 이미지를 한 번에 모아 호출하므로 진단 수만큼 서명 호출이 곱해지지 않는다.
 
 변경 범위:
 
@@ -787,7 +810,8 @@ migration 필요   예 (familyId 도입 시)
 
 작업:
 
-- [ ] `weather/mappers/weather-snapshot.mapper.ts`에 `toSnapshotDto(entity)`와 `toCreateInput(dto)` 두 순수 함수를 두고 네 곳이 이를 호출한다. `Pick`/`satisfies`로 필드 누락 시 컴파일 에러가 나도록 타입을 조인다.
+- [x] `weather/mappers/weather-snapshot.mapper.ts`에 `toSnapshotDto(entity)`와 `toCreateInput(dto)` 두 순수 함수를 두고 네 곳이 이를 호출한다. `Pick`/`satisfies`로 필드 누락 시 컴파일 에러가 나도록 타입을 조인다.
+- [x] 실제 함수 구성은 `metricsFromCollected` / `metricsFromSnapshot` / `assignWeatherMetrics` / `toWeatherSnapshotDto`다. 지표 키 목록을 `Pick<PrismaWeatherSnapshot, WeatherMetricKey>`로 묶어, 필드가 늘면 네 곳이 아니라 이 파일에서 컴파일 에러가 난다. `weather.service.ts`·`diagnosis.service.ts`·`product.service.ts`·`recommendation.mapper.ts`가 이걸 쓴다.
 
 변경 범위:
 
@@ -813,7 +837,7 @@ text
 
 작업:
 
-- [ ] `backend/src/common/errors/error-name.util.ts`로 옮기고 세 곳에서 import한다. "한 번만 쓰는 유틸은 만들지 않는다"는 원칙에 어긋나지 않는다 — 이미 세 번 쓰이고 있다.
+- [x] `backend/src/common/errors/error-name.util.ts`로 옮기고 세 곳에서 import한다. "한 번만 쓰는 유틸은 만들지 않는다"는 원칙에 어긋나지 않는다 — 이미 세 번 쓰이고 있다.
 
 변경 범위:
 
