@@ -61,7 +61,15 @@ describe('Diagnosis Delete (e2e)', () => {
       imports: [AppModule],
     })
       .overrideProvider(KmaClient)
-      .useValue({ fetchUvIndex: jest.fn().mockResolvedValue(nullWeather) })
+      .useValue({
+        fetchUvIndex: jest.fn().mockResolvedValue(nullWeather),
+        fetchNowcast: jest.fn().mockResolvedValue({
+          temperature: null,
+          humidity: null,
+          observedAt: null,
+          failed: false,
+        }),
+      })
       .overrideProvider(AirKoreaClient)
       .useValue({
         fetchAirQuality: jest.fn().mockResolvedValue({

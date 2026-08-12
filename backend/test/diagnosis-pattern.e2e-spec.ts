@@ -45,7 +45,10 @@ describe('Diagnosis & Pattern (e2e)', () => {
       imports: [AppModule],
     })
       .overrideProvider(KmaClient)
-      .useValue({ fetchUvIndex: jest.fn().mockResolvedValue({ current: null, peak: null, peakHour: null, observedAt: null }) })
+      .useValue({
+        fetchUvIndex: jest.fn().mockResolvedValue({ current: null, peak: null, peakHour: null, observedAt: null }),
+        fetchNowcast: jest.fn().mockResolvedValue({ temperature: null, humidity: null, observedAt: null, failed: false }),
+      })
       .overrideProvider(AirKoreaClient)
       .useValue({ fetchAirQuality: jest.fn().mockResolvedValue({ ozone: null, pm25: null, pm10: null, cai: null, no2: null, so2: null, co: null, observedAt: null }) })
       .overrideProvider(StationClient)

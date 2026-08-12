@@ -62,6 +62,12 @@ describe('Withdrawal (e2e)', () => {
           observedAt: null,
           failed: false,
         }),
+        fetchNowcast: jest.fn().mockResolvedValue({
+          temperature: null,
+          humidity: null,
+          observedAt: null,
+          failed: false,
+        }),
       })
       .overrideProvider(AirKoreaClient)
       .useValue({
