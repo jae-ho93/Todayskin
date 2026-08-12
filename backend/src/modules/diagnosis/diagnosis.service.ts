@@ -260,6 +260,13 @@ export class DiagnosisService {
             storeImage && inference.landmarks
               ? (inference.landmarks as unknown as Prisma.InputJsonValue)
               : undefined,
+          // 신규(검증 단계): YOLO 여드름 구역 리포트 + 5클래스 질환 분류.
+          // 얼굴 이미지 자체가 아니라 파생 텍스트/라벨이라 랜드마크와 달리 저장 동의와
+          // 무관하게 항상 보존한다.
+          acneReport: inference.acneReport ?? undefined,
+          diseaseClassification: inference.diseaseClassification
+            ? (inference.diseaseClassification as unknown as Prisma.InputJsonValue)
+            : undefined,
         },
       });
 
@@ -573,6 +580,8 @@ export class DiagnosisService {
     // BE-2026-08-12: 저장된 논리 URI(memory://)는 RN Image가 로드 가능한 http로 정규화
     dto.thumbnailUri = this.toPublicThumbnailUri(diagnosis.thumbnailUri);
     dto.parts = parts.map((p) => this.partToDto(p));
+    dto.acneReport = diagnosis.acneReport ?? null;
+    dto.diseaseClassification = this.toDiseaseClassificationDto(diagnosis.diseaseClassification);
     return dto;
   }
 
@@ -583,7 +592,18 @@ export class DiagnosisService {
     dto.overallScore = diagnosis.overallScore;
     dto.thumbnailUri = this.toPublicThumbnailUri(diagnosis.thumbnailUri);
     dto.parts = metrics.map((m) => this.metricToDto(m));
+    dto.acneReport = diagnosis.acneReport ?? null;
+    dto.diseaseClassification = this.toDiseaseClassificationDto(diagnosis.diseaseClassification);
     return dto;
+  }
+
+  private toDiseaseClassificationDto(
+    raw: Prisma.JsonValue | null,
+  ): SkinScoreSnapshotDto['diseaseClassification'] {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const obj = raw as { label?: unknown; confidence?: unknown };
+    if (typeof obj.label !== 'string' || typeof obj.confidence !== 'number') return null;
+    return { label: obj.label, confidence: obj.confidence };
   }
 
   /** BE-2026-08-12: 레거시 DB의 memory:// 논리 URI까지 http로 정규화해 내보낸다. */

@@ -123,6 +123,8 @@ export class PythonInferenceProvider implements InferenceProvider {
       modelVersion?: unknown;
       parts?: unknown;
       landmarks?: unknown;
+      acneReport?: unknown;
+      diseaseClassification?: unknown;
     };
     if (
       typeof d.overallScore !== 'number' ||
@@ -136,8 +138,21 @@ export class PythonInferenceProvider implements InferenceProvider {
       modelVersion: d.modelVersion,
       parts: d.parts as InferredPartMetric[],
       landmarks: parseLandmarks(d.landmarks),
+      acneReport: parseAcneReport(d.acneReport),
+      diseaseClassification: parseDiseaseClassification(d.diseaseClassification),
     };
   }
+}
+
+function parseAcneReport(raw: unknown): InferenceResult['acneReport'] {
+  return typeof raw === 'string' && raw.length > 0 ? raw : null;
+}
+
+function parseDiseaseClassification(raw: unknown): InferenceResult['diseaseClassification'] {
+  if (!raw || typeof raw !== 'object') return null;
+  const dc = raw as { label?: unknown; confidence?: unknown };
+  if (typeof dc.label !== 'string' || typeof dc.confidence !== 'number') return null;
+  return { label: dc.label, confidence: dc.confidence };
 }
 
 function parseLandmarks(raw: unknown): InferenceResult['landmarks'] {

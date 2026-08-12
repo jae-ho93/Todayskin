@@ -182,9 +182,19 @@ def map_to_app_schema(analysis: dict, model_version: str) -> dict:
             "note": values["note"],
         })
 
+    acne = analysis.get("acne_report")
+    disease = analysis.get("disease_classification")
+
     return {
         "overallScore": round(analysis["overall_score"]),
         "modelVersion": model_version,
         "parts": app_parts,
         "landmarks": analysis.get("landmarks"),
+        # 신규: YOLO 여드름 구역 리포트(텍스트) + 5클래스 질환 분류 결과.
+        # 두 값 다 optional -- 클라이언트는 없으면 그냥 안 보여주면 된다.
+        "acneReport": acne.get("reportText") if acne else None,
+        "diseaseClassification": (
+            {"label": disease["label"], "confidence": disease["confidence"]}
+            if disease else None
+        ),
     }

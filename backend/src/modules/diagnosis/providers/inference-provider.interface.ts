@@ -25,15 +25,35 @@ export interface InferenceLandmarks {
 }
 
 /**
+ * YOLO 여드름 병변 탐지 → 구역별 한글 텍스트 리포트. 바운딩 박스는 그리지 않고
+ * "이마에 비염증성 여드름 1개, 염증성 여드름 1개가 있습니다." 같은 문장만 반환한다.
+ * 병변이 없으면 "감지된 여드름 병변이 없습니다."
+ */
+export type AcneReport = string;
+
+/**
+ * 5클래스(건선/아토피/주사/지루/정상) 전체 이미지 질환 분류 결과.
+ * confidence: 0~1 (softmax 확률).
+ */
+export interface DiseaseClassification {
+  label: string;
+  confidence: number;
+}
+
+/**
  * 추론 전체 결과.
  * overallScore: 0~100. modelVersion: 추론 모델 식별자. parts: 6개 부위.
  * landmarks: 선택. inference-service가 제공하면 Diagnosis.landmarks에 저장.
+ * acneReport/diseaseClassification: 선택. 신규 2개 모델(YOLO/질환분류기) 결과 —
+ * 아직 검증 단계라 둘 다 없어도(null) 진단 자체는 정상 처리된다.
  */
 export interface InferenceResult {
   overallScore: number;
   modelVersion: string;
   parts: InferredPartMetric[];
   landmarks?: InferenceLandmarks | null;
+  acneReport?: AcneReport | null;
+  diseaseClassification?: DiseaseClassification | null;
 }
 
 /**
