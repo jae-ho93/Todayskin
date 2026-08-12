@@ -193,7 +193,7 @@ describe('WeatherService', () => {
     expect(result.source).toBe(WeatherSource.LIVE);
   });
 
-  it('근접측정소 조회 실패 시 REGIONS 근사표로 폴백', async () => {
+  it('근접측정소 조회 실패 시 대기질은 근사표 측정소로 폴백한다', async () => {
     stationClient.fetchNearestStation.mockResolvedValue(null);
     kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 3 }));
     airKoreaClient.fetchAirQuality.mockResolvedValue(air());
@@ -203,6 +203,61 @@ describe('WeatherService', () => {
     expect(result.regionName).toBe('서울특별시');
     // 폴백 시 강남구 측정소명 사용
     expect(airKoreaClient.fetchAirQuality).toHaveBeenCalledWith('강남구');
+  });
+
+  /**
+   * N41: 해운대구에서 찍은 기록이 "부산 중구"로 표시됐다.
+   *
+   * 측정소 조회가 실패하면 근사표의 `airkoreaStationName`을 구 이름으로 썼는데,
+   * 그건 측정소명이지 행정구역이 아니다(부산 대표 측정소가 '중구'다). 사용자는
+   * 추측과 사실을 구별할 수 없으므로 모르면 비운다.
+   */
+  it('N41: 측정소 조회가 실패해도 근사표 측정소명을 구 이름으로 쓰지 않는다', async () => {
+    stationClient.fetchNearestStation.mockResolvedValue(null);
+    kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 3 }));
+    airKoreaClient.fetchAirQuality.mockResolvedValue(air());
+
+    // 해운대 좌표 → 근사표는 '부산광역시'(대표 측정소명 '중구')로 붙는다
+    const result = await service.getCurrentWeather(35.16526, 129.1635);
+
+    expect(result.regionName).toBe('부산광역시');
+    expect(result.districtName).toBeNull();
+    expect(airKoreaClient.fetchAirQuality).toHaveBeenCalledWith('중구');
+  });
+
+  it('N41: 측정소 조회가 성공하면 그 구 이름을 쓴다', async () => {
+    stationClient.fetchNearestStation.mockResolvedValue({
+      stationName: '좌동',
+      districtName: '해운대구',
+      cityName: '부산',
+    });
+    kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 3 }));
+    airKoreaClient.fetchAirQuality.mockResolvedValue(air());
+
+    const result = await service.getCurrentWeather(35.16526, 129.1635);
+
+    expect(result.districtName).toBe('해운대구');
+    expect(airKoreaClient.fetchAirQuality).toHaveBeenCalledWith('좌동');
+  });
+
+  /**
+   * 캐시 키가 좌표를 소수 2자리로 뭉치므로, 폴백으로 만든 결과가 기본 TTL(5분)로
+   * 들어가면 그 일대 사용자 전원이 5분 내내 같은 오답을 본다. 실기기에서 10회 연속
+   * 같은 오답이 나온 원인이 이것이다.
+   */
+  it('N41: 측정소 조회 실패 결과는 짧은 TTL로만 캐시한다', async () => {
+    stationClient.fetchNearestStation.mockResolvedValue(null);
+    kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 3 }));
+    airKoreaClient.fetchAirQuality.mockResolvedValue(air());
+    redisService.isAvailable.mockReturnValue(true);
+
+    await service.getCurrentWeather(35.16526, 129.1635);
+
+    expect(redisService.setJson).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.anything(),
+      30,
+    );
   });
 
   it('동일 관측 시각 snapshot이 있으면 재사용(create 미호출)', async () => {
@@ -319,6 +374,7 @@ describe('WeatherService', () => {
       stationName: '종로구',
       regionName: '서울특별시',
       cityName: '서울특별시',
+      districtName: '종로구',
     });
 
     expect(result?.id).toBe('snap-meta');
@@ -331,6 +387,8 @@ describe('WeatherService', () => {
     expect(arg.data.regionName).toBe('서울특별시');
     expect(arg.data.airkoreaStation).toBe('종로구');
     expect(arg.data.kmaAreaNo).toBe('1111000000');
+    // N41: 스케줄러 경로 스냅샷의 구 이름이 전부 null이던 문제.
+    expect(arg.data.districtName).toBe('종로구');
   });
 
   it('N25: 기본 지역(좌표 없음)은 UV와 대기질을 병렬로 모두 호출한다', async () => {

@@ -67,6 +67,7 @@ export class WeatherCollectionScheduler extends LeaderElectedScheduler {
           stationName: region.airkoreaStationName,
           regionName: region.cityName,
           cityName: region.cityName,
+          districtName: region.districtName,
         });
         ok++;
       } catch (e) {
