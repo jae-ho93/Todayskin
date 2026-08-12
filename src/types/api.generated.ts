@@ -1087,6 +1087,10 @@ export interface components {
              * @enum {string}
              */
             source: "LIVE" | "CACHED" | "UNAVAILABLE";
+            /** @description N42: 자외선 수집이 실패했는지. true면 값이 비어 있는 이유가 "측정값 없음"이 아니라 "수집 실패"다. */
+            uvCollectionFailed?: boolean;
+            /** @description N42: 대기질 수집이 실패했는지. */
+            airCollectionFailed?: boolean;
             /** @description 자외선 지수(현재 시점 예보) */
             uvIndex?: number | null;
             /**
@@ -1199,6 +1203,10 @@ export interface components {
              * @enum {string}
              */
             source?: "LIVE" | "CACHED" | "UNAVAILABLE";
+            /** @description N42: 자외선 수집이 실패했는지. true면 값이 비어 있는 이유가 "측정값 없음"이 아니라 "수집 실패"다. */
+            uvCollectionFailed?: boolean;
+            /** @description N42: 대기질 수집이 실패했는지. */
+            airCollectionFailed?: boolean;
             /** @description 자외선 지수(현재 시점 예보) */
             uvIndex?: number | null;
             /**
@@ -1485,6 +1493,8 @@ export interface components {
             districtName?: string | null;
             /** @example LIVE */
             source: string;
+            uvCollectionFailed?: boolean;
+            airCollectionFailed?: boolean;
             uvIndex?: number | null;
             uvStatus?: string | null;
             uvIndexPeak?: number | null;

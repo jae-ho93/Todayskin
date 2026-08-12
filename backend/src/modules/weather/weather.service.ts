@@ -28,6 +28,13 @@ import { WeatherSnapshot } from '@prisma/client';
 const DEGRADED_CACHE_TTL_SECONDS = 30;
 
 /**
+ * N42: 진단 경로에서만 켜는 재시도 횟수. 이 경로의 결과는 영구 저장되고 캐시가
+ * 흡수해 주지도 않아, 일시 실패 한 번이 그 기록에 영원히 남는다. 응답 경로는
+ * 0을 유지한다 — 외부 API가 느릴 때 모든 사용자의 지연이 배로 늘어난다.
+ */
+const DIAGNOSIS_RETRY_COUNT = 1;
+
+/**
  * 영구 저장용으로 수집한 메타데이터. 응답용 DTO와 달리 지역/측정소/좌표를 포함한다.
  */
 interface CollectedWeather {
@@ -168,7 +175,12 @@ export class WeatherService {
   ): Promise<WeatherSnapshot | null> {
     // T12: 진단/추천 연결용은 캐시를 사용하지 않는다. 재현성·정확성이 캐시 지연보다 중요.
     // N25: 스케줄러 워밍은 meta를 넘겨 근접측정소 조회를 생략하고 병렬 수집한다.
-    const collected = await this.collect(lat, lon, meta);
+    //
+    // N42: 이 경로의 결과는 진단 기록에 영구히 남는다. 캐시가 없으니 일시 실패를
+    // 흡수해 줄 것도 없어, 한 번의 타임아웃이 그 기록의 날씨를 영원히 비운다.
+    // 진단은 하루 몇 건 수준이라 재시도 비용이 거의 없다 — 여기서만 켠다.
+    const collected = await this.collect(lat, lon, meta, DIAGNOSIS_RETRY_COUNT);
+    await this.recordCollectionFailureMetric(collected);
     return this.persist(collected);
   }
 
@@ -186,6 +198,7 @@ export class WeatherService {
     lat?: number,
     lon?: number,
     meta?: RegionMeta,
+    retries = 0,
   ): Promise<CollectedWeather> {
     // N41: 세 분기가 각자 완전한 객체를 반환한다. 예전에는 `let`에 나눠 대입해서
     // 한 분기가 `districtName`을 빠뜨려도 컴파일러가 잡지 못했고, 실제로 스케줄러
@@ -194,8 +207,8 @@ export class WeatherService {
 
     if (meta) {
       const [uv, air] = await Promise.all([
-        this.kmaClient.fetchUvIndex(meta.areaNo),
-        this.airKoreaClient.fetchAirQuality(meta.stationName),
+        this.kmaClient.fetchUvIndex(meta.areaNo, retries),
+        this.airKoreaClient.fetchAirQuality(meta.stationName, retries),
       ]);
       return {
         uv,
@@ -215,8 +228,8 @@ export class WeatherService {
       // 자외선지수 조회는 근접측정소 조회 결과와 무관(areaNo만 필요)하므로
       // 순차 대기하지 않고 병렬로 실행해 두 정부 API 모두 느릴 때의 왕복 시간을 줄인다.
       const [nearest, uv] = await Promise.all([
-        this.stationClient.fetchNearestStation(lat, lon),
-        this.kmaClient.fetchUvIndex(region.kmaAreaNo),
+        this.stationClient.fetchNearestStation(lat, lon, retries),
+        this.kmaClient.fetchUvIndex(region.kmaAreaNo, retries),
       ]);
 
       // 측정소 조회가 실패하면 근사표의 대표 측정소로 대기질을 조회한다. 이건
@@ -233,7 +246,7 @@ export class WeatherService {
 
       return {
         uv,
-        air: await this.airKoreaClient.fetchAirQuality(stationName),
+        air: await this.airKoreaClient.fetchAirQuality(stationName, retries),
         // F56: 시/도는 근사표의 정식 명칭(예: '부산광역시'), 구/군은 최인접 측정소
         // 주소 토큰(예: '해운대구').
         regionName: region.cityName,
@@ -248,8 +261,8 @@ export class WeatherService {
 
     // N25: 기본 지역은 두 외부 API가 서로 독립이므로 병렬 호출한다.
     const [uv, air] = await Promise.all([
-      this.kmaClient.fetchUvIndex(this.defaultKmaAreaNo),
-      this.airKoreaClient.fetchAirQuality(this.defaultStationName),
+      this.kmaClient.fetchUvIndex(this.defaultKmaAreaNo, retries),
+      this.airKoreaClient.fetchAirQuality(this.defaultStationName, retries),
     ]);
     return {
       uv,
@@ -271,6 +284,8 @@ export class WeatherService {
     dto.regionName = c.regionName;
     dto.districtName = c.districtName;
     dto.source = this.resolveSource(c.uv, c.air);
+    dto.uvCollectionFailed = c.uv.failed;
+    dto.airCollectionFailed = c.air.failed;
     return assignWeatherMetrics(dto, metricsFromCollected(c, this.policy));
   }
 
@@ -298,6 +313,25 @@ export class WeatherService {
   private async recordCacheMetric(kind: 'hit' | 'miss'): Promise<void> {
     // incrementCounter는 내부에서 예외를 삼키고 null을 반환한다(응답 경로 비차단).
     await this.redisService.incrementCounter(`metric:weather:cache:${kind}`);
+  }
+
+  /**
+   * N42: 진단 스냅샷의 수집 실패율. 예전에는 실패가 조용히 null이 되어
+   * 얼마나 자주 일어나는지 알 수 없었다 — 재시도가 효과가 있는지도 알 수 없다.
+   */
+  private async recordCollectionFailureMetric(c: CollectedWeather): Promise<void> {
+    await this.redisService.incrementCounter('metric:weather:collect:total');
+    if (c.uv.failed) {
+      await this.redisService.incrementCounter('metric:weather:collect:uv_failed');
+    }
+    if (c.air.failed) {
+      await this.redisService.incrementCounter('metric:weather:collect:air_failed');
+    }
+    if (c.stationLookupFailed) {
+      await this.redisService.incrementCounter(
+        'metric:weather:collect:station_failed',
+      );
+    }
   }
 
   /**
@@ -447,6 +481,11 @@ export class WeatherService {
           kmaAreaNo: c.kmaAreaNo,
           airkoreaStation: c.airkoreaStation,
           ...metricsFromCollected(c, this.policy),
+          // N42: 부분 실패도 저장한다. 자외선과 관측 시각은 실제 값이므로 통째로
+          // 버리면 진단과 환경의 연결이 아예 끊긴다. 대신 무엇을 못 받았는지
+          // 남겨 화면이 "값 없음"과 "수집 실패"를 구별할 수 있게 한다.
+          uvCollectionFailed: c.uv.failed,
+          airCollectionFailed: c.air.failed,
           source,
         },
       });

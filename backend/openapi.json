@@ -2092,6 +2092,14 @@
             "example": "LIVE",
             "description": "데이터 출처"
           },
+          "uvCollectionFailed": {
+            "type": "boolean",
+            "description": "N42: 자외선 수집이 실패했는지. true면 값이 비어 있는 이유가 \"측정값 없음\"이 아니라 \"수집 실패\"다."
+          },
+          "airCollectionFailed": {
+            "type": "boolean",
+            "description": "N42: 대기질 수집이 실패했는지."
+          },
           "uvIndex": {
             "type": "number",
             "description": "자외선 지수(현재 시점 예보)",
@@ -2336,6 +2344,14 @@
             ],
             "example": "LIVE",
             "description": "데이터 출처"
+          },
+          "uvCollectionFailed": {
+            "type": "boolean",
+            "description": "N42: 자외선 수집이 실패했는지. true면 값이 비어 있는 이유가 \"측정값 없음\"이 아니라 \"수집 실패\"다."
+          },
+          "airCollectionFailed": {
+            "type": "boolean",
+            "description": "N42: 대기질 수집이 실패했는지."
           },
           "uvIndex": {
             "type": "number",
@@ -3099,6 +3115,12 @@
           "source": {
             "type": "string",
             "example": "LIVE"
+          },
+          "uvCollectionFailed": {
+            "type": "boolean"
+          },
+          "airCollectionFailed": {
+            "type": "boolean"
           },
           "uvIndex": {
             "type": "number",

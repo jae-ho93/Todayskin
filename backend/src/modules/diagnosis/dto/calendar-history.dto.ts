@@ -47,6 +47,16 @@ export class CalendarWeatherDto {
   @ApiProperty({ type: String, example: 'LIVE' })
   source!: string;
 
+  /**
+   * N42/F70: 값이 비어 있는 이유. true면 "측정값 없음"이 아니라 "수집 실패"다.
+   * 둘 다 null로만 내리면 화면이 똑같이 `-`로 그려서 사용자가 구별할 수 없다.
+   */
+  @ApiPropertyOptional({ type: Boolean })
+  uvCollectionFailed?: boolean;
+
+  @ApiPropertyOptional({ type: Boolean })
+  airCollectionFailed?: boolean;
+
   @ApiPropertyOptional({ type: Number, nullable: true })
   uvIndex?: number | null;
 

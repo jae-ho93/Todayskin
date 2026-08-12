@@ -35,6 +35,13 @@ export interface WeatherSnapshot {
   districtName?: string | null;
   // F41: 데이터 출처 — LIVE(실시간 조회) | CACHED(Redis 캐시) | UNAVAILABLE(측정 불가)
   source?: 'LIVE' | 'CACHED' | 'UNAVAILABLE' | null;
+  /**
+   * N42/F70: 값이 비어 있는 이유. true면 "측정값 없음"이 아니라 "수집 실패"다.
+   * 둘을 구별하지 않으면 화면이 똑같이 `-`로 그려서, 사용자는 일시적 장애인지
+   * 원래 값이 없었는지 알 수 없다.
+   */
+  uvCollectionFailed?: boolean;
+  airCollectionFailed?: boolean;
   // 각 지표는 실제 정부 API(기상청/에어코리아) 호출이 실패하면 null이다 — 목업으로 채우지 않고
   // 화면에서 "측정 불가"로 명시적으로 보여준다. 오래된 응답/캐시와의 호환을 위해 undefined도 허용한다.
   uvIndex?: number | null; // 자외선지수
@@ -215,6 +222,9 @@ export interface CalendarWeather {
   /** F56: 시/군/구 (예: "해운대구"). 없으면 null/undefined. */
   districtName?: string | null;
   source: string; // LIVE | CACHED | UNAVAILABLE
+  /** N42/F70: 값이 비어 있는 이유가 "수집 실패"인지. */
+  uvCollectionFailed?: boolean;
+  airCollectionFailed?: boolean;
   uvIndex?: number | null;
   uvStatus?: UvLevel | null;
   uvIndexPeak?: number | null;

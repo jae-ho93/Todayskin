@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import proj4 from 'proj4';
 import { DEFAULT_REGION } from '../regions/region.registry';
 import { errorName } from '../../../common/errors/error-name.util';
+import { withRetry } from '../../../common/retry/retry.util';
 import { fetchWithTimeout } from './fetch-with-timeout';
 
 /** 에어코리아 근접측정소 목록 endpoint ("측정소정보 조회 서비스") */
@@ -52,14 +53,31 @@ export class StationClient {
     this.apiKey = configService.get<string>('AIRKOREA_API_KEY', '');
   }
 
+  /**
+   * @param retries 일시 실패 시 재시도 횟수. 기본 0 — 응답 경로는 재시도하지 않는다.
+   *   결과를 영구 저장하는 진단 경로만 켠다 — N42.
+   *
+   * 이 조회가 실패하면 대기질 조회가 대표 측정소로 넘어가고 구 이름도 비게 된다
+   * (N41). 즉 한 번의 실패가 두 지표를 함께 망가뜨려서, 재시도 효과가 특히 크다.
+   */
   async fetchNearestStation(
     lat: number,
     lon: number,
+    retries = 0,
   ): Promise<NearestStation | null> {
     if (!this.apiKey) {
       return null;
     }
+    return withRetry(() => this.fetchOnce(lat, lon), {
+      retries,
+      shouldRetry: (result) => result === null,
+    });
+  }
 
+  private async fetchOnce(
+    lat: number,
+    lon: number,
+  ): Promise<NearestStation | null> {
     try {
       // WGS84(lon,lat 순서) → EPSG:5181 (TM 중부원점, x=lon, y=lat)
       // 변환 실패도 폴백 대상이므로 try 안에서 처리한다.

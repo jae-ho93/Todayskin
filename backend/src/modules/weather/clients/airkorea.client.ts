@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { errorName } from '../../../common/errors/error-name.util';
+import { withRetry } from '../../../common/retry/retry.util';
 import { fetchWithTimeout } from './fetch-with-timeout';
 
 /** 한국 표준시(UTC+9) */
@@ -26,9 +27,17 @@ export interface AirQualityData {
  */
 export interface AirQualityDataWithTime extends AirQualityData {
   observedAt: Date | null;
+  /**
+   * N42: 값이 비어 있는 이유가 "수집 실패"인지 "측정값 없음"인지 구분한다.
+   *
+   * 예전에는 둘 다 그냥 null이라, 진단 기록에 영구 저장된 빈 값이 일시적 장애
+   * 때문인지 원래 값이 없었던 건지 알 수 없었다. 화면도 똑같이 `-`로 그렸다.
+   * 재시도할 가치가 있는지 판단하는 근거이기도 하다.
+   */
+  failed: boolean;
 }
 
-const EMPTY: AirQualityDataWithTime = {
+const EMPTY_VALUES = {
   ozone: null,
   pm25: null,
   pm10: null,
@@ -37,7 +46,13 @@ const EMPTY: AirQualityDataWithTime = {
   so2: null,
   co: null,
   observedAt: null,
-};
+} as const;
+
+/** 호출이 실패했다(타임아웃·HTTP 오류·파싱 실패). 재시도할 가치가 있다. */
+const FAILED: AirQualityDataWithTime = { ...EMPTY_VALUES, failed: true };
+
+/** 호출은 됐지만 쓸 값이 없다(키 미설정 등). 재시도해도 결과가 같다. */
+const EMPTY: AirQualityDataWithTime = { ...EMPTY_VALUES, failed: false };
 
 function safeFloat(value: unknown): number | null {
   if (value === null || value === undefined || value === '-' || value === '') {
@@ -63,11 +78,25 @@ export class AirKoreaClient {
     this.apiKey = configService.get<string>('AIRKOREA_API_KEY', '');
   }
 
-  async fetchAirQuality(stationName: string): Promise<AirQualityDataWithTime> {
+  /**
+   * @param retries 일시 실패 시 재시도 횟수. 기본 0 — 응답 경로는 재시도하지 않는다
+   *   (외부 API가 느릴 때 모든 사용자의 지연이 배로 늘어난다). 결과를 영구 저장하는
+   *   진단 경로만 켠다 — N42.
+   */
+  async fetchAirQuality(
+    stationName: string,
+    retries = 0,
+  ): Promise<AirQualityDataWithTime> {
     if (!this.apiKey) {
       return EMPTY;
     }
+    return withRetry(() => this.fetchOnce(stationName), {
+      retries,
+      shouldRetry: (result) => result.failed,
+    });
+  }
 
+  private async fetchOnce(stationName: string): Promise<AirQualityDataWithTime> {
     const params = new URLSearchParams({
       serviceKey: this.apiKey,
       returnType: 'json',
@@ -83,11 +112,12 @@ export class AirKoreaClient {
       const res = await fetchWithTimeout(url, this.timeoutMs);
       if (!res.ok) {
         this.logger.warn(`AirKorea air quality fetch failed: HTTP ${res.status}`);
-        return EMPTY;
+        return FAILED;
       }
       const data = (await res.json()) as AirKoreaResponse;
       const latest = extractFirstItem(data);
       if (!latest) {
+        // 응답은 왔는데 측정 항목이 없다. 재시도해도 같은 결과라 실패로 보지 않는다.
         return EMPTY;
       }
       return {
@@ -99,10 +129,11 @@ export class AirKoreaClient {
         so2: safeFloat(latest.so2Value),
         co: safeFloat(latest.coValue),
         observedAt: parseAirKoreaTime(latest.dataTime),
+        failed: false,
       };
     } catch (e) {
       this.logger.warn(`AirKorea air quality fetch failed: ${errorName(e)}`);
-      return EMPTY;
+      return FAILED;
     }
   }
 }
