@@ -260,6 +260,48 @@ describe('ImageStorageService', () => {
     });
   });
 
+  describe('deleteForDiagnosis (N43 기록 단건 삭제)', () => {
+    beforeEach(() => {
+      prisma.diagnosisImage.findMany.mockResolvedValue([
+        {
+          id: 'image-1',
+          diagnosisId: 'snap-1',
+          userId: 1,
+          s3Bucket: 'todayskin-bucket',
+          s3Key: 'diagnoses/1/snap-1/front.jpg',
+          deleteAttempts: 0,
+        },
+      ]);
+      store.deleteObject.mockResolvedValue(undefined);
+    });
+
+    it('해당 진단의 이미지만 대상으로 삼는다 — 다른 기록의 사진을 지우지 않는다', async () => {
+      await service.deleteForDiagnosis(1, 'snap-1');
+
+      expect(prisma.diagnosisImage.findMany).toHaveBeenCalledWith({
+        where: { userId: 1, diagnosisId: 'snap-1', deletedAt: null },
+      });
+      expect(prisma.diagnosisImage.updateMany).toHaveBeenCalledWith({
+        where: { userId: 1, diagnosisId: 'snap-1', deletedAt: null, pendingDeleteAt: null },
+        data: { pendingDeleteAt: expect.any(Date) },
+      });
+    });
+
+    it('사용자 전체 랜드마크를 비우지 않는다 — 진단 row가 통째로 사라지기 때문', async () => {
+      await service.deleteForDiagnosis(1, 'snap-1');
+
+      expect(prisma.diagnosis.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('객체 삭제 실패 시 503 — 호출자가 진단 row를 지우지 않게 막는다', async () => {
+      store.deleteObject.mockRejectedValue(new Error('s3 unavailable'));
+
+      await expect(service.deleteForDiagnosis(1, 'snap-1')).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+    });
+  });
+
   describe('retryPendingDeletes (N10 재시도 worker)', () => {
     it('미완료 row를 스캔해 성공 건을 완료 마킹한다', async () => {
       prisma.diagnosisImage.findMany.mockResolvedValue([

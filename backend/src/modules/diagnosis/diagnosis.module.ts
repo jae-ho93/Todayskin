@@ -13,6 +13,7 @@ import { WeatherModule } from '../weather/weather.module';
 import { ConsentModule } from '../consent/consent.module';
 import { StorageModule } from '../storage/storage.module';
 import { IdempotencyModule } from '../idempotency/idempotency.module';
+import { AdminModule } from '../admin/admin.module';
 
 /**
  * DiagnosisModule — T9.
@@ -28,7 +29,8 @@ import { IdempotencyModule } from '../idempotency/idempotency.module';
  * InferenceProvider(토큰)를 주입받는다.
  */
 @Module({
-  imports: [WeatherModule, ConsentModule, StorageModule, IdempotencyModule],
+  // AdminModule: 기록 삭제(N43) 감사 로그. 되돌릴 수 없는 개인정보 삭제라 흔적을 남긴다.
+  imports: [WeatherModule, ConsentModule, StorageModule, IdempotencyModule, AdminModule],
   controllers: [DiagnosisController],
   providers: [
     {

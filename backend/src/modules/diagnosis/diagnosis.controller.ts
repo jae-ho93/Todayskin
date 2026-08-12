@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -15,6 +16,7 @@ import {
   ApiBearerAuth,
   ApiConsumes,
   ApiCreatedResponse,
+  ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
@@ -148,6 +150,22 @@ export class DiagnosisController {
       lon: query.lon,
       wentOutside: query.wentOutside ?? false,
     });
+  }
+
+  @Delete(':id')
+  @ApiOperation({
+    summary: 'N43: 진단 기록 삭제 (본인) — 이미지·추천까지 물리 삭제',
+  })
+  @ApiParam({ name: 'id', description: '진단 id' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @ApiNoContentResponse({ description: '삭제 완료' })
+  @HttpCode(204)
+  async remove(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+  ): Promise<void> {
+    await this.diagnosisService.deleteDiagnosis(user.sub, id);
   }
 }
 

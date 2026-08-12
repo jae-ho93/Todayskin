@@ -1369,6 +1369,36 @@
         ]
       }
     },
+    "/diagnosis/{id}": {
+      "delete": {
+        "operationId": "DiagnosisController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "진단 id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "삭제 완료"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "N43: 진단 기록 삭제 (본인) — 이미지·추천까지 물리 삭제",
+        "tags": [
+          "diagnosis"
+        ]
+      }
+    },
     "/diagnosis/pattern": {
       "get": {
         "description": "진단+날씨 시계열을 모아 피부 지표와 환경 지표 사이의 상관관계를 분석한다. 데이터가 부족하면 404가 아닌 200 + LOCKED로 반환한다. 비동기는 POST /diagnosis/pattern/async 사용.",

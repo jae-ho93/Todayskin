@@ -29,6 +29,7 @@ import { ConsentService } from '../consent/consent.service';
 import { IdempotencyService } from '../idempotency/idempotency.service';
 import { ConsentPurpose } from '../consent/enums/consent-purpose.enum';
 import { ImageStorageService } from '../storage/image-storage.service';
+import { AuditLogService } from '../admin/audit-log.service';
 import { SkinScoreSnapshotDto } from './dto/skin-score-snapshot.dto';
 import { HistoryEntryDto } from './dto/history-entry.dto';
 import { SkinPartMetricDto } from './dto/skin-part-metric.dto';
@@ -131,7 +132,52 @@ export class DiagnosisService {
     private readonly consentService: ConsentService,
     private readonly imageStorage: ImageStorageService,
     private readonly idempotency: IdempotencyService,
+    private readonly auditLog: AuditLogService,
   ) {}
+
+  /**
+   * N43: 진단 기록 한 건을 삭제한다. 얼굴에서 나온 데이터라 삭제 수단은 선택이 아니다.
+   *
+   * **물리 삭제다.** 탈퇴(N44)와 같은 기준을 쓴다. soft delete로 두면 진단 row를
+   * 지우는 주체가 어디에도 없어(retention sweep은 세션·job·날씨만 본다) 사실상
+   * "화면에서만 감추기"가 되고, "철회 시 지체 없이 파기"라는 처리방침과 어긋난다.
+   *
+   * 이미지를 먼저 지우는 순서가 중요하다 — 이유는 `deleteForDiagnosis` 주석 참고.
+   * S3 삭제가 실패하면 예외가 올라와 진단 row는 남는다. 사용자에게는 삭제가 실패한
+   * 것으로 보이고 재시도할 수 있다. 반대로 row를 먼저 지우면 사진만 남고 기록은
+   * 사라져, 가장 지우고 싶었던 것이 남는다.
+   */
+  async deleteDiagnosis(userId: number, diagnosisId: string): Promise<void> {
+    const diagnosis = await this.prisma.diagnosis.findFirst({
+      where: notDeletedWhere({ id: diagnosisId }),
+      select: { id: true, userId: true },
+    });
+    if (!diagnosis) {
+      throw new NotFoundException('진단을 찾을 수 없습니다');
+    }
+    if (diagnosis.userId !== userId) {
+      throw new ForbiddenException('해당 진단에 대한 접근 권한이 없습니다');
+    }
+
+    const imagesDeleted = await this.imageStorage.deleteForDiagnosis(userId, diagnosisId);
+
+    await this.prisma.$transaction(async (tx) => {
+      // Recommendation.diagnosisId는 SetNull이라 진단만 지우면 추천이 사용자에게
+      // 그대로 남는다. 그 문장은 지운 진단을 설명하는 글이므로 같이 지운다.
+      await tx.recommendation.deleteMany({ where: { diagnosisId, userId } });
+      // SkinMetric·DiagnosisImage는 Cascade로 함께 사라진다.
+      await tx.diagnosis.delete({ where: { id: diagnosisId } });
+    });
+
+    await this.auditLog.log({
+      actorId: userId,
+      action: 'diagnosis.deleted',
+      targetType: 'Diagnosis',
+      targetId: diagnosisId,
+      result: 'success',
+      metadata: { imagesDeleted },
+    });
+  }
 
   /**
    * 진단 제출: 정면 이미지 검증 → 추론 → 날씨 스냅샷 확보 → transaction 저장.

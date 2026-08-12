@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Pressable,
   StyleSheet,
@@ -14,6 +15,7 @@ import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { EvidenceBadge } from '../../src/components/EvidenceBadge';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
+import { useToast } from '../../src/components/Toast';
 import {
   AIR_STATUS_LABEL,
   AIR_STATUS_TEXT_COLOR,
@@ -35,6 +37,38 @@ export default function DiagnosisDetailScreen() {
   const { id, date } = useLocalSearchParams<{ id: string; date: string }>();
   const [diagnosis, setDiagnosis] = useState<CalendarDiagnosis | null>(null);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
+  const { showToast } = useToast();
+
+  /**
+   * F67: 되돌릴 수 없는 삭제라 확인을 먼저 받는다. 사진이 함께 사라진다는 점을
+   * 문구에 밝힌다 — 기록만 지워지고 사진은 남는다고 오해하면 동의의 의미가 없다.
+   */
+  const confirmDelete = () => {
+    Alert.alert(
+      '이 기록을 삭제할까요?',
+      '촬영한 사진과 부위 분석, 이 기록에서 나온 추천이 함께 삭제됩니다. 삭제하면 되돌릴 수 없어요.',
+      [
+        { text: '취소', style: 'cancel' },
+        { text: '삭제', style: 'destructive', onPress: () => void handleDelete() },
+      ],
+    );
+  };
+
+  const handleDelete = async () => {
+    if (!id || deleting) return;
+    setDeleting(true);
+    try {
+      await api.deleteDiagnosis(id);
+      showToast('기록을 삭제했어요', { type: 'success' });
+      router.back();
+    } catch {
+      // 화면 상태는 그대로 두고 알린다 — 서버에 남아 있는데 화면에서만 지우면
+      // 다음 진입에서 되살아난 것처럼 보인다.
+      setDeleting(false);
+      showToast('기록을 삭제하지 못했어요. 잠시 후 다시 시도해주세요.', { type: 'error' });
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -171,6 +205,28 @@ export default function DiagnosisDetailScreen() {
       ) : (
         <Text style={styles.noRec}>이 진단에는 추천이 없어요</Text>
       )}
+
+      {/* F67: 파괴적 동작이라 본문 아래 끝에 둔다 — 스크롤 중 오조작을 줄인다. */}
+      <Pressable
+        onPress={confirmDelete}
+        disabled={deleting}
+        style={({ pressed }) => [
+          styles.deleteButton,
+          pressed && styles.pressed,
+          deleting && styles.deleteButtonDisabled,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel="이 기록 삭제"
+      >
+        {deleting ? (
+          <ActivityIndicator size="small" color={colors.statusBad} />
+        ) : (
+          <Ionicons name="trash-outline" size={16} color={colors.statusBad} />
+        )}
+        <Text style={styles.deleteButtonText}>
+          {deleting ? '삭제하는 중…' : '이 기록 삭제'}
+        </Text>
+      </Pressable>
     </ScreenContainer>
   );
 }
@@ -419,6 +475,20 @@ const styles = StyleSheet.create({
   recProductsButtonText: { ...typography.caption, color: colors.sageDark, fontWeight: '700' },
   pressed: { opacity: 0.6 },
   noRec: { ...typography.caption, color: colors.textTertiary },
+
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.statusBad + '55',
+  },
+  deleteButtonDisabled: { opacity: 0.5 },
+  deleteButtonText: { ...typography.bodySm, color: colors.statusBad },
 
   imageBox: {
     borderRadius: radius.lg,

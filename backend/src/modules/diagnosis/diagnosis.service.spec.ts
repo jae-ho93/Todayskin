@@ -17,6 +17,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ConsentService } from '../consent/consent.service';
 import { ImageStorageService } from '../storage/image-storage.service';
 import { IdempotencyService } from '../idempotency/idempotency.service';
+import { AuditLogService } from '../admin/audit-log.service';
 import { HistoryEntryDto } from './dto/history-entry.dto';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -33,6 +34,7 @@ describe('DiagnosisService', () => {
   let imageStorage: {
     storeDiagnosisImage: jest.Mock;
     deleteAllForUser: jest.Mock;
+    deleteForDiagnosis: jest.Mock;
     getPresignedUrlForDiagnosis: jest.Mock;
     // R20: 캘린더 경로는 include된 image row로 배치 서명한다.
     presignImages: jest.Mock;
@@ -45,6 +47,7 @@ describe('DiagnosisService', () => {
     retake: jest.Mock;
   };
   let prisma: Record<string, any>;
+  let auditLog: { log: jest.Mock };
 
   const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0x00]);
   const validImages: InferenceImages = {
@@ -74,6 +77,7 @@ describe('DiagnosisService', () => {
     imageStorage = {
       storeDiagnosisImage: jest.fn(),
       deleteAllForUser: jest.fn(),
+      deleteForDiagnosis: jest.fn().mockResolvedValue(1),
       getPresignedUrlForDiagnosis: jest.fn(),
       presignImages: jest.fn().mockResolvedValue([]),
       // BE-2026-08-12: 스냅샷 thumbnailUri 정규화 — memory:// → http 변환을 흉내낸다
@@ -100,8 +104,12 @@ describe('DiagnosisService', () => {
       skinMetric: {
         createMany: jest.fn(),
       },
+      recommendation: {
+        deleteMany: jest.fn(),
+      },
       $transaction: jest.fn(),
     };
+    auditLog = { log: jest.fn().mockResolvedValue(undefined) };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -112,6 +120,7 @@ describe('DiagnosisService', () => {
         { provide: ImageStorageService, useValue: imageStorage },
         { provide: IdempotencyService, useValue: idempotency },
         { provide: PrismaService, useValue: prisma },
+        { provide: AuditLogService, useValue: auditLog },
       ],
     }).compile();
 
@@ -465,6 +474,61 @@ describe('DiagnosisService', () => {
       const result = await service.getDiagnosisWithMetrics(1, 'snap-x');
       expect(result.diagnosis.id).toBe('snap-x');
       expect(result.metrics).toHaveLength(1);
+    });
+  });
+
+  // ── N43 기록 삭제 ──────────────────────────────────
+
+  describe('deleteDiagnosis', () => {
+    const tx = {
+      recommendation: { deleteMany: jest.fn() },
+      diagnosis: { delete: jest.fn() },
+    };
+
+    beforeEach(() => {
+      tx.recommendation.deleteMany.mockClear();
+      tx.diagnosis.delete.mockClear();
+      prisma.$transaction.mockImplementation(async (fn: any) => fn(tx));
+    });
+
+    it('진단이 없으면 404', async () => {
+      prisma.diagnosis.findFirst.mockResolvedValue(null);
+      await expect(service.deleteDiagnosis(1, 'd-1')).rejects.toThrow(NotFoundException);
+      expect(imageStorage.deleteForDiagnosis).not.toHaveBeenCalled();
+    });
+
+    it('남의 기록은 지울 수 없다 — 403이고 이미지에 손대지 않는다', async () => {
+      prisma.diagnosis.findFirst.mockResolvedValue({ id: 'd-1', userId: 2 });
+      await expect(service.deleteDiagnosis(1, 'd-1')).rejects.toThrow(ForbiddenException);
+      expect(imageStorage.deleteForDiagnosis).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('본인 기록이면 이미지·추천·진단을 모두 지운다', async () => {
+      prisma.diagnosis.findFirst.mockResolvedValue({ id: 'd-1', userId: 1 });
+
+      await service.deleteDiagnosis(1, 'd-1');
+
+      expect(imageStorage.deleteForDiagnosis).toHaveBeenCalledWith(1, 'd-1');
+      // 추천은 SetNull이라 명시적으로 지우지 않으면 사용자에게 그대로 남는다.
+      expect(tx.recommendation.deleteMany).toHaveBeenCalledWith({
+        where: { diagnosisId: 'd-1', userId: 1 },
+      });
+      expect(tx.diagnosis.delete).toHaveBeenCalledWith({ where: { id: 'd-1' } });
+      expect(auditLog.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'diagnosis.deleted', targetId: 'd-1' }),
+      );
+    });
+
+    it('이미지 삭제가 실패하면 진단 row를 남긴다 — 사진만 남고 기록이 사라지는 것을 막는다', async () => {
+      prisma.diagnosis.findFirst.mockResolvedValue({ id: 'd-1', userId: 1 });
+      imageStorage.deleteForDiagnosis.mockRejectedValue(new ServiceUnavailableException());
+
+      await expect(service.deleteDiagnosis(1, 'd-1')).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(auditLog.log).not.toHaveBeenCalled();
     });
   });
 
