@@ -1,5 +1,6 @@
 import {
   currentMonthBounds,
+  formatCapturedDate,
   formatDateKo,
   formatKstDate,
   kstDaysAgo,
@@ -80,6 +81,25 @@ describe('kst-date', () => {
     it('앞자리 0을 떼고 한국어로 표기한다', () => {
       expect(formatDateKo('2026-08-01')).toBe('8월 1일');
       expect(formatDateKo('2026-12-25')).toBe('12월 25일');
+    });
+  });
+
+  describe('formatCapturedDate', () => {
+    it('0을 채워 자리수를 고정한다 — 목록에서 세로 정렬이 맞아야 한다', () => {
+      expect(formatCapturedDate('2026-08-01T05:00:00.000Z')).toBe('2026.08.01');
+      expect(formatCapturedDate('2026-12-25T05:00:00.000Z')).toBe('2026.12.25');
+    });
+
+    // KST 자정 전후. UTC 날짜를 그대로 쓰면 두 값이 같은 날로 뭉개진다.
+    it.each([
+      ['2026-08-12T14:59:59.000Z', '2026.08.12'], // KST 08-12 23:59:59
+      ['2026-08-12T15:00:00.000Z', '2026.08.13'], // KST 08-13 00:00:00
+    ])('%s → %s', (iso, expected) => {
+      expect(formatCapturedDate(iso)).toBe(expected);
+    });
+
+    it('연말 경계에서 연도가 함께 넘어간다', () => {
+      expect(formatCapturedDate('2026-12-31T15:00:00.000Z')).toBe('2027.01.01');
     });
   });
 });
