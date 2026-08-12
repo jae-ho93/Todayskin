@@ -8,6 +8,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { api } from '../src/api/client';
 import { useToast } from '../src/components/Toast';
 import { useUserLocation } from '../src/hooks/useUserLocation';
+import { prepareUploadImage } from '../src/lib/upload-image';
 import { colors, radius, shadow, spacing, typography } from '../src/theme';
 import type { ConsentPurposeInfo } from '../src/types';
 
@@ -110,13 +111,16 @@ export default function CameraGuideScreen() {
     }
   };
 
-  const submitPhoto = async (uri: string) => {
+  const submitPhoto = async (photo: { uri: string; width?: number; height?: number }) => {
     const originPhase = phase;
     setPhase('analyzing');
     setError(null);
     try {
+      // F72: 원본(최대 10MB)을 그대로 올리면 업로드가 느리다 — 장변 1440px로 줄여 전송.
+      // 리사이즈는 '분석 중' 화면에서 진행되고, 실패하면 원본으로 폴백한다.
+      const front = await prepareUploadImage(photo.uri, photo.width, photo.height);
       await api.submitDiagnosis({
-        front: uri,
+        front,
         wentOutside: wentOutside ?? false,
         coords: wentOutside ? (coords ?? undefined) : undefined,
       });
@@ -131,7 +135,7 @@ export default function CameraGuideScreen() {
     if (phase !== 'capture') return;
     const photo = await cameraRef.current?.takePictureAsync({ quality: 0.5 });
     if (!photo) return;
-    await submitPhoto(photo.uri);
+    await submitPhoto({ uri: photo.uri, width: photo.width, height: photo.height });
   };
 
   const handlePickFromLibrary = async () => {
@@ -148,7 +152,8 @@ export default function CameraGuideScreen() {
       aspect: [3, 4],
     });
     if (result.canceled || !result.assets[0]) return;
-    await submitPhoto(result.assets[0].uri);
+    const asset = result.assets[0];
+    await submitPhoto({ uri: asset.uri, width: asset.width, height: asset.height });
   };
 
   if (phase === 'intro') {
