@@ -16,6 +16,7 @@ import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { EvidenceBadge } from '../../src/components/EvidenceBadge';
 import { LandmarkOverlay } from '../../src/components/LandmarkOverlay';
+import { RetryButton } from '../../src/components/RetryButton';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { AIR_STATUS_COLOR, UV_LEVEL_COLOR } from '../../src/lib/air-status';
 import { formatDateKo, monthBounds, todayKst } from '../../src/lib/kst-date';
@@ -37,6 +38,8 @@ export default function HistoryScreen() {
 
   // 서버 집계 시계열 (N8)
   const [scoreSeries, setScoreSeries] = useState<ScoreSeries | null>(null);
+  // F75: 조회 실패(null)를 "데이터 없음"과 구분해 재시도를 제공한다.
+  const [seriesFailed, setSeriesFailed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   // 선택 날짜의 통합 히스토리 (N8)
@@ -51,7 +54,9 @@ export default function HistoryScreen() {
   const initialLoadDoneRef = useRef(false);
 
   const load = useCallback(async () => {
-    setScoreSeries(await api.getScoreSeries(monthBounds(currentMonth)));
+    const series = await api.getScoreSeries(monthBounds(currentMonth));
+    setScoreSeries(series);
+    setSeriesFailed(series === null);
   }, [currentMonth]);
 
   const loadDay = useCallback(async (date: string) => {
@@ -190,21 +195,29 @@ export default function HistoryScreen() {
     <ScreenContainer refreshing={refreshing} onRefresh={handleRefresh}>
       <Text style={styles.title}>마이 히스토리</Text>
 
-      {trend && (
-        <Card style={styles.trendCard}>
-          <Text style={styles.trendLabel}>스코어 변화 추이</Text>
-          <Svg
-            width="100%"
-            height={trend.height}
-            viewBox={`0 0 ${trend.width} ${trend.height}`}
-            preserveAspectRatio="none"
-          >
-            <Polyline points={trend.points} fill="none" stroke={colors.sage} strokeWidth={2.5} />
-          </Svg>
-          <Text style={styles.trendRange}>
-            {formatDateKo(trend.from)} ~ {formatDateKo(trend.to)}
-          </Text>
+      {seriesFailed ? (
+        <Card style={styles.emptyCard}>
+          <Text style={styles.emptyText}>스코어 추이를 불러올 수 없어요</Text>
+          {/* F75: 오류 상태 재시도 일관화 — 홈·추천과 같은 방식 */}
+          <RetryButton onPress={() => void load()} />
         </Card>
+      ) : (
+        trend && (
+          <Card style={styles.trendCard}>
+            <Text style={styles.trendLabel}>스코어 변화 추이</Text>
+            <Svg
+              width="100%"
+              height={trend.height}
+              viewBox={`0 0 ${trend.width} ${trend.height}`}
+              preserveAspectRatio="none"
+            >
+              <Polyline points={trend.points} fill="none" stroke={colors.sage} strokeWidth={2.5} />
+            </Svg>
+            <Text style={styles.trendRange}>
+              {formatDateKo(trend.from)} ~ {formatDateKo(trend.to)}
+            </Text>
+          </Card>
+        )
       )}
 
       <Text style={styles.sectionTitle}>날짜별 기록</Text>
@@ -251,6 +264,8 @@ export default function HistoryScreen() {
         <Card style={styles.emptyCard}>
           <Text style={styles.emptyText}>기록을 불러올 수 없어요</Text>
           <Text style={styles.emptyHint}>네트워크를 확인하거나 다시 로그인해주세요</Text>
+          {/* F75: 오류 상태 재시도 일관화 — 탭 이탈 없이 같은 자리에서 재시도 */}
+          <RetryButton onPress={() => selectedDate && void loadDay(selectedDate)} />
         </Card>
       ) : dayHistory.diagnoses.length === 0 ? (
         <Card style={styles.emptyCard}>
