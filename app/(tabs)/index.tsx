@@ -6,6 +6,7 @@ import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { CircularGauge } from '../../src/components/CircularGauge';
 import { RecommendationCard } from '../../src/components/RecommendationCard';
+import { RetryButton } from '../../src/components/RetryButton';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { useToast } from '../../src/components/Toast';
 import { WeatherCard } from '../../src/components/WeatherCard';
@@ -57,8 +58,8 @@ export default function HomeDashboard() {
       setLoadingRecommendations(true);
       setSkinScoreUnavailable(false);
 
-      const weatherSnapshot = await api.getWeather(coords ?? undefined);
-      setWeather(weatherSnapshot);
+      const weatherResult = await api.getWeather(coords ?? undefined);
+      setWeather(weatherResult.status === 'ok' ? weatherResult.data : null);
       setWeatherLoading(false);
       hasDataRef.current = true;
 
@@ -80,10 +81,13 @@ export default function HomeDashboard() {
 
     // A등급 (공인 가이드라인)은 날씨 만으로 즉시 판단, B등급은 전담 서버에
     // 전달해 서버가 소유권을 확인한 뒤 지장된 파부·날씨 데이터를 사용한다.
-    const [aGrade, bGradeResponse] = await Promise.all([
+    const [aGradeResult, bGradeResponse] = await Promise.all([
       api.getRecommendations('A'),
       api.generateRecommendationsFast(skinResult.data.id),
     ]);
+
+    // R14: 조회 실패(null)와 "성공했지만 A등급 추천 없음"(빈 배열)을 구분한다.
+    const aGrade = aGradeResult.status === 'ok' ? aGradeResult.data : null;
 
     // F1: fast-path 응답 처리
     // source: CACHED/FALLBACK → 실제품을 즉시 표시하고 jobId가 있으면 LIVE 결과로 교체한다.
@@ -184,6 +188,7 @@ export default function HomeDashboard() {
           <Card style={styles.weatherLoading}>
             <Ionicons name="cloud-offline-outline" size={24} color={colors.textTertiary} />
             <Text style={styles.weatherLoadingText}>날씨 정보를 불러올 수 없어요</Text>
+            <RetryButton onPress={handleRefresh} disabled={refreshing} />
           </Card>
         )}
 
@@ -200,6 +205,7 @@ export default function HomeDashboard() {
             <Ionicons name="cloud-offline-outline" size={28} color={colors.textTertiary} />
             <Text style={styles.emptyStateText}>피부 스코어를 불러올 수 없어요</Text>
             <Text style={styles.emptyStateSubtext}>잠시 후 다시 시도해주세요</Text>
+            <RetryButton onPress={handleRefresh} disabled={refreshing} />
           </View>
         )}
 
@@ -229,7 +235,10 @@ export default function HomeDashboard() {
                   </Text>
                 </View>
               ) : recommendations === null ? (
-                <Text style={styles.recommendationLoadingText}>추천을 불러올 수 없어요</Text>
+                <View style={styles.recommendationLoading}>
+                  <Text style={styles.recommendationLoadingText}>추천을 불러올 수 없어요</Text>
+                  <RetryButton onPress={handleRefresh} disabled={refreshing} />
+                </View>
               ) : (
                 <View style={styles.recommendationList}>
                   {recommendations.slice(0, 4).map((rec) => (

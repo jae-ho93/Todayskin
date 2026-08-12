@@ -43,10 +43,11 @@ export default function CameraGuideScreen() {
   /** 필수 동의가 모두 체결됐는지 확인. true면 진행 가능. */
   const checkConsents = useCallback(async (): Promise<boolean> => {
     try {
-      const [registry, myConsents] = await Promise.all([
+      const [registryResult, myConsents] = await Promise.all([
         api.getConsentRegistry(),
         api.getMyConsents(),
       ]);
+      const registry = registryResult.status === 'ok' ? registryResult.data : null;
       setConsentRegistry(registry);
       const agreed = new Set(
         (myConsents ?? []).filter((c) => c.agreed).map((c) => c.purpose),

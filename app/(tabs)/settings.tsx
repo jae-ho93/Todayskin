@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
+import { RetryButton } from '../../src/components/RetryButton';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { useToast } from '../../src/components/Toast';
 import { clearSession } from '../../src/lib/session';
@@ -136,12 +137,19 @@ export default function SettingsScreen() {
     }
   };
 
-  const openConsentModal = async () => {
-    setConsentModalOpen(true);
+  const loadConsents = useCallback(async () => {
     setConsentsLoading(true);
-    if (!registry) setRegistry(await api.getConsentRegistry());
+    if (!registry) {
+      const result = await api.getConsentRegistry();
+      setRegistry(result.status === 'ok' ? result.data : null);
+    }
     setMyConsents(await api.getMyConsents());
     setConsentsLoading(false);
+  }, [registry]);
+
+  const openConsentModal = async () => {
+    setConsentModalOpen(true);
+    await loadConsents();
   };
 
   const { showToast } = useToast();
@@ -368,6 +376,7 @@ export default function SettingsScreen() {
             ) : registry === null && myConsents === null ? (
               <View style={styles.modalEmpty}>
                 <Text style={styles.modalEmptyText}>동의 내역을 불러올 수 없어요</Text>
+                <RetryButton onPress={() => void loadConsents()} disabled={consentsLoading} />
               </View>
             ) : (registry ?? (myConsents ?? [])).length === 0 ? (
               <View style={styles.modalEmpty}>

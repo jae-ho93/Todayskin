@@ -46,12 +46,12 @@ describe('GET /weather 계약', () => {
     };
     fetchMock.mockResolvedValueOnce(jsonResponse(200, payload));
 
-    const weather = await api.getWeather({ latitude: 37.5665, longitude: 126.978 });
+    const result = await api.getWeather({ latitude: 37.5665, longitude: 126.978 });
 
-    expect(weather).toEqual(payload);
+    expect(result).toEqual({ status: 'ok', data: payload });
     // 0으로 뭉개지 않아야 한다 — 화면이 "측정 불가"와 "0"을 구분한다.
-    expect(weather?.uvIndex).toBeNull();
-    expect(weather?.source).toBe('UNAVAILABLE');
+    expect(result.status === 'ok' && result.data.uvIndex).toBeNull();
+    expect(result.status === 'ok' && result.data.source).toBe('UNAVAILABLE');
   });
 
   it('좌표를 쿼리스트링으로 보낸다', async () => {
@@ -62,10 +62,38 @@ describe('GET /weather 계약', () => {
     expect(fetchMock.mock.calls[0][0]).toContain('/weather?lat=37.5665&lon=126.978');
   });
 
-  it('5xx면 목업이 아니라 null을 반환한다', async () => {
+  // R14: 실패를 null로 뭉개면 화면이 "측정 불가"와 "조회 실패"를 구분할 수 없다.
+  it('5xx면 목업이 아니라 error 상태를 반환한다', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(503, { detail: 'unavailable' }));
 
-    await expect(api.getWeather()).resolves.toBeNull();
+    await expect(api.getWeather()).resolves.toEqual({ status: 'error' });
+  });
+
+  it('네트워크 오류도 error 상태로 돌려준다', async () => {
+    fetchMock.mockRejectedValueOnce(new Error('Network request failed'));
+
+    await expect(api.getWeather()).resolves.toEqual({ status: 'error' });
+  });
+
+  // R14: safeFetch를 없애고 authFetch 한 경로로 합쳤으므로, 인증이 필수가 아닌
+  // 엔드포인트도 토큰이 있으면 헤더를 싣는다.
+  it('토큰이 있으면 Authorization 헤더를 함께 보낸다', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, {}));
+
+    await api.getWeather();
+
+    const headers = fetchMock.mock.calls[0][1]?.headers as Record<string, string>;
+    expect(headers.Authorization).toBe('Bearer access-1');
+  });
+
+  it('토큰이 없으면 Authorization 헤더 없이 보낸다', async () => {
+    jest.spyOn(session, 'getToken').mockResolvedValue(null);
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, {}));
+
+    await api.getWeather();
+
+    const headers = fetchMock.mock.calls[0][1]?.headers as Record<string, string>;
+    expect(headers.Authorization).toBeUndefined();
   });
 });
 
@@ -93,16 +121,19 @@ describe('추천·제품 응답 스키마 계약', () => {
   it('GET /recommendations는 배열을 그대로 전달한다', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(200, [recommendation]));
 
-    await expect(api.getRecommendations('A')).resolves.toEqual([recommendation]);
+    await expect(api.getRecommendations('A')).resolves.toEqual({
+      status: 'ok',
+      data: [recommendation],
+    });
     expect(fetchMock.mock.calls[0][0]).toContain('/recommendations?grade=A');
   });
 
   it('GET /products는 카탈로그 배열을 전달한다', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(200, [product]));
 
-    const products = await api.getProducts('moisture');
+    const result = await api.getProducts('moisture');
 
-    expect(products?.[0].matchedGrade).toBe('B');
+    expect(result.status === 'ok' && result.data[0].matchedGrade).toBe('B');
     expect(fetchMock.mock.calls[0][0]).toContain('/products?category=moisture');
   });
 

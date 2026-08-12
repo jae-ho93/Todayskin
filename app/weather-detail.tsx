@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../src/api/client';
 import { Card } from '../src/components/Card';
+import { RetryButton } from '../src/components/RetryButton';
 import { ScreenContainer } from '../src/components/ScreenContainer';
 import { useToast } from '../src/components/Toast';
 import { useUserLocation } from '../src/hooks/useUserLocation';
@@ -202,10 +203,10 @@ export default function WeatherDetailScreen() {
       if (mode === 'initial') setLoading(true);
       else setRefreshing(true);
       try {
-        const w = await api.getWeather(coords ?? undefined);
+        const result = await api.getWeather(coords ?? undefined);
         if (!mountedRef.current) return;
         hasLoadedRef.current = true;
-        setWeather(w);
+        setWeather(result.status === 'ok' ? result.data : null);
       } catch {
         if (!mountedRef.current) return;
         // F52: 오류 시 기존 정보 유지 — 화면 블랭크 방지
@@ -259,6 +260,7 @@ export default function WeatherDetailScreen() {
         <Ionicons name="cloud-offline-outline" size={32} color={colors.textTertiary} />
         <Text style={styles.unavailableTitle}>날씨 정보를 불러올 수 없어요</Text>
         <Text style={styles.observedAt}>잠시 후 다시 시도해주세요</Text>
+        <RetryButton onPress={() => loadWeather('initial')} disabled={refreshing} />
       </ScreenContainer>
     );
   }

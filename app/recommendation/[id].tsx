@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../src/api/client';
 import { Card } from '../../src/components/Card';
 import { EvidenceBadge } from '../../src/components/EvidenceBadge';
 import { IngredientChip } from '../../src/components/IngredientChip';
+import { RetryButton } from '../../src/components/RetryButton';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { useToast } from '../../src/components/Toast';
 import { colors, radius, spacing, typography } from '../../src/theme';
@@ -17,9 +18,27 @@ export default function RecommendationDetailScreen() {
   const [showExplanation, setShowExplanation] = useState(true);
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
   const [loading, setLoading] = useState(true);
-  // 관련 제품은 부가 정보라 불러오기 실패해도 조용히 빈 목록으로 둔다(별도 실패 UI 없음)
-  const [products, setProducts] = useState<Product[]>([]);
+  // R14: null = 카탈로그 조회 실패(재시도 안내), [] = 조회 성공했고 제품이 없음.
+  const [products, setProducts] = useState<Product[] | null>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
   const { showToast } = useToast();
+
+  const mountedRef = useRef(true);
+
+  const loadProducts = useCallback(async () => {
+    setProductsLoading(true);
+    const result = await api.getProducts();
+    if (!mountedRef.current) return;
+    setProducts(result.status === 'ok' ? result.data : null);
+    setProductsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -29,13 +48,14 @@ export default function RecommendationDetailScreen() {
       setRecommendation(result);
       setLoading(false);
     });
-    api.getProducts().then((result) => {
-      if (!cancelled) setProducts(result ?? []);
-    });
     return () => {
       cancelled = true;
     };
   }, [id]);
+
+  useEffect(() => {
+    void loadProducts();
+  }, [loadProducts]);
 
   if (loading) {
     return (
@@ -57,7 +77,13 @@ export default function RecommendationDetailScreen() {
     );
   }
 
-  const relatedProducts = products.filter((p) => recommendation.relatedProductIds.includes(p.id));
+  const relatedProducts = (products ?? []).filter((p) =>
+    recommendation.relatedProductIds.includes(p.id),
+  );
+  // 이 추천에 엮인 제품이 있는데 카탈로그를 못 불러온 경우에만 실패를 알린다.
+  // 애초에 엮인 제품이 없으면 섹션 자체가 없는 게 맞다.
+  const productsUnavailable =
+    products === null && !productsLoading && recommendation.relatedProductIds.length > 0;
 
   const openPurchaseUrl = async (product: Product) => {
     if (!product.purchaseUrl) {
@@ -115,7 +141,15 @@ export default function RecommendationDetailScreen() {
       </View>
 
       <View>
-        {relatedProducts.length > 1 ? (
+        {productsUnavailable ? (
+          <>
+            <Text style={styles.sectionTitle}>관련 제품</Text>
+            <Card style={styles.productsUnavailable}>
+              <Text style={styles.productsUnavailableText}>제품 정보를 불러올 수 없어요</Text>
+              <RetryButton onPress={() => void loadProducts()} disabled={productsLoading} />
+            </Card>
+          </>
+        ) : relatedProducts.length > 1 ? (
           <>
             <Text style={styles.sectionTitle}>관련 제품</Text>
             <View style={styles.productList}>
@@ -168,6 +202,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   unavailableCtaText: { ...typography.subtitle, color: colors.textInverse },
+  productsUnavailable: { alignItems: 'center', gap: spacing.xs },
+  productsUnavailableText: { ...typography.bodySm, color: colors.textTertiary },
   title: { ...typography.displaySm, color: colors.textPrimary },
   gradeCard: { gap: spacing.md },
   gradeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

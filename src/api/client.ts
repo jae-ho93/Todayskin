@@ -48,19 +48,16 @@ async function authHeaders(): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-// 목업으로 조용히 대체하지 않는다 — 실패(네트워크 오류·타임아웃·5xx)하면 null을 반환해서
-// 호출부가 "불러올 수 없어요"를 명시적으로 보여주게 한다.
-async function safeFetch<T>(path: string, timeoutMs = 2500): Promise<T | null> {
-  try {
-    const res = await fetch(`${API_BASE_URL}${path}`, { signal: timeoutSignal(timeoutMs) });
-    if (!res.ok) return null;
-    return (await res.json()) as T;
-  } catch {
-    return null;
-  }
-}
-
-export type FetchResult<T> = { status: 'ok'; data: T } | { status: 'not_found' } | { status: 'error' };
+/**
+ * R14: 모든 읽기 요청의 결과 타입.
+ *
+ * 실패를 null로 뭉개면 화면이 "정상적으로 비어 있음"과 "불러오지 못함"을 구분하지
+ * 못해서, 재시도를 안내해야 할 자리에 빈 상태를 보여주게 된다.
+ */
+export type FetchResult<T> =
+  | { status: 'ok'; data: T }
+  | { status: 'not_found' }
+  | { status: 'error' };
 
 // N18: refresh 토큰 회전. 여러 요청이 동시에 401을 받아도 refresh는 정확히 1회만 보낸다.
 // 성공하면 새 access token으로 세션이 갱신되고, 실패하면 clearSession()이 호출돼
@@ -145,11 +142,15 @@ async function fetchWithAuth(
   return res;
 }
 
-// 로그인한 유저 기준 데이터 조회. 404("정상적으로 없음")와 그 외 실패(네트워크 오류·타임아웃·5xx)를
+// 읽기(GET) 공통 경로. 404("정상적으로 없음")와 그 외 실패(네트워크 오류·타임아웃·5xx)를
 // 구분해야 하는 화면(예: 아직 촬영 기록 없음 vs. 불러오는 데 실패함)을 위해 결과를 분리해서 반환한다.
-async function authFetch<T>(path: string): Promise<FetchResult<T>> {
+//
+// R14: 인증이 필요 없는 엔드포인트(`/weather`, `/products`, `/consents/registry` 등)도
+// 이 경로를 쓴다. 토큰이 없으면 헤더가 그냥 빠지므로 동작은 같고, 서버가 나중에 인증을
+// 요구하도록 바뀌어도 화면이 조용히 깨지지 않는다.
+async function authFetch<T>(path: string, timeoutMs?: number): Promise<FetchResult<T>> {
   try {
-    const res = await fetchWithAuth(path);
+    const res = await fetchWithAuth(path, { timeoutMs });
     if (res.status === 404) return { status: 'not_found' };
     if (!res.ok) return { status: 'error' };
     return { status: 'ok', data: (await res.json()) as T };
@@ -244,10 +245,10 @@ async function authPatchJson<T>(path: string, body: unknown): Promise<T> {
 
 export const api = {
   // 기상청/에어코리아 등 외부 정부 API를 순차 호출하다 보니 응답이 0.5~16초까지 들쭉날쭉하다
-  // (백엔드 자체 타임아웃 예산이 최대 약 16초). 기본 2.5초 타임아웃으로는 정상 응답도 자주 잘려서
+  // (백엔드 자체 타임아웃 예산이 최대 약 16초). 기본 타임아웃으로는 정상 응답도 자주 잘려서
   // 실패로 오인하기 쉬우므로 여유 있게 20초로 늘린다.
   getWeather: (coords?: { latitude: number; longitude: number }) =>
-    safeFetch<WeatherSnapshot>(
+    authFetch<WeatherSnapshot>(
       coords ? `/weather?lat=${coords.latitude}&lon=${coords.longitude}` : '/weather',
       20000,
     ),
@@ -300,7 +301,7 @@ export const api = {
   },
   // 기존 추천 (동기 생성 — F1에서 제거 예정)
   getRecommendations: (grade?: EvidenceGrade) =>
-    safeFetch<Recommendation[]>(grade ? `/recommendations?grade=${grade}` : '/recommendations'),
+    authFetch<Recommendation[]>(grade ? `/recommendations?grade=${grade}` : '/recommendations'),
   getRecommendationById: (id: string) =>
     authFetch<Recommendation>(`/recommendations/${id}`).then((result) =>
       result.status === 'ok' ? result.data : null,
@@ -415,7 +416,7 @@ export const api = {
   // ──────────────── 기존 제품·추천 ────────────────
 
   getProducts: (category?: Product['category']) =>
-    safeFetch<Product[]>(category ? `/products?category=${category}` : '/products'),
+    authFetch<Product[]>(category ? `/products?category=${category}` : '/products'),
 
   // ──────────────── 인증 (OTP, 가입, 로그인) ────────────────
 
@@ -433,7 +434,7 @@ export const api = {
 
   // ──────────────── 동의 & 알림 설정 ────────────────
 
-  getConsentRegistry: () => safeFetch<ConsentPurposeInfo[]>('/consents/registry'),
+  getConsentRegistry: () => authFetch<ConsentPurposeInfo[]>('/consents/registry'),
   upsertConsent: (purpose: ConsentPurpose, agreed: boolean) =>
     authPostJson<{ purpose: string; agreed: boolean }>('/consents', { purpose, agreed }),
   // N19: 내 동의 상태 목록 (설정 화면 철회 UI).
