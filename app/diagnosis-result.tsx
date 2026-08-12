@@ -85,7 +85,7 @@ export default function DiagnosisResultScreen() {
     const prev = points[idx - 1];
     if (!prev) return null;
     const diff = Math.round(skinScore.overallScore - prev.overallScore);
-    if (diff === 0) return { label: '지난 진단과 동일', up: null as boolean | null };
+    if (diff === 0) return { label: '지난 측정과 동일', up: null as boolean | null };
     return { label: `${diff > 0 ? '▲' : '▼'} ${Math.abs(diff)}점`, up: diff > 0 };
   }, [skinScore, series]);
 
@@ -101,7 +101,7 @@ export default function DiagnosisResultScreen() {
     return (
       <View style={[styles.flex, styles.centered]}>
         <Ionicons name="cloud-offline-outline" size={32} color={colors.textTertiary} />
-        <Text style={styles.unavailableTitle}>진단 결과를 불러올 수 없어요</Text>
+        <Text style={styles.unavailableTitle}>측정 결과를 불러올 수 없어요</Text>
         <Pressable onPress={() => router.replace('/(tabs)')} hitSlop={12} style={styles.unavailableCta}>
           <Text style={styles.unavailableCtaText}>홈으로 돌아가기</Text>
         </Pressable>
@@ -129,7 +129,7 @@ export default function DiagnosisResultScreen() {
         <Pressable onPress={() => router.replace('/(tabs)')} hitSlop={12}>
           <Ionicons name="close" size={22} color={colors.textPrimary} />
         </Pressable>
-        <Text style={styles.headerTitle}>오늘의 진단 결과</Text>
+        <Text style={styles.headerTitle}>오늘의 측정 결과</Text>
         <View style={{ width: 22 }} />
       </SafeAreaView>
 

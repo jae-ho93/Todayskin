@@ -271,3 +271,21 @@ describe('설정·프로필 응답 계약', () => {
     expect(init?.method).toBe('PATCH');
   });
 });
+
+describe('진단 제출 오류 카피 (F74)', () => {
+  it('45초 타임아웃(abort)은 기술 문구 대신 원인 카피로 바꿔 던진다', async () => {
+    fetchMock.mockRejectedValueOnce(Object.assign(new Error('Aborted'), { name: 'AbortError' }));
+
+    await expect(
+      api.submitDiagnosis({ front: 'file://front.jpg', wentOutside: false }),
+    ).rejects.toThrow('네트워크가 느려 분석이 오래 걸리고 있어요. 잠시 후 다시 시도해주세요.');
+  });
+
+  it('타임아웃이 아닌 오류는 그대로 전달한다', async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError('Network request failed'));
+
+    await expect(
+      api.submitDiagnosis({ front: 'file://front.jpg', wentOutside: false }),
+    ).rejects.toThrow('Network request failed');
+  });
+});

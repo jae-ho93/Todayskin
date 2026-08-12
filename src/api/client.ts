@@ -48,6 +48,11 @@ async function authHeaders(): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+// 타임아웃(AbortSignal.timeout)은 환경에 따라 AbortError 또는 TimeoutError로 떨어진다.
+function isAbortError(e: unknown): boolean {
+  return e instanceof Error && (e.name === 'AbortError' || e.name === 'TimeoutError');
+}
+
 /**
  * R14: 모든 읽기 요청의 결과 타입.
  *
@@ -303,12 +308,22 @@ export const api = {
     }
     // N18: 401(access 만료)이면 refresh 후 1회 재시도하도록 fetchWithAuth를 사용한다.
     // FormData는 Content-Type을 직접 지정하면 경계 문자열이 깨지므로 지정하지 않는다.
-    const res = await fetchWithAuth(
-      `/diagnosis?${params.toString()}`,
-      { method: 'POST', body: formData, timeoutMs: 45000 },
-      // 진단 추론 뒤 KMA/AirKorea 스냅샷을 연결한다. 외부 API의 최악 대기
-      // 예산(각 8초)보다 짧게 끊으면 서버 저장은 성공하고 앱만 실패로 보일 수 있다.
-    );
+    let res: Response;
+    try {
+      res = await fetchWithAuth(
+        `/diagnosis?${params.toString()}`,
+        { method: 'POST', body: formData, timeoutMs: 45000 },
+        // 진단 추론 뒤 KMA/AirKorea 스냅샷을 연결한다. 외부 API의 최악 대기
+        // 예산(각 8초)보다 짧게 끊으면 서버 저장은 성공하고 앱만 실패로 보일 수 있다.
+      );
+    } catch (e) {
+      // F74: 45초 타임아웃(abort)이 "Aborted" 같은 기술 문구로 노출되지 않게
+      // 원인을 알 수 있는 카피로 바꿔 던진다.
+      if (isAbortError(e)) {
+        throw new Error('네트워크가 느려 분석이 오래 걸리고 있어요. 잠시 후 다시 시도해주세요.');
+      }
+      throw e;
+    }
     const data = await res.json().catch(() => null);
     if (!res.ok) throw new Error(extractErrorMessage(data, res.status));
     return data as SkinScoreSnapshot;

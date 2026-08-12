@@ -111,7 +111,7 @@ export default function DiagnosisDetailScreen() {
   return (
     <ScreenContainer>
       <View style={styles.header}>
-        <Text style={styles.title}>진단 기록</Text>
+        <Text style={styles.title}>측정 기록</Text>
         <Pressable
           onPress={() => router.back()}
           hitSlop={12}
@@ -204,7 +204,7 @@ export default function DiagnosisDetailScreen() {
           ))}
         </View>
       ) : (
-        <Text style={styles.noRec}>이 진단에는 추천이 없어요</Text>
+        <Text style={styles.noRec}>이 기록에는 추천이 없어요</Text>
       )}
 
       {/* F67: 파괴적 동작이라 본문 아래 끝에 둔다 — 스크롤 중 오조작을 줄인다. */}

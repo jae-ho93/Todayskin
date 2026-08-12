@@ -313,7 +313,7 @@ function DiagnosisCard({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
                 ))}
               </>
             ) : (
-              <Text style={styles.noRec}>이 진단에는 추천이 없어요</Text>
+              <Text style={styles.noRec}>이 기록에는 추천이 없어요</Text>
             )}
             <View style={styles.detailButton}>
               <Text style={styles.detailButtonText}>상세기록 보기</Text>

@@ -126,7 +126,7 @@ export default function CameraGuideScreen() {
       });
       router.replace('/diagnosis-result');
     } catch (e) {
-      setError(e instanceof Error ? e.message : '진단 저장에 실패했습니다. 다시 시도해주세요.');
+      setError(e instanceof Error ? e.message : '분석 결과를 저장하지 못했어요. 다시 시도해주세요.');
       setPhase(originPhase);
     }
   };
@@ -264,7 +264,7 @@ export default function CameraGuideScreen() {
           <View style={styles.consentCard}>
             <Text style={styles.consentTitle}>촬영 전 동의가 필요해요</Text>
             <Text style={styles.consentBody}>
-              피부 진단에는 아래 동의가 필요해요. 미동의 시 촬영할 수 없어요.
+              피부 측정에는 아래 동의가 필요해요. 미동의 시 촬영할 수 없어요.
             </Text>
             {consentRegistry?.map((item) => {
               const required = item.required;

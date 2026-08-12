@@ -87,7 +87,7 @@ export default function TrendScreen() {
           {pattern.correlations.length === 0 ? (
             <Card style={styles.stateCard}>
               <Text style={styles.stateBody}>
-                수집된 데이터로 의미 있는 관계를 아직 찾지 못했어요.{'\n'}진단을 계속 기록해주세요.
+                수집된 데이터로 의미 있는 관계를 아직 찾지 못했어요.{'\n'}피부 체크를 꾸준히 기록해주세요.
               </Text>
             </Card>
           ) : (

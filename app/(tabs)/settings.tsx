@@ -126,7 +126,7 @@ export default function SettingsScreen() {
   const handleWithdraw = () => {
     Alert.alert(
       '회원 탈퇴',
-      '탈퇴 시 개인정보와 모든 진단 기록·사진·추천이 즉시 삭제돼요. 복구할 수 없어요. 계속할까요?',
+      '탈퇴 시 개인정보와 모든 측정 기록·사진·추천이 즉시 삭제돼요. 복구할 수 없어요. 계속할까요?',
       [
         { text: '취소', style: 'cancel' },
         {
