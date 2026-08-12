@@ -12,9 +12,13 @@ const KST_OFFSET_MIN = 9 * 60;
 
 export interface UvForecast {
   current: number | null;
-  /** 오늘 남은 시간대 중 예상 최댓값 */
+  /**
+   * 응답에 담긴 오늘 슬롯 중 최댓값. 조회 기준(base)이 3시간 전이고 응답이 3시간
+   * 격자라, 오전에 지나간 시간대는 애초에 응답에 없다. 즉 "그날 24시간의 최댓값"이
+   * 아니라 "3시간 전부터 자정까지 중 최댓값"이다.
+   */
   peak: number | null;
-  /** 그 최댓값이 나오는 시각(0~23시) */
+  /** 그 최댓값이 나오는 KST 시각(0~23시) */
   peakHour: number | null;
 }
 
@@ -149,16 +153,21 @@ function extractFirstItem(data: KmaResponse): KmaItem | null {
 }
 
 /**
- * base 시각(3시간 격자)부터 당일 자정 전까지 남은 (h오프셋, 실제 시각 hour) 목록.
+ * base 시각(3시간 격자)부터 당일 자정 전까지의 (h오프셋, KST 시각 hour) 목록.
  * 응답 필드는 h0~h75(3시간 간격)까지만 있어 그 범위 안에서만 본다.
+ *
+ * `toKst()`는 UTC 밀리초를 +9시간 민 Date를 돌려주므로 **반드시 UTC 게터로 읽어야 한다.**
+ * `getHours()`/`getDate()` 같은 로컬 게터를 쓰면 실행 머신의 타임존이 한 번 더 더해진다
+ * (KST 머신에서 12시가 21시로 표시되던 N39 버그). 같은 파일의 `formatKmaQueryTime`이
+ * 쓰는 방식과 맞춘다. 테스트를 위해 export한다.
  */
-function todayRemainingSlots(base: Date): Array<[number, number]> {
+export function todayRemainingSlots(base: Date): Array<[number, number]> {
   const slots: Array<[number, number]> = [];
-  const baseKstDay = toKst(base).getDate();
+  const baseKstDay = toKst(base).getUTCDate();
   for (let offset = 0; offset <= 75; offset += 3) {
     const slotDt = new Date(base.getTime() + offset * 3600 * 1000);
-    if (toKst(slotDt).getDate() !== baseKstDay) break;
-    slots.push([offset, toKst(slotDt).getHours()]);
+    if (toKst(slotDt).getUTCDate() !== baseKstDay) break;
+    slots.push([offset, toKst(slotDt).getUTCHours()]);
   }
   return slots;
 }
