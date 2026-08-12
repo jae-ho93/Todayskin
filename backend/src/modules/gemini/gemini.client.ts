@@ -182,6 +182,29 @@ const PRODUCT_SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 근거 �
 5. 톤은 매일 쓰는 날씨 앱처럼 친근하고 부담스럽지 않게 작성하세요.
 6. 출력은 지정된 JSON 스키마를 그대로 따르고, timing은 3개 각각 정확히 한 번씩만 사용하세요.`;
 
+/**
+ * R30: 재시도·서킷브레이커 상수.
+ *
+ * 재시도는 **429/5xx에만** 건다. 타임아웃·네트워크 오류를 재시도하면 최악 지연이
+ * 타임아웃의 배수가 되는데, `POST /recommendations`는 동기 경로라 그 지연이 그대로
+ * 사용자 대기가 된다. 429/5xx는 대개 즉시 돌아오므로 예산을 거의 쓰지 않는다.
+ * 그래도 느린 5xx가 겹칠 수 있으니 전체 예산(TOTAL_BUDGET_MS)으로 한 번 더 막는다.
+ */
+const GEMINI_MAX_ATTEMPTS = 3; // 최초 1회 + 재시도 2회
+const GEMINI_BASE_BACKOFF_MS = 400;
+const GEMINI_TOTAL_BUDGET_MS = 30_000;
+const GEMINI_DEFAULT_TIMEOUT_MS = 15_000;
+
+/** 창(window) 안에 이만큼 연속 실패하면 회로를 연다. */
+const CIRCUIT_FAILURE_THRESHOLD = 10;
+const CIRCUIT_WINDOW_MS = 60_000;
+/** 회로가 열린 동안은 호출 없이 즉시 실패한다 — 워커 슬롯이 묶이지 않게. */
+const CIRCUIT_OPEN_MS = 30_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 @Injectable()
 export class GeminiClient {
   private readonly logger = new Logger(GeminiClient.name);
@@ -189,6 +212,12 @@ export class GeminiClient {
   private readonly model: string;
   private readonly endpoint: string;
   private readonly mockEnabled: boolean;
+  private readonly timeoutMs: number;
+
+  /** R30 서킷브레이커 상태 — 카운터와 타임스탬프뿐이라 라이브러리가 필요 없다. */
+  private failureCount = 0;
+  private failureWindowStart = 0;
+  private circuitOpenUntil = 0;
 
   constructor(
     private readonly configService: ConfigService,
@@ -196,6 +225,12 @@ export class GeminiClient {
   ) {
     this.apiKey = this.configService.get<string>('GEMINI_API_KEY');
     this.model = this.configService.get<string>('GEMINI_MODEL', 'gemini-flash-latest');
+    const timeout = Number(
+      this.configService.get<string | number>('GEMINI_TIMEOUT_MS') ??
+        GEMINI_DEFAULT_TIMEOUT_MS,
+    );
+    this.timeoutMs =
+      Number.isFinite(timeout) && timeout > 0 ? timeout : GEMINI_DEFAULT_TIMEOUT_MS;
     this.endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent`;
     // 개발용 mock — 운영에서는 반드시 false여야 함.
     // ConfigService가 envFilePath 파일을 읽지 못한 경우를 대비해 process.env도 직접 확인한다.
@@ -367,11 +402,69 @@ export class GeminiClient {
 
   // ── 내부 헬퍼 ──────────────────────────────────
 
+  /**
+   * R30: 429/5xx는 지수 백오프 + 지터로 재시도하고, 연속 실패가 잦으면 회로를 열어
+   * 호출 자체를 건너뛴다. 그 밖의 4xx(키 오류·잘못된 요청)는 재시도해도 같은 결과라
+   * 즉시 실패한다.
+   */
   private async callGemini<T>(payload: unknown): Promise<T> {
     if (!this.apiKey) {
       throw new GeminiUnavailable('GEMINI_API_KEY not configured');
     }
+    if (Date.now() < this.circuitOpenUntil) {
+      // 회로가 열린 동안은 기다리지 않고 즉시 실패한다 — 호출부는 fallback을 쓴다.
+      throw new GeminiUnavailable('Gemini circuit open — skipping call');
+    }
 
+    const startedAt = Date.now();
+    let lastError = 'unknown';
+
+    for (let attempt = 1; attempt <= GEMINI_MAX_ATTEMPTS; attempt++) {
+      const outcome = await this.requestOnce(payload);
+      if (outcome.kind === 'ok') {
+        // 200이라도 본문이 깨졌으면 실패로 센다 — 그 상태가 이어지면 회로를 열어야 한다.
+        let parsed: T;
+        try {
+          parsed = await this.parseResponse<T>(outcome.res);
+        } catch (e) {
+          this.recordFailure();
+          throw e;
+        }
+        this.recordSuccess();
+        return parsed;
+      }
+
+      lastError = outcome.reason;
+      this.recordFailure();
+
+      const backoff = this.backoffMs(attempt);
+      const circuitJustOpened = Date.now() < this.circuitOpenUntil;
+      const withinBudget =
+        Date.now() - startedAt + backoff + this.timeoutMs <= GEMINI_TOTAL_BUDGET_MS;
+      if (
+        !outcome.retryable ||
+        attempt === GEMINI_MAX_ATTEMPTS ||
+        circuitJustOpened ||
+        !withinBudget
+      ) {
+        break;
+      }
+
+      this.logger.warn(
+        `Gemini 재시도 ${attempt}/${GEMINI_MAX_ATTEMPTS - 1} (${outcome.reason}) — ${backoff}ms 후`,
+      );
+      await sleep(backoff);
+    }
+
+    throw new GeminiUnavailable(`Gemini request failed: ${lastError}`);
+  }
+
+  /** 한 번의 호출. 예외를 던지지 않고 재시도 가능 여부를 함께 돌려준다. */
+  private async requestOnce(
+    payload: unknown,
+  ): Promise<
+    { kind: 'ok'; res: Response } | { kind: 'fail'; reason: string; retryable: boolean }
+  > {
     let res: Response;
     try {
       // R2: API key를 쿼리스트링이 아니라 헤더로 보낸다. URL은 액세스 로그·프록시
@@ -380,21 +473,58 @@ export class GeminiClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-goog-api-key': this.apiKey,
+          'x-goog-api-key': this.apiKey as string,
         },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch (e) {
-      throw new GeminiUnavailable(
-        `Gemini request failed: ${e instanceof Error ? e.message : String(e)}`,
-      );
+      // 타임아웃·네트워크 오류는 재시도하지 않는다(위 상수 주석 참고).
+      return {
+        kind: 'fail',
+        reason: e instanceof Error ? e.message : String(e),
+        retryable: false,
+      };
     }
 
     if (!res.ok) {
-      throw new GeminiUnavailable(`Gemini request failed: HTTP ${res.status}`);
+      return {
+        kind: 'fail',
+        reason: `HTTP ${res.status}`,
+        retryable: res.status === 429 || res.status >= 500,
+      };
     }
+    return { kind: 'ok', res };
+  }
 
+  /** 지수 백오프 + 지터(0~50%) — 동시에 실패한 잡들이 같은 순간에 몰리지 않게. */
+  private backoffMs(attempt: number): number {
+    const base = GEMINI_BASE_BACKOFF_MS * 2 ** (attempt - 1);
+    return Math.round(base * (1 + Math.random() * 0.5));
+  }
+
+  private recordSuccess(): void {
+    this.failureCount = 0;
+  }
+
+  private recordFailure(): void {
+    const now = Date.now();
+    if (now - this.failureWindowStart > CIRCUIT_WINDOW_MS) {
+      this.failureWindowStart = now;
+      this.failureCount = 1;
+    } else {
+      this.failureCount++;
+    }
+    if (this.failureCount >= CIRCUIT_FAILURE_THRESHOLD) {
+      this.circuitOpenUntil = now + CIRCUIT_OPEN_MS;
+      this.failureCount = 0;
+      this.logger.error(
+        `Gemini 연속 실패 ${CIRCUIT_FAILURE_THRESHOLD}회 — ${CIRCUIT_OPEN_MS}ms 동안 호출을 건너뛴다`,
+      );
+    }
+  }
+
+  private async parseResponse<T>(res: Response): Promise<T> {
     let data: unknown;
     try {
       data = await res.json();

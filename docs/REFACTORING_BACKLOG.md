@@ -14,7 +14,8 @@
 | B2 | ✅ 완료 (2026-08-12) | `refactor/r-batch-02-safety-net` | 없음. R16의 `useAsyncJob` 테스트는 훅 추출(R27, B6) 후에 추가한다 |
 | B3 | ✅ 완료 (2026-08-12) | `refactor/r-batch-03-scheduler-worker` | AWS/GitHub 작업(코드 밖): ① 워커 ECS 서비스 생성 + Variable `ECS_SERVICE_WORKER` 설정 → 큐 소비 확인 후 ② backend task definition에 `JOB_ROLE=api` 추가. 순서를 뒤집으면 잡이 처리되지 않는다 |
 | B4 | ✅ 완료 (2026-08-12) | `refactor/r-batch-04-db-migration` | 운영 작업(코드 밖): ① 마이그레이션 배포 후 R11 스윕을 `RETENTION_SWEEP_MODE=dry-run`으로 켜서 삭제 대상 규모 확인 → ② RDS 스냅샷 확보 → ③ `delete`로 전환. 기본값 `off`이므로 배포만으로는 아무 데이터도 지워지지 않는다 |
-| B5~B6 | 대기 | — | — |
+| B5 | ✅ 완료 (2026-08-12) | `refactor/r-batch-05-backend-structure` | 운영 작업(코드 밖): R9 캐시 TTL 10분이므로 상품 시드 직후 즉시 반영이 필요하면 `POST /admin/products/cache/invalidate`를 호출한다. R30 타임아웃 조정이 필요하면 `GEMINI_TIMEOUT_MS`로 조절 |
+| B6 | 대기 | — | — |
 
 ## 작업 묶음 (Batch)
 
@@ -27,7 +28,7 @@
 | **B2. 안전망 (타입·테스트·설정)** ✅ | R15, R16, R18, R34, R29 | `refactor/r-batch-02-safety-net` | 구조 작업 전 타입·테스트 기반 마련 |
 | **B3. 스케줄러·워커** ✅ | R3, R13, R31 | `refactor/r-batch-03-scheduler-worker` | 리더 락(R3) → 워커 분리(R13) 순서 |
 | **B4. DB (한 마이그레이션)** ✅ | R33, R10, R11, R21 | `refactor/r-batch-04-db-migration` | 인덱스·컬럼·보존을 한 마이그레이션으로 묶음 |
-| **B5. 백엔드 구조 (동작 보존)** | R7, R8, R9, R12, R20, R22, R23, R24, R30, R35 | `refactor/r-batch-05-backend-structure` | 순수 구조 개선 — 동작 불변 목표 |
+| **B5. 백엔드 구조 (동작 보존)** ✅ | R7, R8, R9, R12, R20, R22, R23, R24, R30, R35 | `refactor/r-batch-05-backend-structure` | 순수 구조 개선 — 동작 불변 목표 |
 | **B6. 계약·프론트 구조** | R5, R14, R25, R26, R27, R28 | `refactor/r-batch-06-contract-frontend` | B2 완료 후 권장 (strict·테스트가 회귀를 잡음) |
 
 ## 선후관계 (순서가 중요한 것)
@@ -975,7 +976,10 @@ API 변경    가능 — 미사용 엔드포인트 제거 시
 
 작업:
 
-- [ ] 지수 백오프 + 지터로 429/5xx만 2회 재시도한다(4xx 나머지는 즉시 실패). 연속 실패 임계(예: 1분 내 10회) 초과 시 30초간 호출을 건너뛰고 즉시 fallback을 반환하는 간단한 서킷브레이커를 둔다 — 라이브러리 도입 없이 카운터와 타임스탬프 두 필드로 충분하다. 타임아웃은 환경변수(`GEMINI_TIMEOUT_MS`)로 노출한다.
+- [x] 지수 백오프(400ms 기준, 2배) + 지터(0~50%)로 **429/5xx만** 2회 재시도한다. 나머지 4xx는 즉시 실패한다.
+- [x] 타임아웃·네트워크 오류는 재시도하지 않는다. 재시도하면 최악 지연이 타임아웃의 배수가 되는데 `POST /recommendations`는 동기 경로라 그 지연이 그대로 사용자 대기가 된다. 429/5xx는 대개 즉시 돌아오므로 예산을 거의 쓰지 않고, 그래도 전체 예산 30초(`GEMINI_TOTAL_BUDGET_MS`)로 한 번 더 막는다 — 위험란의 "최악 45초"는 발생하지 않는다.
+- [x] 카운터 + 타임스탬프 두 필드로 서킷브레이커를 뒀다. 1분 창 안에 10회 연속 실패하면 30초간 호출을 건너뛰고 즉시 `GeminiUnavailable`을 던져 호출부가 fallback으로 넘어가게 한다(워커 슬롯이 묶이지 않는다). HTTP 200이라도 본문 파싱이 실패하면 실패로 센다.
+- [x] 타임아웃을 `GEMINI_TIMEOUT_MS`(기본 15000, 1000~60000)로 env registry에 등록하고 `.env.example`에 문서화했다.
 
 변경 범위:
 
@@ -1111,7 +1115,11 @@ text
 
 작업:
 
-- [ ] `guardDuplicate`를 제거하고 트랜잭션 내부 검사만 남긴다. 남는 검사에 `notDeletedWhere`를 적용해 파일 내 다른 조회와 규칙을 통일한다. 프로젝트 전반의 soft-delete 조건 적용 방식을 `notDeletedWhere` 헬퍼 하나로 통일한다(`auth.service.ts`의 `getMe`/`login`이 수동 `deletedAt` 검사를 하고 `linkPhone`은 헬퍼를 쓰는 불일치도 함께 정리).
+- [x] **결정: `guardDuplicate`는 남긴다.** 사전 검사는 추론 호출 *앞*, 트랜잭션 검사는 추론 *뒤*에 있다. 제거하면 60초 내 재제출이 비싼 추론을 끝까지 돌린 뒤에야 거부된다(사용자 대기 + 추론 비용 낭비). "idempotency 예약이 이미 막는다"는 전제는 **동시** 요청에만 맞고, 앞 요청이 끝난 뒤의 순차 재제출은 이 창(window)만 막는다. DB 왕복 1회는 추론 대비 무시할 수준이다.
+- [x] 두 검사가 같은 기준을 쓰도록 조건을 `recentDiagnosisWhere()` 한 곳으로 모으고 `notDeletedWhere`를 적용했다. 삭제된 진단은 더 이상 중복 판정에 포함되지 않는다 — "삭제 후 재촬영"이 막히지 않고, 파일 내 다른 조회와 규칙이 같아진다.
+- [x] `auth.service.ts`의 수동 `deletedAt` 검사를 `notDeletedWhere`로 통일했다(`login`, `linkPhone`, `refresh`, `getMe`, `updateMe`, `socialLogin`).
+- [x] `login`/`linkPhone`의 '탈퇴한 계정입니다'(409) 분기는 **도달 불가 코드였다** — 탈퇴 시 `anonymizedPhone`으로 번호를 스크럽하므로 원래 번호로는 조회 자체가 안 된다. 제거해도 실제 응답은 바뀌지 않는다.
+- [x] `socialLogin`은 409를 유지한다. `SocialAccount`는 탈퇴 후에도 남아(unique(provider, providerUserId)) 탈퇴 계정의 재로그인이 실제로 도달하고, 새 계정 생성도 불가능한 상태라 '없음'이 아니라 '탈퇴함'으로 알려야 한다.
 
 변경 범위:
 

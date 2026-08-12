@@ -436,6 +436,16 @@ export const ENV_REGISTRY: EnvVarDefinition[] = [
     schema: Joi.string().default('gemini-flash-latest'),
   },
   {
+    key: 'GEMINI_TIMEOUT_MS',
+    owner: 'ai',
+    description: 'R30 Gemini 단일 호출 타임아웃(ms)',
+    requiredIn: 'never',
+    safeDefault: 15_000,
+    secret: false,
+    // 동기 추천 경로의 사용자 대기 시간이라 너무 크게 잡으면 안 된다.
+    schema: Joi.number().integer().min(1_000).max(60_000).default(15_000),
+  },
+  {
     key: 'MOCK_GEMINI',
     owner: 'ai',
     description: 'Use Gemini mock responses (dev/test only)',

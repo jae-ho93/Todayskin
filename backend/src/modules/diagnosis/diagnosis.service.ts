@@ -233,14 +233,7 @@ export class DiagnosisService {
       }
 
       const recent = await tx.diagnosis.findFirst({
-        where: {
-          userId,
-          createdAt: {
-            gte: new Date(
-              Date.now() - DiagnosisService.DEDUP_WINDOW_SECONDS * 1000,
-            ),
-          },
-        },
+        where: this.recentDiagnosisWhere(userId),
         select: { id: true },
       });
       if (recent) {
@@ -558,15 +551,16 @@ export class DiagnosisService {
 
   /**
    * 중복 요청 방지 — 동일 사용자가 DEDUP_WINDOW 이내에 진단을 제출했는지 확인.
-   * 빠른 연속 터치/재시도로 인한 중복 진단 row 생성을 막는다.
+   *
+   * R35: 정본은 트랜잭션 안의 같은 검사(advisory lock 아래)다. 이 사전 검사는
+   * 경쟁 조건을 막기 위한 게 아니라 **추론 호출 앞에서 빠르게 실패**하기 위한 것이다.
+   * 이걸 빼면 60초 안의 재제출이 비싼 추론을 끝까지 돌린 뒤에야 거부된다.
+   * in-flight 예약(idempotency)은 동시 요청만 막고, 앞 요청이 끝난 뒤의 재제출은
+   * 이 창(window)만 막는다.
    */
   private async guardDuplicate(userId: number): Promise<void> {
-    const since = new Date(Date.now() - DiagnosisService.DEDUP_WINDOW_SECONDS * 1000);
     const recent = await this.prisma.diagnosis.findFirst({
-      where: {
-        userId,
-        createdAt: { gte: since },
-      },
+      where: this.recentDiagnosisWhere(userId),
       select: { id: true },
     });
     if (recent) {
@@ -574,6 +568,21 @@ export class DiagnosisService {
         '최근 진단 제출이 처리 중입니다. 잠시 후 다시 시도해주세요.',
       );
     }
+  }
+
+  /**
+   * 중복 판정 대상 조건 — 사전 검사와 트랜잭션 검사가 같은 기준을 쓰도록 한 곳에 둔다.
+   *
+   * R35: 삭제된 진단은 제외한다. 사용자가 진단을 지우고 다시 찍는 흐름이 이유 없이
+   * 막히지 않게 하기 위해서이고, 이 파일의 다른 조회들과도 규칙이 같아진다.
+   */
+  private recentDiagnosisWhere(userId: number): Prisma.DiagnosisWhereInput {
+    return notDeletedWhere({
+      userId,
+      createdAt: {
+        gte: new Date(Date.now() - DiagnosisService.DEDUP_WINDOW_SECONDS * 1000),
+      },
+    });
   }
 
   // ── 매핑 헬퍼 ──────────────────────────────────

@@ -121,9 +121,13 @@ describe('DiagnosisService', () => {
   // ── submit ──────────────────────────────────
 
   describe('submit', () => {
+    // 트랜잭션 내부의 중복 검사 — 사전 검사와 같은 조건을 쓰는지 확인용(R35).
+    let txFindFirst: jest.Mock;
+
     beforeEach(() => {
       inferenceProvider.infer.mockResolvedValue(validInference);
       prisma.diagnosis.findFirst.mockResolvedValue(null); // 중복 아님
+      txFindFirst = jest.fn().mockResolvedValue(null);
       prisma.$transaction.mockImplementation(async (cb: any) => {
         const created = {
           id: 'snap-abc',
@@ -137,7 +141,7 @@ describe('DiagnosisService', () => {
         };
         const tx = {
           diagnosis: {
-            findFirst: jest.fn().mockResolvedValue(null),
+            findFirst: txFindFirst,
             create: jest.fn().mockResolvedValue(created),
           },
           $executeRaw: jest.fn().mockResolvedValue(1),
@@ -196,6 +200,20 @@ describe('DiagnosisService', () => {
     it('중복 요청(60초 이내) 거부', async () => {
       prisma.diagnosis.findFirst.mockResolvedValueOnce({ id: 'snap-recent' });
       await expect(service.submit(1, validImages)).rejects.toThrow(BadRequestException);
+    });
+
+    it('R35: 중복 사전 검사는 추론 호출 전에 거부한다 (추론 비용 낭비 방지)', async () => {
+      prisma.diagnosis.findFirst.mockResolvedValueOnce({ id: 'snap-recent' });
+      await expect(service.submit(1, validImages)).rejects.toThrow(BadRequestException);
+      expect(inferenceProvider.infer).not.toHaveBeenCalled();
+    });
+
+    it('R35: 삭제된 진단은 중복 판정에서 제외한다 (사전·트랜잭션 검사 동일 기준)', async () => {
+      await service.submit(1, validImages);
+      const preCheckWhere = prisma.diagnosis.findFirst.mock.calls[0][0].where;
+      const txCheckWhere = txFindFirst.mock.calls[0][0].where;
+      expect(preCheckWhere).toMatchObject({ userId: 1, deletedAt: null });
+      expect(txCheckWhere).toMatchObject({ userId: 1, deletedAt: null });
     });
 
     it('InferenceProvider 실패 시 503', async () => {
