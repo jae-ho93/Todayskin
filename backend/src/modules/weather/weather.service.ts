@@ -7,7 +7,11 @@ import {
   metricsFromCollected,
 } from './mappers/weather-snapshot.mapper';
 import { weatherCacheKey } from './weather-cache';
-import { KmaClient, UvForecastWithTime } from './clients/kma.client';
+import {
+  KmaClient,
+  NowcastWithTime,
+  UvForecastWithTime,
+} from './clients/kma.client';
 import {
   AirKoreaClient,
   AirQualityDataWithTime,
@@ -40,6 +44,8 @@ const DIAGNOSIS_RETRY_COUNT = 1;
 interface CollectedWeather {
   uv: UvForecastWithTime;
   air: AirQualityDataWithTime;
+  /** N53: 초단기실황(기온·습도). */
+  nowcast: NowcastWithTime;
   regionName: string;
   /** F56: 시/군/구 표시명 (예: "해운대구"). 없으면 null. */
   districtName: string | null;
@@ -206,13 +212,20 @@ export class WeatherService {
     const location = { lat: lat ?? null, lon: lon ?? null };
 
     if (meta) {
-      const [uv, air] = await Promise.all([
+      // N53: 스케줄러는 근사표 좌표를 항상 넘긴다. 혹시 없으면 기본 지역 좌표로.
+      const [uv, air, nowcast] = await Promise.all([
         this.kmaClient.fetchUvIndex(meta.areaNo, retries),
         this.airKoreaClient.fetchAirQuality(meta.stationName, retries),
+        this.kmaClient.fetchNowcast(
+          lat ?? DEFAULT_REGION.lat,
+          lon ?? DEFAULT_REGION.lon,
+          retries,
+        ),
       ]);
       return {
         uv,
         air,
+        nowcast,
         regionName: meta.regionName,
         districtName: meta.districtName,
         kmaAreaNo: meta.areaNo,
@@ -227,9 +240,11 @@ export class WeatherService {
       const region = findNearestRegion(lat, lon);
       // 자외선지수 조회는 근접측정소 조회 결과와 무관(areaNo만 필요)하므로
       // 순차 대기하지 않고 병렬로 실행해 두 정부 API 모두 느릴 때의 왕복 시간을 줄인다.
-      const [nearest, uv] = await Promise.all([
+      // N53: 초단기실황도 좌표만 있으면 되므로 같은 병렬 묶음에 넣는다.
+      const [nearest, uv, nowcast] = await Promise.all([
         this.stationClient.fetchNearestStation(lat, lon, retries),
         this.kmaClient.fetchUvIndex(region.kmaAreaNo, retries),
+        this.kmaClient.fetchNowcast(lat, lon, retries),
       ]);
 
       // 측정소 조회가 실패하면 근사표의 대표 측정소로 대기질을 조회한다. 이건
@@ -247,6 +262,7 @@ export class WeatherService {
       return {
         uv,
         air: await this.airKoreaClient.fetchAirQuality(stationName, retries),
+        nowcast,
         // F56: 시/도는 근사표의 정식 명칭(예: '부산광역시'), 구/군은 최인접 측정소
         // 주소 토큰(예: '해운대구').
         regionName: region.cityName,
@@ -260,13 +276,18 @@ export class WeatherService {
     }
 
     // N25: 기본 지역은 두 외부 API가 서로 독립이므로 병렬 호출한다.
-    const [uv, air] = await Promise.all([
+    // N53: 기본 지역 좌표는 근사표(서울 종로구)의 것을 쓴다. KMA_AREA_NO를 다른
+    // 지역으로 override한 배포에서는 실황 좌표가 어긋날 수 있다 — 그 경우
+    // 좌표 없는 요청 자체가 드물고, 정확한 사용자 좌표 요청은 위 분기를 탄다.
+    const [uv, air, nowcast] = await Promise.all([
       this.kmaClient.fetchUvIndex(this.defaultKmaAreaNo, retries),
       this.airKoreaClient.fetchAirQuality(this.defaultStationName, retries),
+      this.kmaClient.fetchNowcast(DEFAULT_REGION.lat, DEFAULT_REGION.lon, retries),
     ]);
     return {
       uv,
       air,
+      nowcast,
       regionName: DEFAULT_REGION.cityName,
       // 위치 권한이 없어 기본 지역으로 조회한 것이므로 사용자의 구를 알 수 없다.
       districtName: null,
@@ -283,9 +304,10 @@ export class WeatherService {
     dto.observedAt = this.resolveObservedAt(c).toISOString();
     dto.regionName = c.regionName;
     dto.districtName = c.districtName;
-    dto.source = this.resolveSource(c.uv, c.air);
+    dto.source = this.resolveSource(c.uv, c.air, c.nowcast);
     dto.uvCollectionFailed = c.uv.failed;
     dto.airCollectionFailed = c.air.failed;
+    dto.nowcastCollectionFailed = c.nowcast.failed;
     return assignWeatherMetrics(dto, metricsFromCollected(c, this.policy));
   }
 
@@ -326,6 +348,11 @@ export class WeatherService {
     }
     if (c.air.failed) {
       await this.redisService.incrementCounter('metric:weather:collect:air_failed');
+    }
+    if (c.nowcast.failed) {
+      await this.redisService.incrementCounter(
+        'metric:weather:collect:nowcast_failed',
+      );
     }
     if (c.stationLookupFailed) {
       await this.redisService.incrementCounter(
@@ -402,6 +429,7 @@ export class WeatherService {
   private resolveSource(
     uv: UvForecastWithTime,
     air: AirQualityDataWithTime,
+    nowcast: NowcastWithTime,
   ): WeatherSource {
     const anyUv = uv.current !== null || uv.peak !== null;
     const anyAir =
@@ -412,7 +440,12 @@ export class WeatherService {
       air.no2 !== null ||
       air.so2 !== null ||
       air.co !== null;
-    return anyUv || anyAir ? WeatherSource.LIVE : WeatherSource.UNAVAILABLE;
+    // N53: 기온·습도만 살아 있어도 저장 가치가 있다(피부 건조와 직결).
+    const anyNowcast =
+      nowcast.temperature !== null || nowcast.humidity !== null;
+    return anyUv || anyAir || anyNowcast
+      ? WeatherSource.LIVE
+      : WeatherSource.UNAVAILABLE;
   }
 
   /**
@@ -422,12 +455,11 @@ export class WeatherService {
    * (둘 다 없는 경우는 UNAVAILABLE이지만 응답용 observedAt은 채워야 한다.)
    */
   private resolveObservedAt(c: CollectedWeather): Date {
-    const uv = c.uv.observedAt;
-    const air = c.air.observedAt;
-    if (uv && air) return uv >= air ? uv : air;
-    if (uv) return uv;
-    if (air) return air;
-    return new Date();
+    // N53: 초단기실황 발표 시각도 후보에 넣는다 — 셋 중 가장 최근 시각.
+    const candidates = [c.uv.observedAt, c.air.observedAt, c.nowcast.observedAt]
+      .filter((d): d is Date => d !== null)
+      .sort((a, b) => b.getTime() - a.getTime());
+    return candidates[0] ?? new Date();
   }
 
   /**
@@ -439,7 +471,7 @@ export class WeatherService {
    *   분 단위로 절삭해 비교한다(에어코리아 dataTime은 분 단위, KMA는 시간 단위).
    */
   private async persist(c: CollectedWeather): Promise<WeatherSnapshot | null> {
-    const source = this.resolveSource(c.uv, c.air);
+    const source = this.resolveSource(c.uv, c.air, c.nowcast);
     if (source === WeatherSource.UNAVAILABLE) {
       this.logger.debug('WeatherSnapshot skipped: UNAVAILABLE');
       return null;
@@ -486,6 +518,7 @@ export class WeatherService {
           // 남겨 화면이 "값 없음"과 "수집 실패"를 구별할 수 있게 한다.
           uvCollectionFailed: c.uv.failed,
           airCollectionFailed: c.air.failed,
+          nowcastCollectionFailed: c.nowcast.failed,
           source,
         },
       });

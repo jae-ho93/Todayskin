@@ -166,6 +166,42 @@ function UvHeroCard({ weather }: { weather: WeatherSnapshot }) {
   );
 }
 
+// N53: 초단기실황 기온·습도 — 등급(status) 개념이 없어서 MetricCard 대신 별도 카드.
+function NowcastCard({ weather }: { weather: WeatherSnapshot }) {
+  const hasTemperature = typeof weather.temperature === 'number';
+  const hasHumidity = typeof weather.humidity === 'number';
+  if (!hasTemperature && !hasHumidity) {
+    // F70과 같은 원칙: "수집 실패"와 "값 없음"을 구분해서 보여준다.
+    const message = weather.nowcastCollectionFailed
+      ? '기온·습도 수집에 실패했어요 — 잠시 후 새로고침해주세요'
+      : '기온·습도 값을 불러올 수 없어요';
+    return (
+      <Card style={styles.nowcastCard}>
+        <Text style={styles.metricUnavailableText}>{message}</Text>
+      </Card>
+    );
+  }
+  return (
+    <Card style={styles.nowcastCard}>
+      <View style={styles.nowcastItem}>
+        <Ionicons name="thermometer-outline" size={20} color={colors.sageDark} />
+        <Text style={styles.nowcastLabel}>기온</Text>
+        <Text style={styles.nowcastValue}>
+          {hasTemperature ? `${weather.temperature}°C` : '—'}
+        </Text>
+      </View>
+      <View style={styles.nowcastDivider} />
+      <View style={styles.nowcastItem}>
+        <Ionicons name="water-outline" size={20} color={colors.sageDark} />
+        <Text style={styles.nowcastLabel}>습도</Text>
+        <Text style={styles.nowcastValue}>
+          {hasHumidity ? `${weather.humidity}%` : '—'}
+        </Text>
+      </View>
+    </Card>
+  );
+}
+
 // F41: 지표 조합 → 액션 TIP
 function SkinTip({ weather }: { weather: WeatherSnapshot }) {
   const tips: string[] = [];
@@ -184,6 +220,10 @@ function SkinTip({ weather }: { weather: WeatherSnapshot }) {
   }
   if (isAirConcerning(weather.ozoneStatus)) {
     tips.push('오존 농도가 높아요 — 외출 후 진정 세안을 신경 써주세요');
+  }
+  // N53: 습도 기반 보습 팁 — 40% 미만은 건조 구간(기상청 생활기상 기준 참고).
+  if (typeof weather.humidity === 'number' && weather.humidity < 40) {
+    tips.push('공기가 건조해요 — 보습제를 평소보다 꼼꼼히 발라주세요');
   }
   if (tips.length === 0) {
     tips.push('오늘은 대기 환경이 양호해요 — 평소 루틴을 유지하세요');
@@ -337,6 +377,9 @@ export default function WeatherDetailScreen() {
       {/* F41: 히어로 — 오늘 최고 자외선지수 (예상 표현 제거) */}
       <UvHeroCard weather={weather} />
 
+      {/* N53: 기온·습도 실황 */}
+      <NowcastCard weather={weather} />
+
       <MetricCard
         icon="cloud-outline"
         label="오존"
@@ -445,6 +488,23 @@ const styles = StyleSheet.create({
   heroValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.xs },
   heroValue: { ...typography.displaySm, fontSize: 34, lineHeight: 42, color: colors.textPrimary },
   heroUnit: { ...typography.bodySm, color: colors.textSecondary },
+
+  // N53: 기온·습도 실황 카드
+  nowcastCard: { flexDirection: 'row', alignItems: 'center' },
+  nowcastItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  nowcastLabel: { ...typography.bodySm, color: colors.textSecondary },
+  nowcastValue: { ...typography.headline, color: colors.textPrimary },
+  nowcastDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: colors.gray200,
+    marginHorizontal: spacing.md,
+  },
 
   // 지표 카드
   metricCard: { gap: spacing.sm },

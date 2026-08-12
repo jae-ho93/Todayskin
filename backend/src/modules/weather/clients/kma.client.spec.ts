@@ -1,4 +1,10 @@
-import { todayRemainingSlots } from './kma.client';
+import { ConfigService } from '@nestjs/config';
+import {
+  KmaClient,
+  latLonToGrid,
+  nowcastBaseTime,
+  todayRemainingSlots,
+} from './kma.client';
 
 /**
  * N39 회귀 방지.
@@ -74,5 +80,125 @@ describe('todayRemainingSlots', () => {
     expect(todayRemainingSlots(morningKst).map(([, hour]) => hour)).toEqual([
       9, 12, 15, 18, 21,
     ]);
+  });
+});
+
+// ── N53: 초단기실황 ────────────────────────────────────────────────
+
+describe('latLonToGrid (N53)', () => {
+  it('기상청 가이드 기준점: 서울 종로(37.5735, 126.9788) → (60, 127)', () => {
+    expect(latLonToGrid(37.5735, 126.9788)).toEqual({ nx: 60, ny: 127 });
+  });
+
+  it('부산(35.1796, 129.0756) → (98, 76)', () => {
+    expect(latLonToGrid(35.1796, 129.0756)).toEqual({ nx: 98, ny: 76 });
+  });
+
+  it('제주(33.4996, 126.5312) → (53, 38)', () => {
+    expect(latLonToGrid(33.4996, 126.5312)).toEqual({ nx: 53, ny: 38 });
+  });
+});
+
+describe('nowcastBaseTime (N53)', () => {
+  it('KST 40분 이후에는 그 시각 정시 자료를 조회한다', () => {
+    // UTC 03:45 = KST 12:45 → base 1200
+    expect(nowcastBaseTime(new Date('2026-08-13T03:45:00Z'))).toEqual({
+      date: '20260813',
+      time: '1200',
+    });
+  });
+
+  it('KST 40분 전에는 이전 정시 자료를 조회한다 (발표 지연 회피)', () => {
+    // UTC 03:10 = KST 12:10 → 12시 자료가 아직 없을 수 있어 1100
+    expect(nowcastBaseTime(new Date('2026-08-13T03:10:00Z'))).toEqual({
+      date: '20260813',
+      time: '1100',
+    });
+  });
+
+  it('KST 자정 직후에는 전날 23시 자료로 넘어간다', () => {
+    // UTC 15:20 = KST 다음날 00:20 → 전날 2300
+    expect(nowcastBaseTime(new Date('2026-08-13T15:20:00Z'))).toEqual({
+      date: '20260813',
+      time: '2300',
+    });
+  });
+});
+
+describe('KmaClient.fetchNowcast (N53)', () => {
+  const config = (key: string) =>
+    ({ get: () => key }) as unknown as ConfigService;
+
+  const nowcastResponse = (items: Array<{ category: string; obsrValue: string }>) => ({
+    ok: true,
+    json: async () => ({ response: { body: { items: { item: items } } } }),
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('T1H/REH를 기온·습도로 파싱하고 발표 시각을 관측 시각으로 쓴다', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      nowcastResponse([
+        { category: 'T1H', obsrValue: '27.3' },
+        { category: 'REH', obsrValue: '68' },
+        { category: 'RN1', obsrValue: '0' },
+      ]),
+    ) as unknown as typeof fetch;
+
+    const client = new KmaClient(config('test-key'));
+    const result = await client.fetchNowcast(37.5735, 126.9788);
+
+    expect(result.temperature).toBe(27.3);
+    expect(result.humidity).toBe(68);
+    expect(result.failed).toBe(false);
+    expect(result.observedAt).toBeInstanceOf(Date);
+    // 요청 URL에 격자 좌표(nx=60, ny=127)가 들어간다.
+    const url = (global.fetch as jest.Mock).mock.calls[0][0] as string;
+    expect(url).toContain('nx=60');
+    expect(url).toContain('ny=127');
+  });
+
+  it('HTTP 오류는 failed=true (재시도 가치가 있는 실패)', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+    }) as unknown as typeof fetch;
+
+    const client = new KmaClient(config('test-key'));
+    const result = await client.fetchNowcast(37.5735, 126.9788);
+
+    expect(result).toEqual({
+      temperature: null,
+      humidity: null,
+      observedAt: null,
+      failed: true,
+    });
+  });
+
+  it('API 키가 없으면 호출 없이 빈 결과(failed=false)를 반환한다', async () => {
+    global.fetch = jest.fn() as unknown as typeof fetch;
+
+    const client = new KmaClient(config(''));
+    const result = await client.fetchNowcast(37.5735, 126.9788);
+
+    expect(result.failed).toBe(false);
+    expect(result.temperature).toBeNull();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('응답에 실황 항목이 없으면 빈 결과(failed=false) — 재시도해도 같다', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ response: { body: {} } }),
+    }) as unknown as typeof fetch;
+
+    const client = new KmaClient(config('test-key'));
+    const result = await client.fetchNowcast(37.5735, 126.9788);
+
+    expect(result.failed).toBe(false);
+    expect(result.temperature).toBeNull();
+    expect(result.humidity).toBeNull();
   });
 });

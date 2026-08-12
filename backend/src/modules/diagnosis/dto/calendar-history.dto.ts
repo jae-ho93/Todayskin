@@ -57,6 +57,10 @@ export class CalendarWeatherDto {
   @ApiPropertyOptional({ type: Boolean })
   airCollectionFailed?: boolean;
 
+  /** N53: 기온·습도(초단기실황) 수집 실패 여부. */
+  @ApiPropertyOptional({ type: Boolean })
+  nowcastCollectionFailed?: boolean;
+
   @ApiPropertyOptional({ type: Number, nullable: true })
   uvIndex?: number | null;
 
@@ -104,6 +108,14 @@ export class CalendarWeatherDto {
 
   @ApiPropertyOptional({ type: Number, nullable: true })
   coValue?: number | null;
+
+  /** N53: 기온(°C). */
+  @ApiPropertyOptional({ type: Number, nullable: true })
+  temperature?: number | null;
+
+  /** N53: 상대습도(%). */
+  @ApiPropertyOptional({ type: Number, nullable: true })
+  humidity?: number | null;
 }
 
 export class CalendarProductDto {

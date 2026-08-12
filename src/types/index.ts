@@ -60,6 +60,10 @@ export interface WeatherSnapshot {
   no2Value?: number | null;
   so2Value?: number | null;
   coValue?: number | null;
+  /** N53: 기온(°C)·습도(%) — 기상청 초단기실황. 수집 실패 구분은 nowcastCollectionFailed. */
+  temperature?: number | null;
+  humidity?: number | null;
+  nowcastCollectionFailed?: boolean;
 }
 
 // 11개 부위별 ResNet 앙상블 출력과 대응하는 부위 키
@@ -251,6 +255,10 @@ export interface CalendarWeather {
   no2Value?: number | null;
   so2Value?: number | null;
   coValue?: number | null;
+  /** N53: 기온(°C)·습도(%) — 기상청 초단기실황. */
+  temperature?: number | null;
+  humidity?: number | null;
+  nowcastCollectionFailed?: boolean;
 }
 
 export interface CalendarProduct {

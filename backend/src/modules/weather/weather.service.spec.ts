@@ -1,7 +1,11 @@
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { WeatherService } from './weather.service';
-import { KmaClient, UvForecastWithTime } from './clients/kma.client';
+import {
+  KmaClient,
+  NowcastWithTime,
+  UvForecastWithTime,
+} from './clients/kma.client';
 import {
   AirKoreaClient,
   AirQualityDataWithTime,
@@ -56,6 +60,15 @@ describe('WeatherService', () => {
     ...over,
   });
 
+  // N53: 초단기실황(기온·습도) 기본 fixture.
+  const nowcast = (over: Partial<NowcastWithTime> = {}): NowcastWithTime => ({
+    temperature: null,
+    humidity: null,
+    observedAt: null,
+    failed: false,
+    ...over,
+  });
+
   beforeEach(async () => {
     prisma = {
       weatherSnapshot: {
@@ -74,7 +87,10 @@ describe('WeatherService', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         WeatherService,
-        { provide: KmaClient, useValue: { fetchUvIndex: jest.fn() } },
+        {
+          provide: KmaClient,
+          useValue: { fetchUvIndex: jest.fn(), fetchNowcast: jest.fn() },
+        },
         { provide: AirKoreaClient, useValue: { fetchAirQuality: jest.fn() } },
         { provide: StationClient, useValue: { fetchNearestStation: jest.fn() } },
         { provide: PrismaService, useValue: prisma },
@@ -103,6 +119,9 @@ describe('WeatherService', () => {
     airKoreaClient = moduleRef.get(AirKoreaClient);
     stationClient = moduleRef.get(StationClient);
     redisService = moduleRef.get(RedisService);
+
+    // N53: 대부분의 기존 테스트는 UV/대기질 경로를 검증하므로 실황은 빈 값이 기본.
+    kmaClient.fetchNowcast.mockResolvedValue(nowcast());
   });
 
   it('API 키 없음 시 모든 지표 null + source UNAVAILABLE (목업 대체 안 함)', async () => {
@@ -165,6 +184,68 @@ describe('WeatherService', () => {
 
     const result = await service.getCurrentWeather();
     expect(result.observedAt).toBe('2026-08-04T06:30:00.000Z');
+  });
+
+  // ── N53: 초단기실황(기온·습도) ─────────────────────────────
+  it('N53: 기온·습도를 수집해 응답과 저장에 포함한다', async () => {
+    kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 5 }));
+    airKoreaClient.fetchAirQuality.mockResolvedValue(air({ pm25: 20 }));
+    kmaClient.fetchNowcast.mockResolvedValue(
+      nowcast({
+        temperature: 27.3,
+        humidity: 68,
+        observedAt: new Date('2026-08-04T06:00:00Z'),
+      }),
+    );
+
+    const result = await service.getCurrentWeather(37.5665, 126.978);
+
+    expect(kmaClient.fetchNowcast).toHaveBeenCalledWith(37.5665, 126.978, 0);
+    expect(result.temperature).toBe(27.3);
+    expect(result.humidity).toBe(68);
+    expect(result.nowcastCollectionFailed).toBe(false);
+    expect(prisma.weatherSnapshot.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          temperature: 27.3,
+          humidity: 68,
+          nowcastCollectionFailed: false,
+        }),
+      }),
+    );
+  });
+
+  it('N53: UV·대기가 모두 비어도 기온·습도가 있으면 LIVE로 저장한다', async () => {
+    kmaClient.fetchUvIndex.mockResolvedValue(uv());
+    airKoreaClient.fetchAirQuality.mockResolvedValue(air());
+    kmaClient.fetchNowcast.mockResolvedValue(
+      nowcast({ temperature: 3.1, humidity: 22 }),
+    );
+
+    const result = await service.getCurrentWeather();
+
+    expect(result.source).toBe(WeatherSource.LIVE);
+    expect(result.temperature).toBe(3.1);
+    expect(prisma.weatherSnapshot.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('N53: 실황 수집 실패는 목업 없이 null + nowcastCollectionFailed=true', async () => {
+    kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 5 }));
+    airKoreaClient.fetchAirQuality.mockResolvedValue(air());
+    kmaClient.fetchNowcast.mockResolvedValue(
+      nowcast({ failed: true }),
+    );
+
+    const result = await service.getCurrentWeather();
+
+    expect(result.temperature).toBeNull();
+    expect(result.humidity).toBeNull();
+    expect(result.nowcastCollectionFailed).toBe(true);
+    expect(prisma.weatherSnapshot.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ nowcastCollectionFailed: true }),
+      }),
+    );
   });
 
   // N40: 자외선은 기상청 5단계(낮음·보통·높음·매우높음·위험)를 쓴다.

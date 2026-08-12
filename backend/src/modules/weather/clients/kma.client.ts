@@ -8,6 +8,10 @@ import { fetchWithTimeout } from './fetch-with-timeout';
 const KMA_UV_ENDPOINT =
   'https://apis.data.go.kr/1360000/LivingWthrIdxServiceV5/getUVIdxV5';
 
+/** N53: 기상청 단기예보 초단기실황(기온 T1H·습도 REH) endpoint. 같은 API 키를 쓴다. */
+const KMA_NOWCAST_ENDPOINT =
+  'https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst';
+
 /** 한국 표준시(UTC+9) */
 const KST_OFFSET_MIN = 9 * 60;
 
@@ -53,6 +57,31 @@ const EMPTY_FORECAST_WITH_TIME: UvForecastWithTime = {
   failed: false,
 };
 
+/**
+ * N53: 초단기실황 결과 — 기온(°C)·습도(%). UV와 같은 실패 구분 정책을 따른다.
+ * 실패 시 목업으로 채우지 않고 null + failed 플래그로 상위에 알린다.
+ */
+export interface NowcastWithTime {
+  temperature: number | null;
+  humidity: number | null;
+  observedAt: Date | null;
+  failed: boolean;
+}
+
+const FAILED_NOWCAST: NowcastWithTime = {
+  temperature: null,
+  humidity: null,
+  observedAt: null,
+  failed: true,
+};
+
+const EMPTY_NOWCAST: NowcastWithTime = {
+  temperature: null,
+  humidity: null,
+  observedAt: null,
+  failed: false,
+};
+
 /** "-" / "" / null → null, 그 외 float 파싱. 실패 시 null. */
 function safeFloat(value: unknown): number | null {
   if (value === null || value === undefined || value === '-' || value === '') {
@@ -95,6 +124,83 @@ export class KmaClient {
       retries,
       shouldRetry: (result) => result.failed,
     });
+  }
+
+  /**
+   * N53: 초단기실황(기온·습도) 조회. 좌표를 기상청 DFS 격자(nx/ny)로 변환해 호출한다.
+   * @param retries UV와 동일 — 결과를 영구 저장하는 진단 경로만 켠다.
+   */
+  async fetchNowcast(
+    lat: number,
+    lon: number,
+    retries = 0,
+  ): Promise<NowcastWithTime> {
+    if (!this.apiKey) {
+      return EMPTY_NOWCAST;
+    }
+    return withRetry(() => this.fetchNowcastOnce(lat, lon), {
+      retries,
+      shouldRetry: (result) => result.failed,
+    });
+  }
+
+  private async fetchNowcastOnce(
+    lat: number,
+    lon: number,
+  ): Promise<NowcastWithTime> {
+    const { nx, ny } = latLonToGrid(lat, lon);
+    // 실황은 매시 40분경 정시(HH00) 자료가 발표된다. 40분 전이면 이전 시각을 조회.
+    const base = nowcastBaseTime(new Date());
+
+    const params = new URLSearchParams({
+      serviceKey: this.apiKey,
+      numOfRows: '10', // 실황 카테고리는 8개(T1H/REH/RN1/PTY/...) — 한 페이지에 다 온다.
+      pageNo: '1',
+      base_date: base.date,
+      base_time: base.time,
+      nx: String(nx),
+      ny: String(ny),
+      dataType: 'JSON',
+    });
+
+    try {
+      const url = `${KMA_NOWCAST_ENDPOINT}?${params.toString()}`;
+      const res = await fetchWithTimeout(url, this.timeoutMs);
+      if (!res.ok) {
+        // serviceKey가 담긴 URL을 통째로 로깅하지 않는다 — UV와 동일 정책.
+        this.logger.warn(`KMA nowcast fetch failed: HTTP ${res.status}`);
+        return FAILED_NOWCAST;
+      }
+      const data = (await res.json()) as KmaNowcastResponse;
+      const items = extractNowcastItems(data);
+      if (items.length === 0) {
+        // 응답은 왔는데 실황 항목이 없다(키 권한 미신청 등). 재시도해도 같다.
+        return EMPTY_NOWCAST;
+      }
+
+      const byCategory = new Map<string, number | null>();
+      for (const item of items) {
+        if (typeof item.category === 'string') {
+          byCategory.set(item.category, safeFloat(item.obsrValue));
+        }
+      }
+
+      const temperature = byCategory.get('T1H') ?? null;
+      const humidity = byCategory.get('REH') ?? null;
+      if (temperature === null && humidity === null) {
+        return EMPTY_NOWCAST;
+      }
+
+      return {
+        temperature,
+        humidity,
+        observedAt: parseKmaTime(`${base.date}${base.time.slice(0, 2)}`),
+        failed: false,
+      };
+    } catch (e) {
+      this.logger.warn(`KMA nowcast fetch failed: ${errorName(e)}`);
+      return FAILED_NOWCAST;
+    }
   }
 
   private async fetchOnce(areaNo: string): Promise<UvForecastWithTime> {
@@ -228,5 +334,82 @@ function parseKmaTime(yyyyMMddHH: string): Date | null {
   // KST(UTC+9) → UTC
   const utcMs = Date.UTC(+y, +mo - 1, +d, +h) - KST_OFFSET_MIN * 60 * 1000;
   return new Date(utcMs);
+}
+
+// ── N53: 초단기실황 헬퍼 ─────────────────────────────────────────────
+
+/** 초단기실황 응답 item (category/obsrValue만 사용) */
+interface KmaNowcastItem {
+  category?: string;
+  obsrValue?: string | number;
+}
+
+interface KmaNowcastResponse {
+  response?: {
+    body?: {
+      items?: { item?: KmaNowcastItem | KmaNowcastItem[] };
+    };
+  };
+}
+
+function extractNowcastItems(data: KmaNowcastResponse): KmaNowcastItem[] {
+  const item = data?.response?.body?.items?.item;
+  if (!item) return [];
+  return Array.isArray(item) ? item : [item];
+}
+
+/**
+ * 초단기실황 발표 시각. 정시(HH00) 자료가 매시 40분경 API에 올라오므로,
+ * 40분 전이면 이전 정시를 조회해야 "자료 없음" 빈 응답을 피한다.
+ * 테스트를 위해 export한다.
+ */
+export function nowcastBaseTime(now: Date): { date: string; time: string } {
+  const kst = toKst(now);
+  const base =
+    kst.getUTCMinutes() < 40
+      ? new Date(kst.getTime() - 3600 * 1000)
+      : kst;
+  const y = base.getUTCFullYear();
+  const m = String(base.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(base.getUTCDate()).padStart(2, '0');
+  const h = String(base.getUTCHours()).padStart(2, '0');
+  return { date: `${y}${m}${d}`, time: `${h}00` };
+}
+
+/**
+ * 위/경도 → 기상청 DFS 격자(nx/ny). 기상청 단기예보 API 활용가이드의
+ * Lambert Conformal Conic 변환 공식 그대로다. 테스트를 위해 export한다.
+ */
+export function latLonToGrid(lat: number, lon: number): { nx: number; ny: number } {
+  const RE = 6371.00877; // 지구 반경(km)
+  const GRID = 5.0; // 격자 간격(km)
+  const SLAT1 = 30.0 * (Math.PI / 180);
+  const SLAT2 = 60.0 * (Math.PI / 180);
+  const OLON = 126.0 * (Math.PI / 180);
+  const OLAT = 38.0 * (Math.PI / 180);
+  const XO = 43; // 기준점 X좌표(GRID)
+  const YO = 136; // 기준점 Y좌표(GRID)
+
+  const re = RE / GRID;
+  let sn =
+    Math.tan(Math.PI * 0.25 + SLAT2 * 0.5) /
+    Math.tan(Math.PI * 0.25 + SLAT1 * 0.5);
+  sn = Math.log(Math.cos(SLAT1) / Math.cos(SLAT2)) / Math.log(sn);
+  let sf = Math.tan(Math.PI * 0.25 + SLAT1 * 0.5);
+  sf = (Math.pow(sf, sn) * Math.cos(SLAT1)) / sn;
+  let ro = Math.tan(Math.PI * 0.25 + OLAT * 0.5);
+  ro = (re * sf) / Math.pow(ro, sn);
+
+  let ra = Math.tan(Math.PI * 0.25 + lat * (Math.PI / 180) * 0.5);
+  ra = (re * sf) / Math.pow(ra, sn);
+  let theta = lon * (Math.PI / 180) - OLON;
+  if (theta > Math.PI) theta -= 2.0 * Math.PI;
+  if (theta < -Math.PI) theta += 2.0 * Math.PI;
+  theta *= sn;
+
+  return {
+    nx: Math.floor(ra * Math.sin(theta) + XO + 0.5),
+    ny: Math.floor(ro - ra * Math.cos(theta) + YO + 0.5),
+  };
 }
 

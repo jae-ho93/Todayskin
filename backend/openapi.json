@@ -2138,6 +2138,10 @@
             "type": "boolean",
             "description": "N42: 대기질 수집이 실패했는지."
           },
+          "nowcastCollectionFailed": {
+            "type": "boolean",
+            "description": "N53: 기온·습도(초단기실황) 수집이 실패했는지."
+          },
           "uvIndex": {
             "type": "number",
             "description": "자외선 지수(현재 시점 예보)",
@@ -2254,6 +2258,16 @@
           "coValue": {
             "type": "number",
             "description": "일산화탄소(CO)",
+            "nullable": true
+          },
+          "temperature": {
+            "type": "number",
+            "description": "N53: 기온(°C, 기상청 초단기실황 T1H)",
+            "nullable": true
+          },
+          "humidity": {
+            "type": "number",
+            "description": "N53: 상대습도(%, 기상청 초단기실황 REH)",
             "nullable": true
           }
         },
@@ -2432,6 +2446,10 @@
             "type": "boolean",
             "description": "N42: 대기질 수집이 실패했는지."
           },
+          "nowcastCollectionFailed": {
+            "type": "boolean",
+            "description": "N53: 기온·습도(초단기실황) 수집이 실패했는지."
+          },
           "uvIndex": {
             "type": "number",
             "description": "자외선 지수(현재 시점 예보)",
@@ -2548,6 +2566,16 @@
           "coValue": {
             "type": "number",
             "description": "일산화탄소(CO)",
+            "nullable": true
+          },
+          "temperature": {
+            "type": "number",
+            "description": "N53: 기온(°C, 기상청 초단기실황 T1H)",
+            "nullable": true
+          },
+          "humidity": {
+            "type": "number",
+            "description": "N53: 상대습도(%, 기상청 초단기실황 REH)",
             "nullable": true
           }
         }
@@ -3201,6 +3229,9 @@
           "airCollectionFailed": {
             "type": "boolean"
           },
+          "nowcastCollectionFailed": {
+            "type": "boolean"
+          },
           "uvIndex": {
             "type": "number",
             "nullable": true
@@ -3262,6 +3293,14 @@
             "nullable": true
           },
           "coValue": {
+            "type": "number",
+            "nullable": true
+          },
+          "temperature": {
+            "type": "number",
+            "nullable": true
+          },
+          "humidity": {
             "type": "number",
             "nullable": true
           }

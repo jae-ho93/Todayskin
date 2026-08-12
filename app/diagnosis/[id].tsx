@@ -270,6 +270,17 @@ function WeatherCard({ weather: w, capturedAt }: { weather: CalendarWeather; cap
           collectionFailed={w.airCollectionFailed}
         />
       </View>
+      {/* N53: 기온·습도 — 과거 기록(마이그레이션 이전)은 값이 없으므로 있을 때만 */}
+      {(typeof w.temperature === 'number' || typeof w.humidity === 'number') && (
+        <Text style={styles.weatherNowcastLine}>
+          {[
+            typeof w.temperature === 'number' ? `기온 ${w.temperature}°C` : null,
+            typeof w.humidity === 'number' ? `습도 ${w.humidity}%` : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </Text>
+      )}
     </Card>
   );
 }
@@ -443,6 +454,12 @@ const styles = StyleSheet.create({
   weatherMetrics: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   weatherMetric: { flex: 1, minWidth: 90, gap: 2 },
   weatherMetricLabel: { ...typography.caption, color: colors.textTertiary },
+  // N53: 기온·습도 요약 라인
+  weatherNowcastLine: {
+    ...typography.bodySm,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
   weatherMetricValue: { ...typography.bodySm, fontWeight: '700' },
 
   recCard: { gap: spacing.sm },

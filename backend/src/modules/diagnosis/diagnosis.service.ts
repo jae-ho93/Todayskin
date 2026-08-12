@@ -801,6 +801,7 @@ export class DiagnosisService {
     // N42/F70: 화면이 "값 없음"과 "수집 실패"를 구별하려면 이유가 함께 내려가야 한다.
     dto.uvCollectionFailed = w.uvCollectionFailed;
     dto.airCollectionFailed = w.airCollectionFailed;
+    dto.nowcastCollectionFailed = w.nowcastCollectionFailed;
     // R22: 지표 16개 복사는 공용 매퍼가 한다.
     return Object.assign(dto, metricsFromSnapshot(w));
   }

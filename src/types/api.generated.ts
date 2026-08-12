@@ -1113,6 +1113,8 @@ export interface components {
             uvCollectionFailed?: boolean;
             /** @description N42: 대기질 수집이 실패했는지. */
             airCollectionFailed?: boolean;
+            /** @description N53: 기온·습도(초단기실황) 수집이 실패했는지. */
+            nowcastCollectionFailed?: boolean;
             /** @description 자외선 지수(현재 시점 예보) */
             uvIndex?: number | null;
             /**
@@ -1163,6 +1165,10 @@ export interface components {
             so2Value?: number | null;
             /** @description 일산화탄소(CO) */
             coValue?: number | null;
+            /** @description N53: 기온(°C, 기상청 초단기실황 T1H) */
+            temperature?: number | null;
+            /** @description N53: 상대습도(%, 기상청 초단기실황 REH) */
+            humidity?: number | null;
         };
         EvidenceSourceDto: {
             /** @example who-uv-index-2002 */
@@ -1246,6 +1252,8 @@ export interface components {
             uvCollectionFailed?: boolean;
             /** @description N42: 대기질 수집이 실패했는지. */
             airCollectionFailed?: boolean;
+            /** @description N53: 기온·습도(초단기실황) 수집이 실패했는지. */
+            nowcastCollectionFailed?: boolean;
             /** @description 자외선 지수(현재 시점 예보) */
             uvIndex?: number | null;
             /**
@@ -1296,6 +1304,10 @@ export interface components {
             so2Value?: number | null;
             /** @description 일산화탄소(CO) */
             coValue?: number | null;
+            /** @description N53: 기온(°C, 기상청 초단기실황 T1H) */
+            temperature?: number | null;
+            /** @description N53: 상대습도(%, 기상청 초단기실황 REH) */
+            humidity?: number | null;
         };
         GenerateRecommendationDto: {
             /** @description 진단 ID (최종 계약 — 서버가 소유권 확인 후 DB에서 조회) */
@@ -1534,6 +1546,7 @@ export interface components {
             source: string;
             uvCollectionFailed?: boolean;
             airCollectionFailed?: boolean;
+            nowcastCollectionFailed?: boolean;
             uvIndex?: number | null;
             uvStatus?: string | null;
             uvIndexPeak?: number | null;
@@ -1550,6 +1563,8 @@ export interface components {
             no2Value?: number | null;
             so2Value?: number | null;
             coValue?: number | null;
+            temperature?: number | null;
+            humidity?: number | null;
         };
         CalendarProductDto: {
             id: string;
