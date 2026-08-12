@@ -34,7 +34,6 @@ describe('ProductService', () => {
   let prisma: {
     product: { findMany: jest.Mock };
     weatherSnapshot: { findFirst: jest.Mock };
-    asyncJob: { findFirst: jest.Mock };
   };
 
   beforeEach(async () => {

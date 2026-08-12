@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { maskSensitiveData } from '../../../common/logging/redact.logger';
 import { OtpGatewayError, OtpProvider } from './otp-provider.interface';
+import { errorName } from '../../../common/errors/error-name.util';
 
 /**
  * 운영용 OTP provider — OCTOMO MO 인증 API 연동.
@@ -118,8 +119,4 @@ const RETRY_BACKOFF_MS = 300;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function errorName(e: unknown): string {
-  return e instanceof Error ? e.name : String(e);
 }

@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from '../../redis/redis.service';
+import { errorName } from '../../common/errors/error-name.util';
+import {
+  assignWeatherMetrics,
+  metricsFromCollected,
+} from './mappers/weather-snapshot.mapper';
 import { weatherCacheKey } from './weather-cache';
 import { KmaClient, UvForecastWithTime } from './clients/kma.client';
 import {
@@ -237,33 +242,13 @@ export class WeatherService {
   }
 
   private buildSnapshotDto(c: CollectedWeather): WeatherSnapshotDto {
-    const source = this.resolveSource(c.uv, c.air);
     const dto = new WeatherSnapshotDto();
     dto.observedAt = this.resolveObservedAt(c).toISOString();
     dto.regionName = c.regionName;
     dto.districtName = c.districtName;
-    dto.source = source;
-
-    dto.uvIndex = c.uv.current;
-    dto.uvStatus = this.policy.uvStatus(c.uv.current);
-    dto.uvIndexPeak = c.uv.peak;
-    dto.uvStatusPeak = this.policy.uvStatus(c.uv.peak);
-    dto.uvIndexPeakHour = c.uv.peakHour;
-
-    dto.ozonePpm = c.air.ozone;
-    dto.ozoneStatus = this.policy.ozoneStatus(c.air.ozone);
-    dto.pm25 = c.air.pm25;
-    dto.pm25Status = this.policy.pm25Status(c.air.pm25);
-    dto.pm10 = c.air.pm10;
-    dto.pm10Status = this.policy.pm10Status(c.air.pm10);
-    dto.caiValue = c.air.cai;
-    dto.caiStatus = this.policy.caiStatus(c.air.cai);
-    dto.no2Value = c.air.no2;
-    dto.so2Value = c.air.so2;
-   dto.coValue = c.air.co;
-
-   return dto;
- }
+    dto.source = this.resolveSource(c.uv, c.air);
+    return assignWeatherMetrics(dto, metricsFromCollected(c, this.policy));
+  }
 
   // ── T12 Redis 캐시 헬퍼 ──────────────────────────────
 
@@ -428,22 +413,7 @@ export class WeatherService {
           longitude: c.lon,
           kmaAreaNo: c.kmaAreaNo,
           airkoreaStation: c.airkoreaStation,
-          uvIndex: c.uv.current,
-          uvStatus: this.policy.uvStatus(c.uv.current) ?? undefined,
-          uvIndexPeak: c.uv.peak,
-          uvStatusPeak: this.policy.uvStatus(c.uv.peak) ?? undefined,
-          uvIndexPeakHour: c.uv.peakHour,
-          ozonePpm: c.air.ozone,
-          ozoneStatus: this.policy.ozoneStatus(c.air.ozone) ?? undefined,
-          pm25: c.air.pm25,
-          pm25Status: this.policy.pm25Status(c.air.pm25) ?? undefined,
-          pm10: c.air.pm10,
-          pm10Status: this.policy.pm10Status(c.air.pm10) ?? undefined,
-          caiValue: c.air.cai,
-          caiStatus: this.policy.caiStatus(c.air.cai) ?? undefined,
-          no2Value: c.air.no2,
-          so2Value: c.air.so2,
-          coValue: c.air.co,
+          ...metricsFromCollected(c, this.policy),
           source,
         },
       });
@@ -462,10 +432,6 @@ function truncateToMinute(date: Date): Date {
       date.getUTCMinutes(),
     ),
   );
-}
-
-function errorName(e: unknown): string {
-  return e instanceof Error ? e.name : String(e);
 }
 
 /** 캐시에 저장되는 페이로드. */

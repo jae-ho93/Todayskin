@@ -10,6 +10,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditLogService } from '../admin/audit-log.service';
+import { errorName } from '../../common/errors/error-name.util';
 import {
   IMAGE_OBJECT_STORE,
 } from './providers/image-object-store.interface';
@@ -24,6 +25,19 @@ export const IMAGE_DELETE_RETRY_BATCH = 100;
 
 /** N10: orphan 탐지 기본 dry-run(안전 기본값). cleanup은 ADMIN이 명시적으로 호출. */
 export const IMAGE_ORPHAN_DETECT_PREFIX = 'diagnoses/';
+
+/** R20: 서명에 필요한 최소 정보. `DiagnosisImage` row가 그대로 만족한다. */
+export interface PresignableImage {
+  s3Bucket: string;
+  s3Key: string;
+  contentType: string;
+}
+
+export interface PresignedImage {
+  url: string;
+  contentType: string;
+  expiresAt: string;
+}
 
 export interface ImageDeleteRetryReport {
   scanned: number;
@@ -185,17 +199,27 @@ export class ImageStorageService {
   async getPresignedUrlForDiagnosis(
     diagnosisId: string,
     expiresInSeconds = DEFAULT_PRESIGN_EXPIRES_SECONDS,
-  ): Promise<{
-    url: string;
-    contentType: string;
-    expiresAt: string;
-  } | null> {
+  ): Promise<PresignedImage | null> {
     const image = await this.prisma.diagnosisImage.findFirst({
       where: { diagnosisId, deletedAt: null },
     });
     if (!image) {
       return null;
     }
+    return this.presignImage(image, expiresInSeconds);
+  }
+
+  /**
+   * R20: 이미 조회해 둔 이미지 row로 URL만 만든다.
+   *
+   * 캘린더 히스토리는 상위 쿼리에서 `image`를 include하고도 진단마다
+   * `getPresignedUrlForDiagnosis`를 불러 같은 row를 다시 읽었다(N+1). 서명은 로컬
+   * 연산이라 네트워크가 필요 없으므로, row가 손에 있으면 DB 왕복이 0이어야 한다.
+   */
+  async presignImage(
+    image: PresignableImage,
+    expiresInSeconds = DEFAULT_PRESIGN_EXPIRES_SECONDS,
+  ): Promise<PresignedImage> {
     const url = await this.store.getPresignedUrl({
       bucket: image.s3Bucket,
       key: image.s3Key,
@@ -203,6 +227,28 @@ export class ImageStorageService {
     });
     const expiresAt = new Date(Date.now() + expiresInSeconds * 1000).toISOString();
     return { url, contentType: image.contentType, expiresAt };
+  }
+
+  /**
+   * R20: 여러 이미지를 한 번에 서명한다. 서명 실패가 목록 전체를 실패시키지 않도록
+   * 실패한 항목만 null로 남긴다(기존 단건 경로도 실패 시 image=null로 응답했다).
+   */
+  async presignImages(
+    images: PresignableImage[],
+    expiresInSeconds = DEFAULT_PRESIGN_EXPIRES_SECONDS,
+  ): Promise<Array<PresignedImage | null>> {
+    return Promise.all(
+      images.map(async (image) => {
+        try {
+          return await this.presignImage(image, expiresInSeconds);
+        } catch (e) {
+          this.logger.warn(
+            `presign 실패 (keyHash=${hashKey(image.s3Key)}): ${errorName(e)}`,
+          );
+          return null;
+        }
+      }),
+    );
   }
 
   /**

@@ -34,6 +34,8 @@ describe('DiagnosisService', () => {
     storeDiagnosisImage: jest.Mock;
     deleteAllForUser: jest.Mock;
     getPresignedUrlForDiagnosis: jest.Mock;
+    // R20: 캘린더 경로는 include된 image row로 배치 서명한다.
+    presignImages: jest.Mock;
     toPublicUrl: jest.Mock;
   };
   let idempotency: {
@@ -73,6 +75,7 @@ describe('DiagnosisService', () => {
       storeDiagnosisImage: jest.fn(),
       deleteAllForUser: jest.fn(),
       getPresignedUrlForDiagnosis: jest.fn(),
+      presignImages: jest.fn().mockResolvedValue([]),
       // BE-2026-08-12: 스냅샷 thumbnailUri 정규화 — memory:// → http 변환을 흉내낸다
       toPublicUrl: jest.fn((uri: string) =>
         uri.startsWith('memory://')
@@ -509,7 +512,7 @@ describe('DiagnosisService', () => {
       expect(result.diagnoses[0].weather?.regionName).toBe('서울특별시');
       expect(result.diagnoses[0].image).toBeNull();
       expect(result.diagnoses[0].landmarks).toBeNull();
-      expect(imageStorage.getPresignedUrlForDiagnosis).not.toHaveBeenCalled();
+      expect(imageStorage.presignImages).not.toHaveBeenCalled();
     });
 
     it('N26: 저장 동의지만 이미지가 soft-deleted면 image·landmarks 모두 숨긴다 (이미지 없음)', async () => {
@@ -534,7 +537,8 @@ describe('DiagnosisService', () => {
       const result = await service.getHistoryByDate(1, '2026-08-06');
       expect(result.diagnoses[0].image).toBeNull();
       expect(result.diagnoses[0].landmarks).toBeNull();
-      expect(imageStorage.getPresignedUrlForDiagnosis).not.toHaveBeenCalled();
+      // R20: 노출 대상이 없으면 서명 자체를 시도하지 않는다.
+      expect(imageStorage.presignImages).not.toHaveBeenCalled();
     });
 
     it('N26: 저장 동의지만 이미지 row가 없으면 image·landmarks 모두 null (이미지 없음)', async () => {
@@ -559,17 +563,19 @@ describe('DiagnosisService', () => {
       const result = await service.getHistoryByDate(1, '2026-08-06');
       expect(result.diagnoses[0].image).toBeNull();
       expect(result.diagnoses[0].landmarks).toBeNull();
-      expect(imageStorage.getPresignedUrlForDiagnosis).not.toHaveBeenCalled();
+      expect(imageStorage.presignImages).not.toHaveBeenCalled();
     });
 
     it('저장 동의 시 image·landmarks를 노출', async () => {
       consentService.hasActive.mockResolvedValue(true);
       // BE-2026-08-12: memory 스토어는 dev-storage http URL을 발급한다
-      imageStorage.getPresignedUrlForDiagnosis.mockResolvedValue({
-        url: 'http://127.0.0.1:3000/dev-storage/todayskin-local/diagnoses/1/front.jpg',
-        contentType: 'image/jpeg',
-        expiresAt: '2026-08-06T12:15:00.000Z',
-      });
+      imageStorage.presignImages.mockResolvedValue([
+        {
+          url: 'http://127.0.0.1:3000/dev-storage/todayskin-local/diagnoses/1/front.jpg',
+          contentType: 'image/jpeg',
+          expiresAt: '2026-08-06T12:15:00.000Z',
+        },
+      ]);
       prisma.diagnosis.findMany.mockResolvedValue([
         {
           id: 'snap-day',
@@ -607,12 +613,27 @@ describe('DiagnosisService', () => {
               ],
             },
           ],
-          image: { deletedAt: null },
+          image: {
+            deletedAt: null,
+            s3Bucket: 'todayskin-local',
+            s3Key: 'diagnoses/1/front.jpg',
+            contentType: 'image/jpeg',
+          },
         },
       ]);
 
       const result = await service.getHistoryByDate(1, '2026-08-06');
       expect(result.diagnoses[0].image?.url).toContain('/dev-storage/');
+      // R20: 진단마다 DB를 다시 읽지 않고, include된 row로 한 번에 서명한다.
+      expect(imageStorage.presignImages).toHaveBeenCalledTimes(1);
+      expect(imageStorage.presignImages.mock.calls[0][0]).toEqual([
+        {
+          deletedAt: null,
+          s3Bucket: 'todayskin-local',
+          s3Key: 'diagnoses/1/front.jpg',
+          contentType: 'image/jpeg',
+        },
+      ]);
       expect(result.diagnoses[0].landmarks?.points).toEqual([[0.4, 0.3]]);
       expect(result.diagnoses[0].recommendations[0].products[0].name).toBe('크림');
     });

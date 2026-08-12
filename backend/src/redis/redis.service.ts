@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
+import { errorName } from '../common/errors/error-name.util';
 
 /**
  * RedisService — T12 날씨 캐시용 Redis 연결.
@@ -262,8 +263,4 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       return 0;
     }
   }
-}
-
-function errorName(e: unknown): string {
-  return e instanceof Error ? e.name : String(e);
 }

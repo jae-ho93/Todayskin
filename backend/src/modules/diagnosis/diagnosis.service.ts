@@ -10,6 +10,8 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { notDeletedWhere } from '../../common/soft-delete/soft-delete.policy';
+import { errorMessage } from '../../common/errors/error-name.util';
+import { metricsFromSnapshot } from '../weather/mappers/weather-snapshot.mapper';
 import {
   buildCursorPage,
   CursorPageDto,
@@ -52,6 +54,7 @@ import {
 import { Diagnosis, DiagnosisStatus, Prisma, SkinMetric, WeatherSnapshot } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { DEFAULT_PRESIGN_EXPIRES_SECONDS } from '../storage/image-storage.service';
+import type { PresignedImage } from '../storage/image-storage.service';
 
 type CalendarDiagnosisRow = Prisma.DiagnosisGetPayload<{
   include: {
@@ -211,7 +214,9 @@ export class DiagnosisService {
         );
         weatherSnapshotId = snapshot?.id ?? null;
       } catch (e) {
-        this.logger.warn(`Weather snapshot unavailable, continuing without: ${errorName(e)}`);
+        this.logger.warn(
+          `Weather snapshot unavailable, continuing without: ${errorMessage(e)}`,
+        );
       }
     }
 
@@ -419,9 +424,17 @@ export class DiagnosisService {
       },
     });
 
-    const items = await Promise.all(
-      diagnoses.map((diagnosis) =>
-        this.toCalendarDiagnosisDto(diagnosis, canViewMedia),
+    // R20: 노출 대상 이미지를 한 번에 서명한다. 이전에는 진단마다 presign 헬퍼가
+    // 같은 DiagnosisImage row를 다시 조회했다(위 include로 이미 갖고 있는 데이터).
+    const signedByDiagnosisId = canViewMedia
+      ? await this.presignCalendarImages(diagnoses)
+      : new Map<string, PresignedImage>();
+
+    const items = diagnoses.map((diagnosis) =>
+      this.toCalendarDiagnosisDto(
+        diagnosis,
+        canViewMedia,
+        signedByDiagnosisId.get(diagnosis.id) ?? null,
       ),
     );
 
@@ -613,10 +626,37 @@ export class DiagnosisService {
     return dto;
   }
 
-  private async toCalendarDiagnosisDto(
+  /**
+   * R20: 저장 동의가 있는 요청에서 노출 가능한 이미지만 모아 한 번에 서명한다.
+   * 서명 실패는 항목별 null로 남고(기존 동작), 나머지 항목은 그대로 응답한다.
+   */
+  private async presignCalendarImages(
+    diagnoses: CalendarDiagnosisRow[],
+  ): Promise<Map<string, PresignedImage>> {
+    const visible = diagnoses.filter(
+      (d): d is CalendarDiagnosisRow & { image: NonNullable<CalendarDiagnosisRow['image']> } =>
+        d.image != null && d.image.deletedAt == null,
+    );
+    if (visible.length === 0) return new Map();
+
+    const signed = await this.imageStorage.presignImages(
+      visible.map((d) => d.image),
+      DEFAULT_PRESIGN_EXPIRES_SECONDS,
+    );
+
+    const byId = new Map<string, PresignedImage>();
+    visible.forEach((d, i) => {
+      const s = signed[i];
+      if (s) byId.set(d.id, s);
+    });
+    return byId;
+  }
+
+  private toCalendarDiagnosisDto(
     d: CalendarDiagnosisRow,
     canViewMedia: boolean,
-  ): Promise<CalendarDiagnosisDto> {
+    signedImage: PresignedImage | null,
+  ): CalendarDiagnosisDto {
     const dto = new CalendarDiagnosisDto();
     dto.id = d.id;
     dto.capturedAt = d.capturedAt.toISOString();
@@ -634,13 +674,7 @@ export class DiagnosisService {
     if (canViewMedia) {
       const hasImage = d.image != null && d.image.deletedAt == null;
       if (hasImage) {
-        const signed = await this.imageStorage.getPresignedUrlForDiagnosis(
-          d.id,
-          DEFAULT_PRESIGN_EXPIRES_SECONDS,
-        );
-        dto.image = signed
-          ? this.toCalendarImageDto(signed)
-          : null;
+        dto.image = signedImage ? this.toCalendarImageDto(signedImage) : null;
         // N26: 랜드마크(얼굴 기하 정보)는 저장된 이미지와 함께만 노출한다.
         // 이미지가 없으면(저장 실패·soft delete·철회 잔재) landmarks도 노출하지 않는다.
         // 저장 동의 계약(diagnosis_image_storage)과 영속화·노출 조건을 일치시킨다.
@@ -666,23 +700,8 @@ export class DiagnosisService {
     dto.regionName = w.regionName;
     dto.districtName = w.districtName ?? null;
     dto.source = w.source;
-    dto.uvIndex = w.uvIndex;
-    dto.uvStatus = w.uvStatus;
-    dto.uvIndexPeak = w.uvIndexPeak;
-    dto.uvStatusPeak = w.uvStatusPeak;
-    dto.uvIndexPeakHour = w.uvIndexPeakHour;
-    dto.ozonePpm = w.ozonePpm;
-    dto.ozoneStatus = w.ozoneStatus;
-    dto.pm25 = w.pm25;
-    dto.pm25Status = w.pm25Status;
-    dto.pm10 = w.pm10;
-    dto.pm10Status = w.pm10Status;
-    dto.caiValue = w.caiValue;
-    dto.caiStatus = w.caiStatus;
-    dto.no2Value = w.no2Value;
-    dto.so2Value = w.so2Value;
-    dto.coValue = w.coValue;
-    return dto;
+    // R22: 지표 16개 복사는 공용 매퍼가 한다.
+    return Object.assign(dto, metricsFromSnapshot(w));
   }
 
   private toCalendarRecommendationDto(r: {
@@ -780,8 +799,4 @@ function hasImageSignature(buffer: Buffer, mimetype: string): boolean {
     return buffer.length >= 12 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP';
   }
   return false;
-}
-
-function errorName(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
 }

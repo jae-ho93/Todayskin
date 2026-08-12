@@ -81,6 +81,9 @@ jobs:
       - run: npx prisma migrate deploy
       - run: npx prisma db seed
       - run: npm run build
+      # build(`nest build`)는 tsconfig.build.json으로 spec/e2e를 제외하므로 테스트 코드의
+      # 타입 오류를 잡지 못한다. typecheck는 src + test 전체를 본다.
+      - run: npm run typecheck
       - run: npm test
       - run: npm run test:cov -- --coverageReporters=text-summary
       - run: npm run test:e2e

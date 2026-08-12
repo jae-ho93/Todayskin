@@ -34,6 +34,10 @@ import {
   decodeCursor,
 } from '../../common/pagination/cursor-pagination';
 import { notDeletedWhere } from '../../common/soft-delete/soft-delete.policy';
+import {
+  metricsFromSnapshot,
+  PrismaWeatherMetrics,
+} from '../weather/mappers/weather-snapshot.mapper';
 
 /**
  * LLM이 만들어내지 않는, 서버가 통제하는 정직한 출처 표기 (허위 인용 방지).
@@ -817,45 +821,13 @@ export class RecommendationService {
   /**
    * WeatherSnapshot Prisma 모델을 Gemini 입력용 plain 객체로 변환.
    */
-  private snapshotToInput(s: {
-    observedAt: Date;
-    regionName: string;
-    uvIndex: number | null;
-    uvStatus: string | null;
-    uvIndexPeak: number | null;
-    uvStatusPeak: string | null;
-    uvIndexPeakHour: number | null;
-    ozonePpm: number | null;
-    ozoneStatus: string | null;
-    pm25: number | null;
-    pm25Status: string | null;
-    pm10: number | null;
-    pm10Status: string | null;
-    caiValue: number | null;
-    caiStatus: string | null;
-    no2Value: number | null;
-    so2Value: number | null;
-    coValue: number | null;
-  }): Record<string, unknown> {
+  private snapshotToInput(
+    s: PrismaWeatherMetrics & { observedAt: Date; regionName: string },
+  ): Record<string, unknown> {
     return {
       observedAt: s.observedAt,
       regionName: s.regionName,
-      uvIndex: s.uvIndex,
-      uvStatus: s.uvStatus,
-      uvIndexPeak: s.uvIndexPeak,
-      uvStatusPeak: s.uvStatusPeak,
-      uvIndexPeakHour: s.uvIndexPeakHour,
-      ozonePpm: s.ozonePpm,
-      ozoneStatus: s.ozoneStatus,
-      pm25: s.pm25,
-      pm25Status: s.pm25Status,
-      pm10: s.pm10,
-      pm10Status: s.pm10Status,
-      caiValue: s.caiValue,
-      caiStatus: s.caiStatus,
-      no2Value: s.no2Value,
-      so2Value: s.so2Value,
-      coValue: s.coValue,
+      ...metricsFromSnapshot(s),
     };
   }
 

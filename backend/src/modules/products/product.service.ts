@@ -26,8 +26,8 @@ import { IdempotencyService } from '../idempotency/idempotency.service';
 import { todayKst } from '../diagnosis/calendar-date.util';
 import { WeatherService } from '../weather/weather.service';
 import { WeatherSnapshotDto } from '../weather/dto/weather-snapshot.dto';
+import { toWeatherSnapshotDto } from '../weather/mappers/weather-snapshot.mapper';
 import { WeatherSource } from '../../common/enums/weather-source.enum';
-import { AirStatus } from '../../common/enums/air-status.enum';
 import {
   buildCursorPage,
   CursorPageDto,
@@ -403,29 +403,12 @@ export class ProductService {
     });
   }
 
-  /** WeatherSnapshot row → 응답 DTO. 출처는 CACHED로 표기해 "라이브가 아님"을 명시한다. */
+  /**
+   * WeatherSnapshot row → 응답 DTO. 출처는 CACHED로 표기해 "라이브가 아님"을 명시한다.
+   * R22: 지표 복사는 공용 매퍼가 한다(이전 사본은 districtName을 빠뜨리고 있었다).
+   */
   private snapshotToDto(s: WeatherSnapshot): WeatherSnapshotDto {
-    const dto = new WeatherSnapshotDto();
-    dto.observedAt = s.observedAt.toISOString();
-    dto.regionName = s.regionName;
-    dto.source = WeatherSource.CACHED;
-    dto.uvIndex = s.uvIndex;
-    dto.uvStatus = s.uvStatus as AirStatus;
-    dto.uvIndexPeak = s.uvIndexPeak;
-    dto.uvStatusPeak = s.uvStatusPeak as AirStatus;
-    dto.uvIndexPeakHour = s.uvIndexPeakHour;
-    dto.ozonePpm = s.ozonePpm;
-    dto.ozoneStatus = s.ozoneStatus as AirStatus;
-    dto.pm25 = s.pm25;
-    dto.pm25Status = s.pm25Status as AirStatus;
-    dto.pm10 = s.pm10;
-    dto.pm10Status = s.pm10Status as AirStatus;
-    dto.caiValue = s.caiValue;
-    dto.caiStatus = s.caiStatus as AirStatus;
-    dto.no2Value = s.no2Value;
-    dto.so2Value = s.so2Value;
-    dto.coValue = s.coValue;
-    return dto;
+    return toWeatherSnapshotDto(s, WeatherSource.CACHED);
   }
 
   // ── N27 실제품 매핑·규칙 fallback ──────────────────────────
