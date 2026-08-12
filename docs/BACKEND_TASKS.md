@@ -24,8 +24,10 @@ RDS·S3·CloudWatch 연동, Pino·Sentry·Helmet·JWT·Swagger·Jest를 적용�
 ## 현재 Open
 
 실기기 테스트에서 나온 버그·정책 변경(N39~N45)은 2026-08-13에 모두 반영했다
-([`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md) 참고). 남은 것은 배포 작업뿐이고
+([`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md) 참고). 배포 작업은
 **N16 → N35 → N36 → N37** 순서를 지킨다(N35~N37은 배포 파이프라인이 살아 있어야 검증할 수 있다).
+여기에 프로젝트 리뷰([`Fable5_ProjectReview.md`](Fable5_ProjectReview.md), 2026-08-13)에서 나온
+프로덕션 개선 N46~N51을 추가했다. N46은 보안 항목이라 배포보다 먼저 처리해도 된다.
 
 각 Task는 브랜치 하나 = PR 하나이며, 코드 변경이 없는 인프라 설정 작업은
 설정 근거와 확인 결과를 PR 본문 또는 이 문서에 남긴다.
@@ -99,6 +101,86 @@ R11에서 append-only 테이블에 보존 정책을 넣었다. 기본값이 `off
 
 완료 기준: dry-run 예측 건수와 실제 삭제 건수가 일치하고, 스냅샷이 확보돼 있다.
 
+### N46. 소셜 로그인 토큰 검증 강화 — Kakao 앱 바인딩 + Apple nonce (Fable5 리뷰 S-1·S-2)
+
+브랜치: `fix/social-token-binding` · 선행 없음 (배포 전 처리 권장)
+
+카카오 provider가 access token으로 `/v2/user/me`만 호출해 **어느 앱에 발급된 토큰인지 검증하지
+않는다**(코드 주석에 MVP 갭으로 명시돼 있음). 다른 카카오 연동 앱이 수집한 토큰으로 해당
+사용자의 Todayskin 계정에 로그인할 수 있다. Apple은 aud·서명은 검증하지만 nonce가 없어
+id_token 리플레이 여지가 있다.
+
+- [ ] Kakao: 토큰 정보 조회 API(`/v1/user/access_token_info`)로 `app_id`가 우리 앱과 일치하는지 검증, 불일치 시 401
+- [ ] Apple: 클라이언트가 nonce 생성 → id_token의 `nonce` 클레임 검증 (FE `expo-apple-authentication` nonce 전달 포함)
+- [ ] 성공·실패(타 앱 토큰, nonce 불일치) 테스트 추가
+
+완료 기준: 타 앱에서 발급된 카카오 토큰과 nonce 불일치 Apple 토큰이 401로 거부되고, 기존 소셜 로그인 e2e가 통과한다.
+
+### N47. 인증·OTP 라우트 rate limit fail-closed 전환 (Fable5 리뷰 S-4)
+
+브랜치: `fix/auth-throttle-fail-closed`
+
+`RedisThrottlerStorage`가 Redis 장애 시 요청을 통과시킨다(fail-open). 가용성 트레이드오프로
+의도된 설계지만, **로그인·OTP는 브루트포스 표적**이라 이 두 경로만은 Redis 장애 중에도
+막혀야 한다.
+
+- [ ] auth·otp 컨트롤러 한정 fail-closed 옵션 (Redis 오류 시 429/503) — 나머지 라우트는 fail-open 유지
+- [ ] Redis 단절 상황 테스트 (기존 fail-open 테스트와 분리)
+
+완료 기준: Redis를 내린 상태에서 OTP 발송·로그인 시도가 제한되고, 일반 조회 API는 계속 동작한다.
+
+### N48. AuditLog metadata 마스킹 강제 (Fable5 리뷰 S-5)
+
+브랜치: `fix/audit-metadata-masking`
+
+`AuditLogService` 주석은 "metadata에 민감정보 저장 금지"를 선언하지만 강제 장치가 없어,
+호출자가 전화번호 등을 넣으면 감사 테이블에 평문으로 남는다. Pino 로그는 경로 마스킹이
+있는데 감사 로그만 예외다.
+
+- [ ] `AuditLogService.record()`에서 metadata를 재귀 마스킹(전화·생일·토큰 패턴) 후 저장
+- [ ] 민감 키가 들어와도 마스킹되는 단위 테스트
+
+완료 기준: 감사 로그에 전화번호·토큰이 평문으로 저장될 수 없다.
+
+### N49. 추론 이미지 품질 게이트 — blur·휘도·최소 해상도 (Fable5 리뷰 P1)
+
+브랜치: `feature/inference-quality-gate` · 아키텍처상 FastAPI(inference-service) 전처리 담당
+
+현재 클라이언트·NestJS·FastAPI 어디에도 사진 품질 검사가 없다(MIME·10MB·얼굴 존재만 검사).
+어둡거나 흔들린 사진도 점수가 나와 **첫 결과의 신뢰를 운에 맡긴다.** 품질 검증은 추론
+전처리의 일부로 FastAPI에 두고, `ARCHITECTURE.md`에 전처리 검증 범위를 명시한다.
+
+- [ ] FastAPI: Laplacian 분산(blur)·평균 휘도·최소 해상도 검사 → 실패 시 422 + 사유 코드(`BLURRY`/`TOO_DARK`/`TOO_SMALL`)
+- [ ] NestJS: 422 사유를 표준 오류 포맷으로 매핑해 FE에 전달 (OpenAPI 반영)
+- [ ] 임계값은 환경변수로 (기본값은 실측 샘플로 보정)
+- [ ] FE 후속: 사유별 재촬영 안내 화면 연결 (FRONTEND_TASKS 후속 태스크로 등록)
+
+완료 기준: 어두운/흔들린/저해상도 샘플이 422와 사유 코드로 거부되고, 정상 샘플은 기존과 동일하게 통과한다.
+
+### N50. CloudWatch 알람 + 장애 런북 (Fable5 리뷰 P1)
+
+선행: N16 · 코드 변경 없음 (인프라 설정 + 문서)
+
+로그·헬스체크는 있지만 **알림이 없어** 장애를 사용자 제보로 알게 되는 구조다.
+
+- [ ] 알람 4종: ALB 5xx율, ECS 태스크 비정상(health fail), AsyncJob FAILED 급증(DLQ 적체), inference 429율
+- [ ] 알람 수신 채널 연결 (이메일 또는 Slack webhook)
+- [ ] 장애 런북 1페이지 (`docs/DEPLOYMENT.md`에 추가): 증상 → 확인 순서 → 롤백 판단 기준
+
+완료 기준: 알람을 인위적으로 트리거해 수신을 확인하고, 런북이 문서에 있다.
+
+### N51. JWT 서명키 보관 개선 (Fable5 리뷰 S-3)
+
+선행: N16 (Secrets Manager 가동 후)
+
+`JwtKeyRotation.secret`이 DB에 평문으로 저장된다. DB 스냅샷·백업이 유출되면 토큰 위조가
+가능하다.
+
+- [ ] 프로덕션 키를 Secrets Manager 단일 소스로 이전하거나, DB 보관 유지 시 KMS 봉투 암호화 적용 (택1 — 근거를 PR에 기록)
+- [ ] 회전 절차가 기존 `JWT_SECRET` fallback과 호환되는지 테스트
+
+완료 기준: 프로덕션 DB 덤프만으로는 유효한 토큰을 만들 수 없다.
+
 ## 보류 (조건 충족 후 착수)
 
 근거가 있어 남긴 항목이다. 조건이 충족되면 위 Open으로 올린다.
@@ -117,6 +199,19 @@ R6 1단계로 전역 락을 풀고 슬롯 수를 `INFERENCE_CONCURRENCY`(기본 
 조건: **추천 규칙이 카탈로그 전체를 보지 않도록 바뀔 때.** 현재 규칙 선택은 전체 카탈로그를 전제한다.
 조회 비용은 TTL 10분 캐시로 이미 잡혀 있어 지금 좁힐 이득이 없다. 근거는
 [`REFACTORING_BACKLOG.md`](REFACTORING_BACKLOG.md) R9 상세에 있다.
+
+### N52. API `/v1` 버저닝 도입 (Fable5 리뷰)
+
+조건: **팀 결정 D-12 + 스토어 출시 준비 착수.** 현재 API freeze 상태라 지금 옮기면 FE 전면
+수정만 유발한다. 스토어 배포 후에는 구버전 앱을 강제 업데이트할 수 없으므로, **첫 심사 제출
+전**에 prefix를 넣는 것이 마지막 저비용 시점이다. 상세 근거는
+[`Fable5_ProjectReview.md`](Fable5_ProjectReview.md) 30장.
+
+### N53. WeatherSnapshot 기온·습도 수집 확장 (Fable5 리뷰)
+
+조건: **팀 결정(스키마 확장 합의).** 현재 스냅샷은 자외선·대기질만 수집하고 피부 건조와
+가장 직접 연관된 기온·습도가 없다. 기상청 단기예보 확장으로 해결 가능하며, 패턴(C등급)
+상관의 설명력을 높인다. 상세는 [`Fable5_ProjectReview.md`](Fable5_ProjectReview.md) 16장.
 
 ## 완료 (Done)
 
