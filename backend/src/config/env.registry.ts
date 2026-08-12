@@ -556,6 +556,25 @@ export const ENV_REGISTRY: EnvVarDefinition[] = [
     schema: Joi.string().valid('auto', 'memory', 'redis').default('auto'),
   },
   {
+    // N47: 인증·OTP 라우트 전용 한도 (fail-closed). 라우트별·IP별 분당 요청 수.
+    key: 'THROTTLE_SENSITIVE_LIMIT',
+    owner: 'security',
+    description: 'Auth/OTP rate limit max requests per window (fail-closed)',
+    requiredIn: 'never',
+    safeDefault: 30,
+    secret: false,
+    schema: Joi.number().integer().min(1).default(30),
+  },
+  {
+    key: 'THROTTLE_SENSITIVE_TTL_MS',
+    owner: 'security',
+    description: 'Auth/OTP rate limit window ms',
+    requiredIn: 'never',
+    safeDefault: 60_000,
+    secret: false,
+    schema: Joi.number().integer().min(100).default(60_000),
+  },
+  {
     key: 'JOB_METRICS_INTERVAL_MS',
     owner: 'jobs',
     description: 'BullMQ queue/DLQ metrics collection interval ms (0=disabled)',

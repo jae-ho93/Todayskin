@@ -10,6 +10,10 @@ import { validateEnvWithRegistry } from './config/env.validation';
 import { SoftDeleteModule } from './common/soft-delete/soft-delete.module';
 import { SchedulerModule } from './common/scheduler/scheduler.module';
 import { RedisThrottlerStorage } from './common/rate-limit/redis-throttler.storage';
+import {
+  SENSITIVE_THROTTLER,
+  isSensitiveThrottledRoute,
+} from './common/rate-limit/sensitive-throttle';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
@@ -59,12 +63,24 @@ import { JobsModule } from './modules/jobs/jobs.module';
           // 조용한 fail-open 전환은 rate limit이 무한정 꺼진 것처럼 보이게 한다.
           throw new Error('THROTTLE_STORAGE=redis requires REDIS_URL');
         }
+        const isTestEnv = () => config.get<string>('NODE_ENV') === 'test';
         return {
           throttlers: [
             {
               name: 'default',
               limit: config.get<number>('THROTTLE_LIMIT', 60),
               ttl: config.get<number>('THROTTLE_TTL_MS', 60_000),
+            },
+            {
+              // N47: 인증·OTP 등 @SensitiveThrottle 라우트 전용 — 더 낮은 한도 +
+              // Redis 장애 시 fail-closed(503). 데코레이터 없는 라우트는 건너뛴다.
+              // 주의: per-throttler skipIf가 루트 skipIf를 가리므로(v6 소스 확인)
+              // 테스트 환경 예외를 여기에도 포함해야 한다.
+              name: SENSITIVE_THROTTLER,
+              limit: config.get<number>('THROTTLE_SENSITIVE_LIMIT', 30),
+              ttl: config.get<number>('THROTTLE_SENSITIVE_TTL_MS', 60_000),
+              skipIf: (context) =>
+                isTestEnv() || !isSensitiveThrottledRoute(context),
             },
           ],
           storage: useRedis
