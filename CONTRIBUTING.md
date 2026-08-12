@@ -51,5 +51,5 @@ N16·총리팩·결제·BE 계약 변경은 기본 규칙.
 ## 지금 할 일
 
 - **FE:** [docs/FRONTEND_TASKS.md](docs/FRONTEND_TASKS.md) (작업 절차·계약 통합 관리)
-- **BE:** freeze. 이력·N16 → [docs/BACKEND_TASKS.md](docs/BACKEND_TASKS.md)
+- **BE:** freeze. 활성 보드(N16·OCTOMO) → [docs/BACKEND_TASKS.md](docs/BACKEND_TASKS.md) · 완료 이력 → [docs/BACKEND_ARCHIVE.md](docs/BACKEND_ARCHIVE.md)
 - 셋업: [docs/SETUP.md](docs/SETUP.md) · 원칙: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)

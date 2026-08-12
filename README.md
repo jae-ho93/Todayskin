@@ -167,7 +167,8 @@ Todayskin/
 ├─ app/ · src/                     # Expo 앱
 ├─ docs/                           # 문서 허브 → docs/README.md
 │  ├─ SETUP.md · ARCHITECTURE.md · DEPLOYMENT.md
-│  ├─ BACKEND_TASKS.md · FRONTEND_TASKS.md
+│  ├─ BACKEND_TASKS.md · BACKEND_ARCHIVE.md · REFACTORING_BACKLOG.md
+│  ├─ FRONTEND_TASKS.md
 ├─ backend/                        # NestJS + inference-service
 │  ├─ README.md                    # 모듈·디렉터리 구조 지도
 │  ├─ src/ · prisma/ · test/
@@ -184,7 +185,7 @@ Todayskin/
 |------|----------------|
 | 누구나 / 새로 합류 | 이 README → [SETUP](docs/SETUP.md) → [CONTRIBUTING](CONTRIBUTING.md) |
 | 프론트 | [FRONTEND_TASKS](docs/FRONTEND_TASKS.md) · `app/`, `src/` |
-| 백엔드 | [ARCHITECTURE](docs/ARCHITECTURE.md) · [backend/README](backend/README.md) · [BACKEND_TASKS](docs/BACKEND_TASKS.md) |
+| 백엔드 | [ARCHITECTURE](docs/ARCHITECTURE.md) · [backend/README](backend/README.md) · [BACKEND_TASKS](docs/BACKEND_TASKS.md) · [BACKEND_ARCHIVE](docs/BACKEND_ARCHIVE.md) · [REFACTORING_BACKLOG](docs/REFACTORING_BACKLOG.md) |
 | 프로젝트 매니저 (PM) | FE/BE Task 보드 · CONTRIBUTING |
 | 인프라 | [DEPLOYMENT](docs/DEPLOYMENT.md) |
 
