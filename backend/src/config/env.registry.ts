@@ -138,6 +138,26 @@ export const ENV_REGISTRY: EnvVarDefinition[] = [
     // 동일한 PENDING→COMPLETED 계약을 유지한다.
     schema: Joi.string().valid('auto', 'inline', 'bullmq').default('auto'),
   },
+  {
+    key: 'JOB_ROLE',
+    owner: 'jobs',
+    description: 'Process role api|worker|both — api는 enqueue만, worker는 잡·스케줄러 담당',
+    requiredIn: 'never',
+    safeDefault: 'both',
+    secret: false,
+    // R13: 기본 both = 기존 동작(단일 서비스). worker 서비스를 띄운 뒤에 api로 내린다.
+    schema: Joi.string().valid('api', 'worker', 'both').default('both'),
+  },
+  {
+    key: 'JOB_WORKER_CONCURRENCY',
+    owner: 'jobs',
+    description: 'BullMQ worker concurrency per queue',
+    requiredIn: 'never',
+    safeDefault: 2,
+    secret: false,
+    // R13: 워커 전용 프로세스는 API 지연 영향이 없으므로 올릴 수 있다. 기본은 기존 값(2).
+    schema: Joi.number().integer().min(1).max(50).default(2),
+  },
 
   {
     key: 'JWT_ACCESS_SECRET',

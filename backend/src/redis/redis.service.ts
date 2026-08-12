@@ -228,6 +228,28 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * R3: 분산 락 획득 시도. `SET key value NX PX ttl` 한 번으로 원자적으로 잡는다.
+   *
+   * 획득한 락은 **해제하지 않고 TTL로 만료시킨다** — 스케줄러 리더 선출용이므로
+   * "이 주기에는 이미 누가 실행했다"는 사실이 TTL 동안 남아 있어야 한다.
+   * 작업 종료 시 해제하면 같은 주기에 다른 인스턴스가 다시 실행한다.
+   *
+   * Redis 미가용 시 false를 반환한다. "락 없음 = 실행"인지 "= 미실행"인지는
+   * 호출부 정책이므로 여기서 판단하지 않는다(SchedulerLeaderService 참고).
+   */
+  async acquireLock(key: string, ttlMs: number, owner: string): Promise<boolean> {
+    if (!this.isAvailable() || !this.client) return false;
+    try {
+      const result = await this.client.set(key, owner, 'PX', ttlMs, 'NX');
+      return result === 'OK';
+    } catch (e) {
+      this.available = false;
+      this.logger.debug(`Redis acquireLock 실패: ${errorName(e)}`);
+      return false;
+    }
+  }
+
   /** N11: 카운터 남은 TTL(ms, 없으면 0). block duration 헤더 계산용. */
   async getCounterTtlMs(key: string): Promise<number> {
     if (!this.isAvailable() || !this.client) return 0;

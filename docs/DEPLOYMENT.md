@@ -60,14 +60,23 @@ docker compose --profile backend up -d --build
 
 ### 운영 CD — `.github/workflows/deploy-ecs.yml` (N5)
 
-`main`에 `backend/**` 변경이 push되거나 `workflow_dispatch`일 때:
+트리거는 **CI 워크플로의 완료**다(R31). 이전에는 `main` push에 직접 걸려 CI와
+배포가 병렬로 시작했고, 테스트가 깨진 커밋도 승인만 있으면 배포됐다.
 
-1. **build-and-push** (자동): NestJS / inference 이미지를 ECR에 push. tag = **commit SHA**
-2. **release** (`environment: production` 승인 게이트):
+1. **guard**: `workflow_run.conclusion == 'success'`인지 확인하고, CI가 검증한
+   커밋(`workflow_run.head_sha`)에서 `backend/**` 변경 여부를 판단한다.
+   프론트 전용 커밋이면 이후 job이 모두 스킵된다(기존 `paths` 필터 대체 —
+   `workflow_run`은 `paths`를 지원하지 않는다). `workflow_dispatch`는 항상 진행한다.
+2. **build-and-push** (자동): NestJS / inference 이미지를 ECR에 push. tag = **commit SHA**
+3. **release** (`environment: production` 승인 게이트):
    - RDS snapshot 백업 (`RDS_INSTANCE_ID` 설정 시)
    - migrate task: `migrate diff` + `migrate deploy` (실패 시 app rollout 중단)
-   - NestJS / inference 각각 새 task revision 등록 후 ECS service 업데이트
+   - worker(`ECS_SERVICE_WORKER` 설정 시) → NestJS → inference 순서로
+     새 task revision 등록 후 ECS service 업데이트
    - `services-stable` 대기
+
+CI가 실패하면 배포 워크플로 자체가 시작되지 않는다. 실패한 커밋을 강제로 배포해야
+하면 `workflow_dispatch`로 `image_tag`를 지정해 수동 실행한다.
 
 ## 운영 배포 (ECS Fargate)
 
@@ -87,6 +96,7 @@ docker compose --profile backend up -d --build
 Task definition 템플릿:
 
 - `backend/docker/ecs/backend-task-definition.json`
+- `backend/docker/ecs/worker-task-definition.json` (R13 — 잡·스케줄러 전용)
 - `backend/docker/ecs/inference-task-definition.json`
 - `backend/docker/ecs/migrate-task-definition.json`
 
@@ -113,9 +123,13 @@ Task definition 템플릿:
 - `ECR_BACKEND_REPO` / `ECR_INFERENCE_REPO`
 - `ECS_CLUSTER`
 - `ECS_SERVICE_BACKEND` / `ECS_SERVICE_INFERENCE`
+- `ECS_SERVICE_WORKER` — R13 워커 서비스. **비워 두면 워커 rollout을 건너뛴다**
 - `ECS_MIGRATE_TASK_FAMILY` (기본 `todayskin-migrate`)
 - `ECS_SUBNETS` — 쉼표 구분 subnet id
 - `ECS_SECURITY_GROUPS` — 쉼표 구분 sg id
+- `ECS_ASSIGN_PUBLIC_IP` — migrate task의 퍼블릭 IP 할당(기본 `ENABLED`).
+  NAT gateway로 전환하면 `DISABLED`. R31 이전에는 job env로 전달되지 않아
+  이 오버라이드가 동작하지 않았다.
 - `RDS_INSTANCE_ID` — 자동 snapshot용 (없으면 스냅샷 단계 skip)
 
 **Environment**
@@ -230,19 +244,52 @@ inference-service는 **내부망 전용** 서비스다. 무제한 이미지 처�
 - `INFERENCE_SHARED_SECRET` (inference 서비스와 동일한 값 — N13)
 - OTP 게이트웨이 `OCTOMO_API_KEY` (MO 인증 — 사용자가 문자를 보내면 수신 여부를 API로 검증, 발송 비용 0원. 가입: octomo.octoverse.kr)
 
-### 날씨 수집 스케줄러 (N21 싱글턴)
+### 스케줄러 리더 선출 (R3)
 
-`WeatherCollectionScheduler`는 기상청/에어코리아를 주기적으로 호출한다. ECS task가
-여러 개 뜨면 **각 task마다** 스케줄러가 실행되어 정부 API를 중복 호출하므로,
-backend service의 **정확히 1개 task만** `WEATHER_COLLECTOR_ENABLED=true`로 유지한다:
+주기 작업(날씨 수집·soft delete 물리 삭제·S3 reconcile·잡 지표)은 모든 task에서
+실행되면 정부 API 중복 호출과 되돌릴 수 없는 물리 삭제의 동시 실행을 일으킨다.
+ECS service의 모든 task는 같은 task definition/env를 공유하므로 "1개만 true"는
+환경변수로 표현할 수 없다 — 그래서 각 tick 진입 시 Redis 락으로 리더를 뽑는다.
 
-- **한계**: ECS service의 모든 task는 같은 task definition/env를 공유하므로, 같은
-  service 안에서는 "1개만 true"로 둘 수 없다. 실제로는 아래 중 하나로 운영한다.
-  1. backend service를 **task 1개로 유지**(기본값 `WEATHER_COLLECTOR_ENABLED=true`)
-  2. 또는 스케줄러 전용 task(service)를 별도로 두고 나머지 backend task는
-     `WEATHER_COLLECTOR_ENABLED=false`로 설정
-- `WEATHER_COLLECTION_INTERVAL_MS`(기본 1시간)·`REGION_STAGGER_MS`(3초)로 호출 빈도 조정
-- task 수를 늘려야 하면 (2) 방식으로 전환한다. 모든 task가 true면 중복 호출이 계속된다.
+- 락: `SET scheduler:{name}:leader {instanceId} NX PX {interval×1.5}`
+- 락은 해제하지 않고 **TTL로 만료**시킨다. 작업이 끝날 때 풀면 같은 주기에 다른
+  task가 이어서 실행한다.
+- 리더 task가 작업 중 죽으면 최대 TTL(약 한 주기)만큼 건너뛴다. 모든 스케줄러
+  작업이 다음 tick에서 복구되는 성격이라 이 손실을 허용한다.
+- **`REDIS_URL`이 없으면 락 없이 실행한다.** 로컬·단일 인스턴스 동작을 유지하기
+  위한 선택이므로, 운영에서 task를 2개 이상으로 늘릴 때 Redis는 필수다.
+- 결과적으로 **desiredCount를 자유롭게 올릴 수 있다.**
+  `WEATHER_COLLECTOR_ENABLED=false`는 이제 필수가 아니며, 정부 API 호출을 즉시
+  끊는 킬 스위치로만 남는다.
+- 호출 빈도 조정: `WEATHER_COLLECTION_INTERVAL_MS`(기본 1시간)·`REGION_STAGGER_MS`(3초)
+
+### 워커 서비스 분리 (R13)
+
+`JOB_ROLE`로 같은 이미지의 역할을 나눈다.
+
+| 값 | HTTP | BullMQ Worker | 스케줄러 |
+|---|---|---|---|
+| `both` (기본) | O | O | O |
+| `api` | O | X (enqueue만) | X |
+| `worker` | O (헬스체크용) | O | O |
+
+- task definition: `backend/docker/ecs/worker-task-definition.json`
+  (`JOB_ROLE=worker`, `JOB_DISPATCHER=bullmq`, `JOB_WORKER_CONCURRENCY=4`)
+- 배포 파이프라인은 GitHub Variable `ECS_SERVICE_WORKER`가 설정돼 있을 때만
+  워커 rollout을 수행한다. 비어 있으면 스킵되므로 서비스 생성 전에도 안전하다.
+- 워커 서비스는 **ALB 타깃 그룹에 등록하지 않는다.** HTTP는 ECS 컨테이너
+  헬스체크(`/health`)만 받는다.
+
+**전환 순서 (역순 금지)**
+
+1. `ECS_SERVICE_WORKER` variable 설정 → 워커 서비스 생성(desiredCount 1) → 배포
+2. 워커 로그에서 `BullMQ queues and workers started (JOB_ROLE=worker...)` 확인
+3. 큐가 실제로 소비되는지 `job_metrics` 로그로 확인(waiting이 쌓이지 않음)
+4. 그 다음에 backend task definition에 `JOB_ROLE=api`를 추가해 배포
+
+API를 먼저 `api`로 내리면 워커가 생기기 전까지 잡이 큐에 쌓인 채 처리되지 않고
+스케줄러도 멈춘다. `backend-task-definition.json`이 `api`가 아닌지 CI가 검사한다
+(`task-definition-env.spec.ts`).
 
 ### 헬스체크 (live / ready 분리 — N6)
 

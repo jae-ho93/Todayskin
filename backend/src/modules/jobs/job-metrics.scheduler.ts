@@ -1,5 +1,7 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { LeaderElectedScheduler } from '../../common/scheduler/leader-elected.scheduler';
+import { SchedulerLeaderService } from '../../common/scheduler/scheduler-leader.service';
 import { JOB_DISPATCHER } from './jobs.constants';
 import type { JobDispatcher } from './dispatchers/job-dispatcher.interface';
 
@@ -8,47 +10,26 @@ import type { JobDispatcher } from './dispatchers/job-dispatcher.interface';
  *
  * JOB_METRICS_INTERVAL_MS(기본 60초)마다 활성 dispatcher의 collectMetrics()를
  * 호출해 구조화 로그로 남긴다. Inline(개발/테스트)은 지원하지 않으므로 스킵.
- * 지표는 로그에만 남기며(CloudWatch 등에서 집계), ECS 다중 task에서도
- * Redis에 실시간 카운트가 있으므로 인스턴스별 분산 없이 일관된다.
+ *
+ * R3: 지표는 Redis의 큐 상태를 읽는 것이라 모든 인스턴스가 같은 값을 본다.
+ * 리더만 기록해 인스턴스 수만큼 중복되는 로그를 없앤다.
  */
 @Injectable()
-export class JobMetricsScheduler implements OnModuleInit, OnModuleDestroy {
-  private readonly logger = new Logger(JobMetricsScheduler.name);
-  private timer: NodeJS.Timeout | null = null;
+export class JobMetricsScheduler extends LeaderElectedScheduler {
+  protected readonly logger = new Logger(JobMetricsScheduler.name);
+  protected readonly schedulerName = 'job-metrics';
+  protected readonly intervalEnvKey = 'JOB_METRICS_INTERVAL_MS';
+  protected readonly defaultIntervalMs = 60_000;
 
   constructor(
     @Inject(JOB_DISPATCHER) private readonly dispatcher: JobDispatcher,
-    private readonly config: ConfigService,
-  ) {}
-
-  onModuleInit(): void {
-    if (this.config.get<string>('NODE_ENV') === 'test') {
-      return;
-    }
-    const interval = Number(
-      this.config.get<number>('JOB_METRICS_INTERVAL_MS') ?? 60_000,
-    );
-    if (!interval || interval <= 0) {
-      this.logger.log('Job metrics scheduler disabled');
-      return;
-    }
-    this.timer = setInterval(() => {
-      void this.collect().catch((e) => {
-        this.logger.warn(`job metrics collection failed: ${(e as Error).message}`);
-      });
-    }, interval);
-    this.timer.unref?.();
-    this.logger.log(`Job metrics scheduler started intervalMs=${interval}`);
+    config: ConfigService,
+    leader: SchedulerLeaderService,
+  ) {
+    super(config, leader);
   }
 
-  onModuleDestroy(): void {
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
-  }
-
-  private async collect(): Promise<void> {
+  protected async tick(): Promise<void> {
     if (typeof this.dispatcher.collectMetrics !== 'function') return;
     const metrics = await this.dispatcher.collectMetrics();
     if (!metrics) return;

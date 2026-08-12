@@ -8,6 +8,7 @@ import * as Sentry from '@sentry/node';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { initSentry, flushSentry } from './common/logging/sentry.config';
+import { resolveJobRole } from './config/job-role';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -83,7 +84,9 @@ async function bootstrap() {
   await app.listen(port);
 
   const logger = app.get(Logger);
-  logger.log(`Server running on http://localhost:${port}`);
+  // R13: 워커 전용 프로세스도 HTTP를 계속 띄운다 — ECS가 컨테이너 헬스체크로
+  // /health를 호출하기 때문이다(ALB 타깃 그룹에는 등록하지 않는다).
+  logger.log(`Server running on http://localhost:${port} (JOB_ROLE=${resolveJobRole(configService)})`);
   if (!isProduction) {
     logger.log(`Swagger UI at http://localhost:${port}/api/docs`);
   }

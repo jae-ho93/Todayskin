@@ -8,6 +8,7 @@ import {
 } from '@nestjs/throttler';
 import { validateEnvWithRegistry } from './config/env.validation';
 import { SoftDeleteModule } from './common/soft-delete/soft-delete.module';
+import { SchedulerModule } from './common/scheduler/scheduler.module';
 import { RedisThrottlerStorage } from './common/rate-limit/redis-throttler.storage';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -76,6 +77,8 @@ import { JobsModule } from './modules/jobs/jobs.module';
     }),
     PrismaModule,
     RedisModule,
+    // R3: 스케줄러 리더 선출(Redis SET NX). 다중 인스턴스에서 주기 작업 중복 실행 방지.
+    SchedulerModule,
     HealthModule,
     SoftDeleteModule,
     AuthModule,
