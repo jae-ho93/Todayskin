@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../src/components/Card';
+import { RetryButton } from '../src/components/RetryButton';
 import { ScreenContainer } from '../src/components/ScreenContainer';
 import { colors, spacing, typography } from '../src/theme';
 import { api } from '../src/api/client';
@@ -19,27 +20,28 @@ export default function TrendScreen() {
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const data = await api.getPattern();
-        if (!active) return;
-        if (data === null) {
-          setFailed(true);
-        } else {
-          setPattern(data);
-        }
-      } catch {
-        if (active) setFailed(true);
-      } finally {
-        if (active) setLoading(false);
+  // F75: 재시도 버튼에서 다시 부를 수 있도록 로드를 함수로 뺐다.
+  // (언마운트 후 setState는 React 18+에서 무해한 no-op이라 active 플래그는 두지 않는다.)
+  const load = useCallback(async () => {
+    setLoading(true);
+    setFailed(false);
+    try {
+      const data = await api.getPattern();
+      if (data === null) {
+        setFailed(true);
+      } else {
+        setPattern(data);
       }
-    })();
-    return () => {
-      active = false;
-    };
+    } catch {
+      setFailed(true);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   return (
     <ScreenContainer>
@@ -63,6 +65,8 @@ export default function TrendScreen() {
           <Text style={styles.stateBody}>
             패턴 분석 데이터를 불러오지 못했어요.{'\n'}잠시 후 다시 시도해주세요.
           </Text>
+          {/* F75: 오류 상태 재시도 일관화 — 홈·추천과 같은 방식 */}
+          <RetryButton onPress={() => void load()} />
         </Card>
       ) : pattern && pattern.status === 'LOCKED' ? (
         <Card style={styles.lockedCard}>
