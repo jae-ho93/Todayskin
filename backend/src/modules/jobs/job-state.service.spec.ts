@@ -17,6 +17,7 @@ describe('JobStateService', () => {
         create: jest.fn(),
         update: jest.fn(),
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
       },
     };
     const moduleRef = await Test.createTestingModule({
@@ -49,6 +50,67 @@ describe('JobStateService', () => {
           queueName: 'recommendation',
         }),
       });
+    });
+
+    it('R10: payload에서 dedupeKey를 유도해 함께 저장한다', async () => {
+      prisma.asyncJob.create.mockResolvedValue({ id: 'job-1' });
+      await service.create({
+        userId: 1,
+        type: JobType.RECOMMENDATION_GENERATE,
+        priority: 1,
+        maxAttempts: 3,
+        queueName: 'recommendation',
+        payload: { diagnosisId: 'd1' },
+      });
+      expect(prisma.asyncJob.create.mock.calls[0][0].data.dedupeKey).toBe(
+        'diagnosisId:d1',
+      );
+    });
+
+    it('R10: dedupe 대상이 아닌 payload는 dedupeKey가 null이다', async () => {
+      prisma.asyncJob.create.mockResolvedValue({ id: 'job-2' });
+      await service.create({
+        userId: 1,
+        type: JobType.RECOMMENDATION_GENERATE,
+        priority: 1,
+        maxAttempts: 3,
+        queueName: 'recommendation',
+        payload: { skinScore: {}, weather: {} },
+      });
+      expect(prisma.asyncJob.create.mock.calls[0][0].data.dedupeKey).toBeNull();
+    });
+  });
+
+  describe('findRecentByDedupeKey (R10)', () => {
+    it('dedupeKey 컬럼 + 최근 창으로 조회한다 (payload JSON 경로 사용 금지)', async () => {
+      prisma.asyncJob.findFirst.mockResolvedValue({ id: 'job-1' });
+      await service.findRecentByDedupeKey({
+        userId: 7,
+        type: JobType.WEATHER_PRODUCTS_GENERATE,
+        dedupeKey: 'regionKey:서울특별시',
+        withinMs: 600_000,
+      });
+
+      const arg = prisma.asyncJob.findFirst.mock.calls[0][0];
+      expect(arg.where).toMatchObject({
+        userId: 7,
+        type: JobType.WEATHER_PRODUCTS_GENERATE,
+        dedupeKey: 'regionKey:서울특별시',
+      });
+      expect(arg.where.payload).toBeUndefined();
+      expect(arg.where.createdAt.gte).toBeInstanceOf(Date);
+      expect(arg.orderBy).toEqual({ createdAt: 'desc' });
+    });
+
+    it('status로 걸러내지 않는다 — 세 상태 모두 재사용 후보다', async () => {
+      prisma.asyncJob.findFirst.mockResolvedValue(null);
+      await service.findRecentByDedupeKey({
+        userId: 1,
+        type: JobType.RECOMMENDATION_GENERATE,
+        dedupeKey: 'diagnosisId:d1',
+        withinMs: 1_000,
+      });
+      expect(prisma.asyncJob.findFirst.mock.calls[0][0].where.status).toBeUndefined();
     });
   });
 

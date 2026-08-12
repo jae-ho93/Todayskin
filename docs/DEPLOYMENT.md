@@ -213,6 +213,18 @@ inference-service는 **내부망 전용** 서비스다. 무제한 이미지 처�
 - Prisma는 down migration을 지원하지 않으므로 위험 변경은 되돌리는 새 migration을 추가
 - migration 파일은 커밋하고 임의 수정/삭제 금지
 
+큰 테이블 인덱스 추가 (R33):
+
+Prisma는 migration 파일을 트랜잭션 안에서 실행하므로 `CREATE INDEX CONCURRENTLY`를
+migration에 쓸 수 없다(트랜잭션 블록에서 금지). 그래서 B4 migration의 모든
+`CREATE INDEX`에는 `IF NOT EXISTS`가 붙어 있다. 행이 많아 잠금이 부담되는 테이블은
+release **전에** psql로 미리 만들어두면 migration이 그 인덱스를 건너뛴다.
+
+```bash
+psql "$DATABASE_URL" -c \
+  'CREATE INDEX CONCURRENTLY IF NOT EXISTS "products_category_idx" ON "products"("category");'
+```
+
 ### Rollback
 
 이전 이미지로 롤백:
@@ -290,6 +302,35 @@ ECS service의 모든 task는 같은 task definition/env를 공유하므로 "1�
 API를 먼저 `api`로 내리면 워커가 생기기 전까지 잡이 큐에 쌓인 채 처리되지 않고
 스케줄러도 멈춘다. `backend-task-definition.json`이 `api`가 아닌지 CI가 검사한다
 (`task-definition-env.spec.ts`).
+
+### 보존 정책 스윕 활성화 (R11)
+
+append-only 테이블 정리는 `SoftDeletePurgeScheduler`(리더 선출 대상)에 붙어 있고,
+**`RETENTION_SWEEP_MODE` 기본값은 `off`다.** 되돌릴 수 없는 DELETE이므로 코드 배포만으로
+데이터가 사라지지 않는다. 켤 때는 다음 순서를 따른다.
+
+1. `RETENTION_SWEEP_MODE=dry-run`으로 배포한다. 삭제하지 않고 대상 건수만 로그로 남는다.
+   `retention_sweep {"mode":"dry-run","tables":{...}}` 로그에서 규모를 확인한다.
+2. 건수가 예상과 다르면 보존 기간(`RETENTION_*_DAYS`)을 조정하고 1로 돌아간다.
+3. RDS 스냅샷을 확보한다(자동 백업만으로는 PITR 창을 벗어난 복구가 어렵다).
+4. `RETENTION_SWEEP_MODE=delete`로 배포한다. 최초 실행은 대상이 많으므로 테이블당
+   `RETENTION_BATCH_SIZE`(기본 1000) × 20배치까지만 지우고 나머지는 다음 tick으로 넘긴다.
+   `truncated` 배열이 빌 때까지 여러 tick이 걸린다.
+5. `SOFT_DELETE_PURGE_INTERVAL_MS`(기본 1시간) 주기로 이어서 정리된다.
+
+| 테이블 | 기본 보존 | 기준 컬럼 |
+|---|---|---|
+| `RefreshSession` | 7일 | `expiresAt` 또는 `revokedAt` |
+| `AsyncJob` (COMPLETED/FAILED) | 30일 | `createdAt` |
+| `AiCallReservation` (COMPLETED) | 1일 | `updatedAt` |
+| `OtpCode` | 30일 | `expiresAt` |
+| `OtpSendLog` | 30일 | `sentAt` |
+| `WeatherSnapshot` | 400일 | `collectedAt` |
+
+기준 컬럼은 만료·폐기 시점이므로 `RETENTION_REFRESH_SESSION_DAYS=7`은 "만료된 지 7일
+지난 세션"을 뜻한다(토큰 수명 `REFRESH_TOKEN_EXPIRES_IN`을 줄이는 것이 아니다).
+이 기간에는 R21 재사용 탐지가 폐기된 세션을 조회할 수 있어야 하므로 0으로 두지 않는다.
+`WeatherSnapshot`은 개인 패턴 분석이 계절 1주기를 비교하므로 400일보다 줄이지 않는다.
 
 ### 헬스체크 (live / ready 분리 — N6)
 

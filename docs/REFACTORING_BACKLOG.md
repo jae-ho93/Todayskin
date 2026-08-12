@@ -13,7 +13,8 @@
 | B1 | ✅ 완료 (2026-08-12) | [#130](https://github.com/jae-ho93/Todayskin/pull/130) | AWS 작업 2건(코드 밖): Secrets Manager `todayskin/prod/OCTOMO_API_KEY` 등록, ALB deregistration delay < `stopTimeout`(120s) 설정. R6 2단계(vCPU 증설 + 슬롯 상향)는 부하 테스트 후 판단 — 값은 `INFERENCE_CONCURRENCY`로 이미 환경변수화됨 |
 | B2 | ✅ 완료 (2026-08-12) | `refactor/r-batch-02-safety-net` | 없음. R16의 `useAsyncJob` 테스트는 훅 추출(R27, B6) 후에 추가한다 |
 | B3 | ✅ 완료 (2026-08-12) | `refactor/r-batch-03-scheduler-worker` | AWS/GitHub 작업(코드 밖): ① 워커 ECS 서비스 생성 + Variable `ECS_SERVICE_WORKER` 설정 → 큐 소비 확인 후 ② backend task definition에 `JOB_ROLE=api` 추가. 순서를 뒤집으면 잡이 처리되지 않는다 |
-| B4~B6 | 대기 | — | — |
+| B4 | ✅ 완료 (2026-08-12) | `refactor/r-batch-04-db-migration` | 운영 작업(코드 밖): ① 마이그레이션 배포 후 R11 스윕을 `RETENTION_SWEEP_MODE=dry-run`으로 켜서 삭제 대상 규모 확인 → ② RDS 스냅샷 확보 → ③ `delete`로 전환. 기본값 `off`이므로 배포만으로는 아무 데이터도 지워지지 않는다 |
+| B5~B6 | 대기 | — | — |
 
 ## 작업 묶음 (Batch)
 
@@ -25,7 +26,7 @@
 | **B1. 즉시 보안·운영** ✅ | R1, R2, R4, R6, R17, R19, R32 | `refactor/r-batch-01-security-critical` | Critical 우선 + 배포 차단(키·root·metrics) 항목 포함 |
 | **B2. 안전망 (타입·테스트·설정)** ✅ | R15, R16, R18, R34, R29 | `refactor/r-batch-02-safety-net` | 구조 작업 전 타입·테스트 기반 마련 |
 | **B3. 스케줄러·워커** ✅ | R3, R13, R31 | `refactor/r-batch-03-scheduler-worker` | 리더 락(R3) → 워커 분리(R13) 순서 |
-| **B4. DB (승인 필요, 한 마이그레이션)** | R33, R10, R11, R21 | `refactor/r-batch-04-db-migration` | 인덱스·컬럼·보존을 한 마이그레이션으로 묶음 |
+| **B4. DB (한 마이그레이션)** ✅ | R33, R10, R11, R21 | `refactor/r-batch-04-db-migration` | 인덱스·컬럼·보존을 한 마이그레이션으로 묶음 |
 | **B5. 백엔드 구조 (동작 보존)** | R7, R8, R9, R12, R20, R22, R23, R24, R30, R35 | `refactor/r-batch-05-backend-structure` | 순수 구조 개선 — 동작 불변 목표 |
 | **B6. 계약·프론트 구조** | R5, R14, R25, R26, R27, R28 | `refactor/r-batch-06-contract-frontend` | B2 완료 후 권장 (strict·테스트가 회귀를 잡음) |
 
@@ -360,9 +361,10 @@ migration 필요   예 (인덱스만, 데이터 마이그레이션 없음)
 
 작업:
 
-- [ ] **선택지 A(권장):** dedupe 키를 JSON에서 꺼내 정규 컬럼 `dedupeKey String?`으로 승격하고 `@@index([userId, type, status, dedupeKey, createdAt])`를 건다. 조회가 순수 B-tree가 되고 의미도 명확해진다.
-- [ ] **선택지 B:** `payload`에 GIN 인덱스(`USING gin (payload jsonb_path_ops)`)를 추가한다. Prisma가 지원하지 않으므로 raw SQL 마이그레이션이 필요하다.
-- [ ] A가 더 단순하고 빠르다. 기존 행은 `dedupeKey`를 NULL로 두고 신규부터 채우면 되며, 조회는 `dedupeKey`가 NULL인 과거 행을 자연히 무시한다(잡 dedupe는 최근 수분 단위 윈도우이므로 과거 데이터가 필요 없다).
+- [x] **선택지 A 채택:** `AsyncJob.dedupeKey String?` + `@@index([userId, type, dedupeKey, createdAt])`. 인덱스에서 `status`는 뺐다 — 두 호출처가 상태로 필터하지 않고(PENDING·PROCESSING·COMPLETED를 모두 후보로 본다) 컬럼을 더 넣으면 인덱스만 커진다.
+- [x] 선택지 B(GIN)는 쓰지 않았다. raw SQL이 필요한 데다 JSON 경로 비교가 남는다.
+- [x] 기존 행은 `dedupeKey`가 NULL이다. 백필하지 않는다 — dedupe 윈도우는 수 분이라 배포 직후 잠깐 느슨해질 뿐이고, 그 구간은 잡의 idempotent 예약이 막는다.
+- [x] 키 생성을 `job-dedupe.ts` 한 곳에 모았다(`buildJobDedupeKey`). 이전에는 `payload.diagnosisId` / `payload.regionKey`를 각 서비스가 직접 꺼내 JSON 경로로 조회했다. 생성(`JobStateService.create`)과 조회(`findRecentByDedupeKey`)가 같은 함수를 쓰지 않으면 키가 어긋나 dedupe가 조용히 멈춘다.
 
 변경 범위:
 
@@ -390,13 +392,16 @@ migration 필요   예
 
 작업:
 
-- [ ] 테이블별 보존 기간을 정의하고 기존 `SoftDeletePurgeScheduler`(제안 [3]의 리더 락 적용 후)에 정리 작업을 추가한다.
-- [ ] RefreshSession       expiresAt < now - 7d  또는 revokedAt < now - 7d  → DELETE
-- [ ] AsyncJob             createdAt < now - 30d (COMPLETED/FAILED만)      → DELETE
-- [ ] AiCallReservation    updatedAt < now - 1d  (COMPLETED)               → DELETE
-- [ ] OtpCode / OtpSendLog createdAt < now - 30d                           → DELETE
-- [ ] WeatherSnapshot      개인 패턴 분석이 필요한 기간(예: 400일) 초과분   → DELETE
-- [ ] 보존 기간은 환경변수로 노출하고, 삭제는 배치 크기를 제한해 반복(`deleteMany` + `take` 루프)한다. 인덱스는 [33]에서 함께 추가한다.
+- [x] `RetentionService`를 만들고 `SoftDeletePurgeScheduler.tick()`에 붙였다(R3 리더 락 적용 후이므로 인스턴스가 여러 개여도 한 번만 돈다).
+- [x] RefreshSession       expiresAt < now - 7d  또는 revokedAt < now - 7d  → DELETE
+- [x] AsyncJob             createdAt < now - 30d (COMPLETED/FAILED만)      → DELETE
+- [x] AiCallReservation    updatedAt < now - 1d  (COMPLETED)               → DELETE
+- [x] OtpCode / OtpSendLog 30d — 각각 인덱스가 있는 `expiresAt` / `sentAt`으로 자른다(`createdAt`은 인덱스가 없고, OTP는 생성-만료 간격이 수 분이라 기간 의미가 같다)
+- [x] WeatherSnapshot      collectedAt < now - 400d                        → DELETE
+- [x] 보존 기간은 `RETENTION_*` 환경변수로 노출했다. 인덱스는 R33에서 함께 추가했다.
+- [x] **`RETENTION_SWEEP_MODE` 기본값은 `off`다.** 되돌릴 수 없는 DELETE이므로 코드 배포만으로는 아무것도 지우지 않는다. 운영 활성화는 `dry-run`으로 규모 확인 → 스냅샷 → `delete` 순서로 별도 진행한다(docs/DEPLOYMENT.md).
+- [x] 삭제는 id를 먼저 뽑고 그 목록만 지운다. `deleteMany`에는 LIMIT이 없어 조건에 맞는 전체 행을 한 트랜잭션에서 지우려 하고, 최초 실행처럼 대상이 많을 때 테이블 잠금이 길어진다. 테이블당 20배치를 넘기면 남은 몫을 다음 tick으로 넘긴다.
+- [x] 한 테이블의 실패가 나머지 정리를 막지 않도록 정책별로 예외를 잡는다.
 
 변경 범위:
 
@@ -685,8 +690,9 @@ text
 
 작업:
 
-- [ ] 폐기와 신규 세션 생성을 `prisma.$transaction`으로 묶는다. 실패 시 옛 세션이 살아 있으므로 클라이언트가 그대로 재시도할 수 있다.
-- [ ] `RefreshSession`에 `familyId`를 두고, 재사용이 탐지되면 같은 `familyId`의 모든 세션을 폐기한다(OAuth 2.0 BCP의 표준 동작).
+- [x] 폐기와 신규 세션 생성을 `prisma.$transaction`으로 묶었다. 실패 시 옛 세션이 살아 있으므로 클라이언트가 그대로 재시도할 수 있다. 폐기는 `updateMany({ revokedAt: null })` + `count === 1` 검사로 하므로 같은 토큰의 동시 회전은 하나만 성공한다(원자적 소비).
+- [x] `RefreshSession.familyId` + `@@index([familyId])`를 추가했다. 회전한 세션은 계열을 물려받고, 새 로그인은 자기 id가 계열 뿌리가 된다. 기존 행은 `familyId = id`로 백필했다.
+- [x] 폐기된 토큰이 다시 오면 계열 전체를 폐기한다(OAuth 2.0 BCP). 단 `REFRESH_REUSE_GRACE_MS`(기본 10초) 안의 재사용은 네트워크 재시도로 보고 401만 준다 — 앱이 같은 토큰으로 두 번 갱신을 시도하는 것은 흔하고, 이를 탈취로 처리하면 정상 사용자가 로그아웃된다.
 
 변경 범위:
 
@@ -1006,12 +1012,14 @@ text
 
 작업:
 
-- [ ] Product                @@index([category]) @@index([createdAt, id])
-- [ ] RecommendationTemplate @@index([createdAt, id])
-- [ ] WeatherSnapshot        @@index([collectedAt])
-- [ ] RefreshSession         @@index([expiresAt]) @@index([revokedAt])
-- [ ] OtpCode                @@index([expiresAt])
-- [ ] 제안 [9], [11]과 함께 하나의 마이그레이션으로 묶는다. 운영 적용 시 `CREATE INDEX CONCURRENTLY`를 쓰도록 마이그레이션 SQL을 수동 편집한다(Prisma 기본 생성은 테이블을 잠근다).
+- [x] Product                @@index([category]) @@index([createdAt, id])
+- [x] RecommendationTemplate @@index([createdAt, id])
+- [x] WeatherSnapshot        @@index([collectedAt])
+- [x] RefreshSession         @@index([expiresAt]) @@index([revokedAt])
+- [x] OtpCode                @@index([expiresAt])
+- [x] R11의 스윕이 쓰는 인덱스를 함께 넣었다: `OtpSendLog @@index([sentAt])`, `AiCallReservation @@index([status, updatedAt])`. 인덱스 없이 스윕을 돌리면 정리 작업이 매 tick 풀스캔한다.
+- [x] R10, R11, R21과 한 마이그레이션(`20260817000000_b4_indexes_retention_token_family`)으로 묶었다.
+- [x] `CREATE INDEX CONCURRENTLY`는 넣지 않았다 — Prisma는 마이그레이션을 트랜잭션 안에서 실행하고 `CONCURRENTLY`는 트랜잭션에서 못 쓴다. 대신 모든 `CREATE INDEX`에 `IF NOT EXISTS`를 붙였으므로, 큰 테이블은 배포 전에 psql로 `CONCURRENTLY` 생성해두면 마이그레이션이 그 인덱스를 건너뛴다(docs/DEPLOYMENT.md).
 
 변경 범위:
 

@@ -63,6 +63,8 @@ import { NotificationModule } from '../notifications/notification.module';
     JobService,
     JobMetricsScheduler,
   ],
-  exports: [JobService],
+  // R10: dedupe 조회를 위해 JobStateService도 노출한다. 도메인 서비스가
+  // async_jobs를 직접 쿼리하지 않고 이 파사드만 쓰게 해 dedupe 키 규칙을 한곳에 묶는다.
+  exports: [JobService, JobStateService],
 })
 export class JobsModule {}

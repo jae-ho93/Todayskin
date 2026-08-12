@@ -333,6 +333,14 @@ export class AuthService {
   /**
    * Refresh Token 회전. 검증 후 기존 세션을 폐기하고 새 세션을 발급한다.
    * 폐기된/만료된 토큰은 401을 반환한다.
+   *
+   * R21: 폐기와 신규 발급을 한 트랜잭션으로 묶는다. 이전에는 폐기가 커밋된 뒤
+   * 신규 세션 생성이 실패하면(DB 순단·프로세스 종료) 옛 토큰은 이미 무효인데
+   * 새 토큰이 없어 사용자가 강제 로그아웃됐다. 이제 실패 시 옛 세션이 살아 있어
+   * 클라이언트가 같은 토큰으로 그대로 재시도할 수 있다.
+   *
+   * R21: 이미 폐기된 토큰이 다시 오면 계열(familyId) 전체를 폐기한다
+   * (refresh token reuse detection — OAuth 2.0 Security BCP).
    */
   async refresh(
     refreshToken: string,
@@ -347,12 +355,14 @@ export class AuthService {
     });
 
     const now = new Date();
-    if (
-      !session ||
-      session.userId !== payload.sub ||
-      session.revokedAt ||
-      session.expiresAt <= now
-    ) {
+    if (!session || session.userId !== payload.sub) {
+      throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다');
+    }
+    if (session.revokedAt) {
+      await this.handleRefreshReuse(session, now);
+      throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다');
+    }
+    if (session.expiresAt <= now) {
       throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다');
     }
 
@@ -363,21 +373,42 @@ export class AuthService {
       throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다');
     }
 
-    // 조건부 update로 토큰을 원자적으로 소비한다. 같은 refresh token으로
-    // 동시에 두 요청이 들어오면 정확히 하나만 count=1이 되고, 나머지는 401이다.
-    const consumed = await this.prisma.refreshSession.updateMany({
-      where: {
-        id: session.id,
-        revokedAt: null,
-        expiresAt: { gt: now },
-      },
+    return this.issueTokens(user.id, user.role, userAgent, ipAddress, {
+      familyId: session.familyId,
+      consumeSessionId: session.id,
+    });
+  }
+
+  /**
+   * R21: 이미 폐기된 refresh 토큰 재사용 처리.
+   *
+   * 탈취된 토큰이라면 계열 전체를 끊어야 하지만, 정상 클라이언트의 재시도
+   * (네트워크 타임아웃 후 같은 토큰 재전송, 앱 재시작 경합)도 같은 모습으로 보인다.
+   * 그래서 폐기 직후 짧은 유예 시간 안의 재사용은 재시도로 보고 401만 반환하고,
+   * 그보다 오래된 토큰이 다시 나타나면 탈취 신호로 보아 계열을 폐기한다.
+   * 유예를 두지 않으면 흔한 재시도 한 번에 전체 로그아웃이 발생한다.
+   */
+  private async handleRefreshReuse(
+    session: { id: string; userId: number; familyId: string; revokedAt: Date | null },
+    now: Date,
+  ): Promise<void> {
+    const rawGrace = Number(this.configService.get<number>('REFRESH_REUSE_GRACE_MS'));
+    const graceMs = Number.isFinite(rawGrace) && rawGrace >= 0 ? rawGrace : 10_000;
+    const revokedAgoMs = session.revokedAt
+      ? now.getTime() - session.revokedAt.getTime()
+      : Number.POSITIVE_INFINITY;
+    if (revokedAgoMs <= graceMs) return;
+
+    const revoked = await this.prisma.refreshSession.updateMany({
+      where: { familyId: session.familyId, revokedAt: null },
       data: { revokedAt: now },
     });
-    if (consumed.count !== 1) {
-      throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다');
+    if (revoked.count > 0) {
+      this.logger.warn(
+        `Refresh token reuse detected — revoked family userId=${session.userId} ` +
+          `familyId=${session.familyId} sessions=${revoked.count}`,
+      );
     }
-
-    return this.issueTokens(user.id, user.role, userAgent, ipAddress);
   }
 
   async getMe(userId: number): Promise<UserResponseDto> {
@@ -423,11 +454,19 @@ export class AuthService {
 
   // ── 내부 헬퍼 ──────────────────────────────────
 
+ /**
+  * 토큰 발급 + RefreshSession 저장.
+  *
+  * R21 `opts.consumeSessionId`가 주어지면 폐기와 신규 세션 생성을 한 트랜잭션으로
+  * 처리한다. 조건부 폐기가 1건이 아니면(동시 요청이 이미 소비) 트랜잭션을 되돌리고
+  * 401을 던진다 — 새 세션이 만들어지지 않으므로 토큰이 새어나가지 않는다.
+  */
  private async issueTokens(
    userId: number,
    role: string,
    userAgent?: string,
    ipAddress?: string,
+   opts?: { familyId?: string; consumeSessionId?: string },
  ): Promise<TokenResponseDto> {
    // jti를 포함해 동일 사용자·동일 초에 발급해도 토큰이 중복되지 않도록 한다.
    const payload: JwtPayload & { jti: string } = {
@@ -467,15 +506,39 @@ export class AuthService {
    const refreshExpiresInSeconds = expiresInToSeconds(refreshExpiresIn);
    const expiresAt = new Date(Date.now() + refreshExpiresInSeconds * 1000);
 
-   await this.prisma.refreshSession.create({
-     data: {
-       userId,
-       tokenHash,
-       userAgent: userAgent ?? null,
-       ipAddress: ipAddress ?? null,
-       expiresAt,
-     },
-   });
+   const sessionId = randomUUID();
+   const sessionData = {
+     id: sessionId,
+     userId,
+     tokenHash,
+     // 새 로그인은 자기 자신이 계열의 뿌리다. 회전은 기존 계열을 물려받는다.
+     familyId: opts?.familyId ?? sessionId,
+     userAgent: userAgent ?? null,
+     ipAddress: ipAddress ?? null,
+     expiresAt,
+   };
+
+   const consumeSessionId = opts?.consumeSessionId;
+   if (consumeSessionId) {
+     await this.prisma.$transaction(async (tx) => {
+       // 조건부 update로 토큰을 원자적으로 소비한다. 같은 refresh token으로
+       // 동시에 두 요청이 들어오면 정확히 하나만 count=1이 되고, 나머지는 401이다.
+       const consumed = await tx.refreshSession.updateMany({
+         where: {
+           id: consumeSessionId,
+           revokedAt: null,
+           expiresAt: { gt: new Date() },
+         },
+         data: { revokedAt: new Date() },
+       });
+       if (consumed.count !== 1) {
+         throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다');
+       }
+       await tx.refreshSession.create({ data: sessionData });
+     });
+   } else {
+     await this.prisma.refreshSession.create({ data: sessionData });
+   }
 
    return {
      accessToken,
