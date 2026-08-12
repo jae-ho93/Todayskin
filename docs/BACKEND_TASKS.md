@@ -64,7 +64,7 @@ RDS·S3·CloudWatch 연동, Pino·Sentry·Helmet·JWT·Swagger·Jest를 적용�
 
 ## 리팩토링 백로그
 
-[`docs/REFACTORING_BACKLOG.md`](REFACTORING_BACKLOG.md) — R1~R35 (Critical 6 · High 15 · Medium 11 · Low 3).
+[`docs/REFACTORING_BACKLOG.md`](REFACTORING_BACKLOG.md) — R1~R35를 **작업 묶음 B1~B6**(즉시 보안 / 안전망 / 스케줄러·워커 / DB / 백엔드 구조 / 계약·프론트) 단위로 진행.
 **승인 전 구현 금지.** DB·API 계약 변경 항목은 별도 승인 후 착수.
 
 ## 완료 정의

@@ -6,16 +6,31 @@
 >
 > **요약:** Critical 6건 · High 15건 · Medium 11건 · Low 3건 (총 35건)
 
-## 현재 아키텍처 (분석 기준)
+## 작업 묶음 (Batch)
 
-```text
-Expo React Native (app/ + src/)
-    ↓ HTTP (JWT Bearer)
-NestJS 11 — Modular Monolith (auth, diagnosis, recommendations, products, weather, jobs …)
-    ↓ Prisma 7          ↓ Redis/BullMQ          ↓ HTTP + X-Inference-Key
-PostgreSQL 16         캐시·큐·rate limit       FastAPI inference-service
-배포: GitHub Actions → ECR → ECS Fargate + Secrets Manager + CloudWatch
-```
+> **R 단위로 PR을 쪼개지 않는다.** 아래 묶음 단위로 검토·승인하고, 묶음 하나 = 브랜치 하나 = PR 하나로 진행한다.
+> 각 R 상세의 `브랜치:`는 소속 묶음 브랜치를 가리킨다.
+
+| 묶음 | 포함 R | 브랜치 | 진행 기준 |
+|---|---|---|---|
+| **B1. 즉시 보안·운영** | R1, R2, R4, R6, R17, R19, R32 | `refactor/r-batch-01-security-critical` | Critical 우선 + 배포 차단(키·root·metrics) 항목 포함 |
+| **B2. 안전망 (타입·테스트·설정)** | R15, R16, R18, R34, R29 | `refactor/r-batch-02-safety-net` | 구조 작업 전 타입·테스트 기반 마련 |
+| **B3. 스케줄러·워커** | R3, R13, R31 | `refactor/r-batch-03-scheduler-worker` | 리더 락(R3) → 워커 분리(R13) 순서 |
+| **B4. DB (승인 필요, 한 마이그레이션)** | R33, R10, R11, R21 | `refactor/r-batch-04-db-migration` | 인덱스·컬럼·보존을 한 마이그레이션으로 묶음 |
+| **B5. 백엔드 구조 (동작 보존)** | R7, R8, R9, R12, R20, R22, R23, R24, R30, R35 | `refactor/r-batch-05-backend-structure` | 순수 구조 개선 — 동작 불변 목표 |
+| **B6. 계약·프론트 구조** | R5, R14, R25, R26, R27, R28 | `refactor/r-batch-06-contract-frontend` | B2 완료 후 권장 (strict·테스트가 회귀를 잡음) |
+
+## 선후관계 (순서가 중요한 것)
+
+| 선행 | 후행 | 이유 |
+|---|---|---|
+| B2 (R15 strict) | R14, R27 | 반환 타입 변경·화면 수정을 컴파일러가 잡아준다 |
+| B2 (R15·R16) | R27 | strict + 테스트 없이 화면 구조 변경은 위험 |
+| R5 | R25 | 같은 화면 파일(`weather-detail.tsx`)을 건드린다 |
+| R7 | R24 | 문구 분리가 클래스 분리(R7)와 함께하는 것이 효율적 |
+| B4 (R33) | R9, R10, R11, R21 | 인덱스·컬럼·보존 정책을 한 마이그레이션으로 |
+| R3 | R13 | 리더 락 없이 스케줄러를 워커로 옮길 수 없다 |
+| R15, R16 | R28 | OpenAPI 생성 타입은 strict·테스트 기반 위에서 안전 |
 
 ## 우선순위별 요약
 
@@ -57,19 +72,6 @@ PostgreSQL 16         캐시·큐·rate limit       FastAPI inference-service
 | Medium | R34 | OTP 서비스와 JWT 키 회전 서비스에 단위 테스트가 없다 |
 | Medium | R35 | 진단 중복 방지 검사가 트랜잭션 밖에서 한 번 더 돌고, soft-delete 조건이 불일치한다 |
 
-## 권장 마이그레이션 순서
-
-```text
-0단계 — 즉시: R2, R4, R17, R29
-1단계 — 안전망: R15, R16, R18, R34
-2단계 — 확장 차단 해제: R3, R19, R31, R32
-3단계 — DB (승인 필요, 한 마이그레이션): R33, R10, R11, R21
-4단계 — 백엔드 구조: R23, R22, R24, R12, R8, R7, R9, R20, R35
-5단계 — 계약 정합: R5, R28, R14
-6단계 — 프론트 구조: R25, R26, R27
-7단계 — 인프라·성능: R13, R30, R6
-```
-
 ## 승인 시 방향 결정이 필요한 항목
 
 - **R5** UV 6~7 등급 정본 — 서버(`bad`) vs 화면(`moderate`)
@@ -83,7 +85,7 @@ PostgreSQL 16         캐시·큐·rate limit       FastAPI inference-service
 
 ## R1. 프론트엔드 JWT가 AsyncStorage에 평문 저장된다
 
-브랜치: `fix/r01-jwt-asyncstorage`
+브랜치: `refactor/r-batch-01-security-critical`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **Critical** · 분류: `POTENTIAL BEHAVIOR CHANGE`
 
@@ -109,7 +111,7 @@ dependency 변경   expo-secure-store 추가
 
 ## R2. Gemini API 키가 쿼리스트링으로 전송된다
 
-브랜치: `fix/r02-gemini-api`
+브랜치: `refactor/r-batch-01-security-critical`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **Critical** · 분류: `BEHAVIOR-PRESERVING REFACTOR`
 
@@ -135,7 +137,7 @@ text
 
 ## R3. 스케줄러가 모든 ECS task에서 중복 실행된다 (물리 삭제 포함)
 
-브랜치: `fix/r03-ecs-task`
+브랜치: `refactor/r-batch-03-scheduler-worker`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **Critical** · 분류: `POTENTIAL BEHAVIOR CHANGE`
 
@@ -163,7 +165,7 @@ text
 
 ## R4. SIGTERM에 graceful shutdown이 없다
 
-브랜치: `fix/r04-sigterm-graceful-shutdown`
+브랜치: `refactor/r-batch-01-security-critical`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **Critical** · 분류: `POTENTIAL BEHAVIOR CHANGE`
 
@@ -189,7 +191,7 @@ text
 
 ## R5. 대기질 등급 임계값이 서버·클라이언트에 이중 정의되어 있고 값이 다르다
 
-브랜치: `fix/r05-`
+브랜치: `refactor/r-batch-06-contract-frontend`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **Critical** · 분류: `POTENTIAL BEHAVIOR CHANGE`
 
@@ -215,7 +217,7 @@ API 변경   없음 (기존 응답 필드를 사용만 시작)
 
 ## R6. 추론 서버가 전역 락으로 직렬화되어 컨테이너당 동시 1건만 처리한다
 
-브랜치: `fix/r06-1`
+브랜치: `refactor/r-batch-01-security-critical`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **Critical** · 분류: `POTENTIAL BEHAVIOR CHANGE`
 
@@ -246,7 +248,7 @@ API 변경   429 응답 코드 추가 (NestJS provider의 재시도/fallback 처
 
 ## R7. RecommendationService가 8가지 책임을 한 클래스에 담고 있다
 
-브랜치: `refactor/r07-recommendationservice-8`
+브랜치: `refactor/r-batch-05-backend-structure`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **High** · 분류: `SAFE REFACTOR`
 
@@ -277,7 +279,7 @@ text
 
 ## R8. fast-path SWR 알고리즘이 두 서비스에 통째로 중복돼 있다
 
-브랜치: `refactor/r08-fast-path-swr`
+브랜치: `refactor/r-batch-05-backend-structure`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **High** · 분류: `BEHAVIOR-PRESERVING REFACTOR`
 
@@ -308,7 +310,7 @@ text
 
 ## R9. 요청마다 상품 카탈로그 전체를 메모리로 로드한다
 
-브랜치: `refactor/r09-`
+브랜치: `refactor/r-batch-05-backend-structure`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **High** · 분류: `POTENTIAL BEHAVIOR CHANGE`
 
@@ -337,7 +339,7 @@ migration 필요   예 (인덱스만, 데이터 마이그레이션 없음)
 
 ## R10. AsyncJob.payload JSON 경로 조회에 인덱스가 없다
 
-브랜치: `refactor/r10-asyncjob-payload-json`
+브랜치: `refactor/r-batch-04-db-migration`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **High** · 분류: `POTENTIAL BEHAVIOR CHANGE`
 
@@ -367,7 +369,7 @@ migration 필요   예
 
 ## R11. 고빈도 append-only 테이블에 보존 정책이 전혀 없다
 
-브랜치: `refactor/r11-append-only`
+브랜치: `refactor/r-batch-04-db-migration`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **High** · 분류: `FEATURE CHANGE`
 
@@ -402,7 +404,7 @@ migration 필요   예 (인덱스)
 
 ## R12. Jobs 모듈과 도메인 모듈이 순환 의존한다 (forwardRef 4개)
 
-브랜치: `refactor/r12-jobs-forwardref-4`
+브랜치: `refactor/r-batch-05-backend-structure`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **High** · 분류: `BEHAVIOR-PRESERVING REFACTOR`
 
@@ -432,7 +434,7 @@ text
 
 ## R13. BullMQ 워커가 API 프로세스 안에서 돈다
 
-브랜치: `refactor/r13-bullmq-api`
+브랜치: `refactor/r-batch-03-scheduler-worker`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **High** · 분류: `POTENTIAL BEHAVIOR CHANGE`
 
@@ -459,7 +461,7 @@ text
 
 ## R14. safeFetch가 인증 헤더를 안 보내고 모든 에러를 null로 삼킨다
 
-브랜치: `refactor/r14-safefetch-null`
+브랜치: `refactor/r-batch-06-contract-frontend`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **High** · 분류: `POTENTIAL BEHAVIOR CHANGE`
 
@@ -488,7 +490,7 @@ API 변경    가능 — 위 엔드포인트를 인증 필수로 바꾸는 경�
 
 ## R15. 프론트엔드가 strict 모드 없이 컴파일되고, 실제 타입 버그가 숨어 있다
 
-브랜치: `refactor/r15-strict`
+브랜치: `refactor/r-batch-02-safety-net`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **High** · 분류: `SAFE REFACTOR`
 
@@ -521,7 +523,7 @@ dependency 변경   eslint, eslint-config-expo, eslint-plugin-react-hooks 추가
 
 ## R16. 프론트엔드에 테스트가 한 개도 없다
 
-브랜치: `refactor/r16-`
+브랜치: `refactor/r-batch-02-safety-net`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **High** · 분류: `SAFE REFACTOR`
 
@@ -552,7 +554,7 @@ dependency 변경   jest-expo, @testing-library/react-native, @types/jest 추가
 
 ## R17. 운영 ECS task definition에 OCTOMO_API_KEY가 없어 readiness가 실패한다
 
-브랜치: `refactor/r17-ecs-task-definition-octomo-api-key-read`
+브랜치: `refactor/r-batch-01-security-critical`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **High** · 분류: `SAFE REFACTOR`
 
@@ -580,7 +582,7 @@ AWS 변경    Secrets Manager 시크릿 생성
 
 ## R18. 환경변수 정의가 두 파일로 갈라져 있고 실제로 어긋나 있다
 
-브랜치: `refactor/r18-`
+브랜치: `refactor/r-batch-02-safety-net`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **High** · 분류: `POTENTIAL BEHAVIOR CHANGE`
 
@@ -605,7 +607,7 @@ text
 
 ## R19. 두 Docker 이미지 모두 root로 실행된다
 
-브랜치: `refactor/r19-docker-root`
+브랜치: `refactor/r-batch-01-security-critical`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **High** · 분류: `POTENTIAL BEHAVIOR CHANGE`
 
@@ -633,7 +635,7 @@ text
 
 ## R20. 캘린더 히스토리 응답이 presigned URL을 N+1로 생성한다
 
-브랜치: `refactor/r20-presigned-url-n-1`
+브랜치: `refactor/r-batch-05-backend-structure`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **Medium** · 분류: `SAFE REFACTOR`
 
@@ -658,7 +660,7 @@ text
 
 ## R21. refresh 토큰 회전 중 실패하면 사용자가 강제 로그아웃된다
 
-브랜치: `refactor/r21-refresh`
+브랜치: `refactor/r-batch-04-db-migration`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **High** · 분류: `POTENTIAL BEHAVIOR CHANGE`
 
@@ -687,7 +689,7 @@ migration 필요   예 (familyId 도입 시)
 
 ## R22. 날씨 필드 매핑이 4곳에 중복돼 있다
 
-브랜치: `refactor/r22-4`
+브랜치: `refactor/r-batch-05-backend-structure`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **Medium** · 분류: `SAFE REFACTOR`
 
@@ -713,7 +715,7 @@ text
 
 ## R23. errorName 헬퍼가 3개 파일에 각각 정의돼 있다
 
-브랜치: `chore/r23-errorname-3`
+브랜치: `refactor/r-batch-05-backend-structure`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **Low** · 분류: `SAFE REFACTOR`
 
@@ -739,7 +741,7 @@ text
 
 ## R24. 도메인 서비스에 사용자 노출 한국어 문구가 하드코딩돼 있다
 
-브랜치: `chore/r24-`
+브랜치: `refactor/r-batch-05-backend-structure`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **Low** · 분류: `SAFE REFACTOR`
 
@@ -765,7 +767,7 @@ text
 
 ## R25. AirStatus 라벨/색상 매핑이 프론트 5곳에 중복돼 있다
 
-브랜치: `chore/r25-airstatus-5`
+브랜치: `refactor/r-batch-06-contract-frontend`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **Low** · 분류: `POTENTIAL BEHAVIOR CHANGE`
 
@@ -791,7 +793,7 @@ text
 
 ## R26. KST 날짜 헬퍼가 프론트에 중복돼 있다
 
-브랜치: `chore/r26-kst`
+브랜치: `refactor/r-batch-06-contract-frontend`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **Low** · 분류: `SAFE REFACTOR`
 
@@ -817,7 +819,7 @@ text
 
 ## R27. 화면 컴포넌트가 상태 10~15개와 잡 오케스트레이션을 직접 들고 있다
 
-브랜치: `refactor/r27-10-15`
+브랜치: `refactor/r-batch-06-contract-frontend`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **Medium** · 분류: `BEHAVIOR-PRESERVING REFACTOR`
 
@@ -847,7 +849,7 @@ text
 
 ## R28. 프론트 타입 325줄이 백엔드 DTO를 수기로 미러링한다
 
-브랜치: `refactor/r28-325-dto`
+브랜치: `refactor/r-batch-06-contract-frontend`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **Medium** · 분류: `SAFE REFACTOR`
 
@@ -875,7 +877,7 @@ dependency 변경   openapi-typescript 추가 (devDependency)
 
 ## R29. 죽은 코드와 커밋된 에러 로그 파일
 
-브랜치: `chore/r29-`
+브랜치: `refactor/r-batch-02-safety-net`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **Low** · 분류: `SAFE REFACTOR`
 
@@ -903,7 +905,7 @@ API 변경    가능 — 미사용 엔드포인트 제거 시
 
 ## R30. Gemini 호출에 재시도·서킷브레이커가 없다
 
-브랜치: `refactor/r30-gemini`
+브랜치: `refactor/r-batch-05-backend-structure`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **Medium** · 분류: `POTENTIAL BEHAVIOR CHANGE`
 
@@ -928,7 +930,7 @@ text
 
 ## R31. 배포 워크플로가 CI 성공에 게이팅되지 않고, 죽은 변수가 있다
 
-브랜치: `refactor/r31-ci`
+브랜치: `refactor/r-batch-03-scheduler-worker`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **Medium** · 분류: `POTENTIAL BEHAVIOR CHANGE`
 
@@ -954,7 +956,7 @@ text
 
 ## R32. 추론 서버의 /metrics가 무인증으로 노출된다
 
-브랜치: `refactor/r32-metrics`
+브랜치: `refactor/r-batch-01-security-critical`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **Medium** · 분류: `POTENTIAL BEHAVIOR CHANGE`
 
@@ -979,7 +981,7 @@ text
 
 ## R33. 조회 패턴에 대응하는 인덱스가 빠져 있다
 
-브랜치: `refactor/r33-`
+브랜치: `refactor/r-batch-04-db-migration`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **Medium** · 분류: `SAFE REFACTOR`
 
@@ -1009,7 +1011,7 @@ migration 필요   예
 
 ## R34. OTP 서비스와 JWT 키 회전 서비스에 단위 테스트가 없다
 
-브랜치: `refactor/r34-otp-jwt`
+브랜치: `refactor/r-batch-02-safety-net`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **Medium** · 분류: `SAFE REFACTOR`
 
@@ -1035,7 +1037,7 @@ text
 
 ## R35. 진단 중복 방지 검사가 트랜잭션 밖에서 한 번 더 돌고, soft-delete 조건이 불일치한다
 
-브랜치: `refactor/r35-soft-delete`
+브랜치: `refactor/r-batch-05-backend-structure`  (묶음 단위 — 상단 [작업 묶음](#작업-묶음-batch) 참조)
 
 우선순위: **Medium** · 분류: `POTENTIAL BEHAVIOR CHANGE`
 
