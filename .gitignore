@@ -78,3 +78,6 @@ backend/.env.local
 backend/prisma/*.db
 backend/prisma/*.db-journal
 backend/.pgdata/
+
+# R15/R29: 로컬 도구 출력 리포트는 커밋하지 않는다 (로컬 경로·에러 로그 노출).
+*-report.txt

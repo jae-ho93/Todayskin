@@ -21,7 +21,8 @@ export default function HomeDashboard() {
   const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [skinScore, setSkinScore] = useState<SkinScoreSnapshot | null>(null);
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  // null = A·B등급 모두 실패 → "불러올 수 없어요". 빈 배열 = 조회 성공, 추천 없음.
+  const [recommendations, setRecommendations] = useState<Recommendation[] | null>([]);
   const [loadingRecommendations, setLoadingRecommendations] = useState(true);
   const [recommendationsRefreshing, setRecommendationsRefreshing] = useState(false);
   // SSE/polling job 대기 취소용 — 재호출·언마운트 시 이전 대기를 중단한다.

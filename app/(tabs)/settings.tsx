@@ -73,7 +73,6 @@ export default function SettingsScreen() {
   const prefsSavingRef = useRef(false);
 
   // ── 동의/처리방침 모달 ──
-  const [policyModalOpen, setPolicyModalOpen] = useState(false);
   const [consentModalOpen, setConsentModalOpen] = useState(false);
   const [registry, setRegistry] = useState<ConsentPurposeInfo[] | null>(null);
   const [myConsents, setMyConsents] = useState<ConsentRecord[] | null>(null);
@@ -134,13 +133,6 @@ export default function SettingsScreen() {
       setPrefsError('알림 설정 저장에 실패했어요');
     } finally {
       prefsSavingRef.current = false;
-    }
-  };
-
-  const openPolicyModal = async () => {
-    setPolicyModalOpen(true);
-    if (!registry) {
-      setRegistry(await api.getConsentRegistry());
     }
   };
 
@@ -222,8 +214,6 @@ export default function SettingsScreen() {
       },
     ]);
   };
-
-  const policy = registry?.find((r) => r.purpose === 'diagnosis_image_processing');
 
   return (
     <ScreenContainer>
@@ -356,40 +346,7 @@ export default function SettingsScreen() {
         />
       </Card>
 
-      {/* 안면 이미지 처리방침 확인 */}
-      <Modal
-        visible={policyModalOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setPolicyModalOpen(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>안면 이미지 처리방침</Text>
-              <Pressable onPress={() => setPolicyModalOpen(false)} hitSlop={12}>
-                <Ionicons name="close" size={24} color={colors.textSecondary} />
-              </Pressable>
-            </View>
-            {policy ? (
-              <ScrollView showsVerticalScrollIndicator={false}>
-                <Text style={styles.modalPolicyTitle}>{policy.title}</Text>
-                <Text style={styles.modalPolicyBody}>{policy.description}</Text>
-                <Text style={styles.modalPolicyMeta}>
-                  철회 정책: {policy.withdrawalPolicy === 'keep_results' ? '이미 보관된 결과는 유지' : '보관 이미지 삭제'}
-                  {'\n'}현재 버전: {policy.currentVersion}
-                </Text>
-              </ScrollView>
-            ) : (
-              <View style={styles.modalEmpty}>
-                <Text style={styles.modalEmptyText}>처리방침을 불러올 수 없어요</Text>
-              </View>
-            )}
-          </View>
-        </View>
-      </Modal>
-
-      {/* 데이터 처리 동의 철회 */}
+      {/* 데이터 처리 동의 철회 — 각 목적의 처리방침 본문도 이 모달에서 보여준다 */}
       <Modal
         visible={consentModalOpen}
         transparent
@@ -549,10 +506,6 @@ const styles = StyleSheet.create({
   modalEmptyText: { ...typography.bodySm, color: colors.textTertiary },
 
   // 처리방침
-  modalPolicyTitle: { ...typography.subtitle, color: colors.textPrimary, marginBottom: spacing.sm },
-  modalPolicyBody: { ...typography.body, color: colors.textSecondary, lineHeight: 22 },
-  modalPolicyMeta: { ...typography.caption, color: colors.textTertiary, marginTop: spacing.lg },
-
   // 동의 철회 목록
   consentItem: {
     flexDirection: 'row',

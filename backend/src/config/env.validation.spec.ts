@@ -79,6 +79,39 @@ describe('envValidationSchema', () => {
     expect(value.GEMINI_MODEL).toBe('gemini-flash-latest');
   });
 
+  // R18: registry에만 있고 Joi 규칙이 없던 키들에 규칙이 생기면서 실제 운영 값이
+  // 새 규칙에 걸려 부팅이 실패하는 것이 이 변경의 유일한 실질 위험이다.
+  // 운영 task definition과 같은 모양의 env가 통과하는지 고정한다.
+  it('운영 task definition 형태의 env가 통과한다', () => {
+    const { error } = envValidationSchema.validate(
+      {
+        NODE_ENV: 'production',
+        PORT: '3000',
+        DATABASE_URL: 'postgresql://user:pass@db.internal:5432/todayskin',
+        SHADOW_DATABASE_URL: 'postgresql://user:pass@db.internal:5432/todayskin_shadow',
+        REDIS_URL: 'redis://cache.internal:6379',
+        JWT_ACCESS_SECRET: 'prod_access_secret_at_least_32_characters',
+        JWT_REFRESH_SECRET: 'prod_refresh_secret_at_least_32_characters',
+        S3_BUCKET: 'todayskin-prod-images',
+        AWS_REGION: 'ap-northeast-2',
+        INFERENCE_SERVICE_URL: 'http://inference.todayskin.local:8000',
+        INFERENCE_SHARED_SECRET: 'shared-secret',
+        OCTOMO_API_KEY: 'octomo-key',
+        OCTOMO_ENDPOINT: 'https://api.octoverse.kr/octomo/v1/public/message/exists',
+        OCTOMO_RECIPIENT_NUMBER: '1666-3538',
+        GOOGLE_CLIENT_ID: '1234.apps.googleusercontent.com',
+        APPLE_BUNDLE_ID: 'kr.todayskin.app',
+        PUSH_DELIVERY_AVAILABLE: 'false',
+        RUN_MIGRATIONS_ON_START: 'false',
+        WEATHER_COLLECTOR_ENABLED: 'true',
+        SENTRY_DSN: 'https://key@o0.ingest.sentry.io/1',
+        LOG_LEVEL: 'info',
+      },
+      { abortEarly: false, allowUnknown: true },
+    );
+    expect(error).toBeUndefined();
+  });
+
   it('T12: WEATHER_CACHE_TTL_SECONDS 기본값은 300', () => {
     const { value } = envValidationSchema.validate(validBase, {
       abortEarly: false,

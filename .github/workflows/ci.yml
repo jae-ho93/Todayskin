@@ -19,7 +19,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx tsc --noEmit
+      # R15: strict 모드 typecheck + ESLint(경고도 실패), R16: jest 단위/계약 테스트
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
 
   # inference-service 계약 테스트 (N13/R6/R32). analyzer/part_mapping을 stub하므로
   # torch·mediapipe 설치 없이 수 초 안에 끝난다.

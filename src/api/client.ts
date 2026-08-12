@@ -5,7 +5,6 @@ import type {
   ConsentPurposeInfo,
   ConsentRecord,
   EvidenceGrade,
-  HistoryEntry,
   Job,
   NotificationPreferences,
   OtpPurpose,
@@ -35,8 +34,10 @@ const API_BASE_URL: string =
   (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined) ??
   'http://localhost:3000';
 
-// RN의 Hermes 엔진 버전에 따라 AbortSignal.timeout()이 없을 수 있어(SDK 버전별로 갈림) 직접 구현
+// RN의 Hermes 엔진 버전에 따라 AbortSignal.timeout()이 없을 수 있어(SDK 버전별로 갈림)
+// 없을 때만 직접 구현한다. 네이티브 구현은 타이머가 이벤트 루프를 붙잡지 않는다.
 function timeoutSignal(ms: number): AbortSignal {
+  if (typeof AbortSignal.timeout === 'function') return AbortSignal.timeout(ms);
   const controller = new AbortController();
   setTimeout(() => controller.abort(), ms);
   return controller.signal;
@@ -68,39 +69,43 @@ let refreshInFlight: Promise<boolean> | null = null;
 
 async function refreshSession(): Promise<boolean> {
   if (refreshInFlight) return refreshInFlight;
-  refreshInFlight = (async () => {
-    const refreshToken = await getRefreshToken();
-    if (!refreshToken) {
-      await clearSession();
-      return false;
-    }
-    try {
-      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
-        signal: timeoutSignal(8000),
-      });
-      if (!res.ok) {
-        // refresh 토큰도 무효·만료 → 세션 정리 후 재로그인 유도.
-        await clearSession();
-        return false;
-      }
-      const data = (await res.json()) as {
-        accessToken: string;
-        refreshToken?: string;
-        expiresIn?: number;
-      };
-      await updateTokens(data.accessToken, data.refreshToken, data.expiresIn);
-      return true;
-    } catch {
-      await clearSession();
-      return false;
-    } finally {
-      refreshInFlight = null;
-    }
-  })();
+  // 성공·실패와 무관하게 in-flight 표식을 반드시 해제한다. 해제가 누락되면
+  // 한 번 실패한 결과가 프로세스 수명 동안 캐시돼 이후 401이 영영 재발급되지 않는다.
+  refreshInFlight = rotateRefreshToken().finally(() => {
+    refreshInFlight = null;
+  });
   return refreshInFlight;
+}
+
+async function rotateRefreshToken(): Promise<boolean> {
+  const refreshToken = await getRefreshToken();
+  if (!refreshToken) {
+    await clearSession();
+    return false;
+  }
+  try {
+    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+      signal: timeoutSignal(8000),
+    });
+    if (!res.ok) {
+      // refresh 토큰도 무효·만료 → 세션 정리 후 재로그인 유도.
+      await clearSession();
+      return false;
+    }
+    const data = (await res.json()) as {
+      accessToken: string;
+      refreshToken?: string;
+      expiresIn?: number;
+    };
+    await updateTokens(data.accessToken, data.refreshToken, data.expiresIn);
+    return true;
+  } catch {
+    await clearSession();
+    return false;
+  }
 }
 
 // N18: 인증 요청 공통. 401이면 refresh 회전을 1회 시도하고 재시도한다.
@@ -248,12 +253,6 @@ export const api = {
     ),
   // 아직 한 번도 촬영하지 않은 경우(status: 'not_found')와 조회 실패(status: 'error')를 구분해서 반환
   getSkinScore: () => authFetch<SkinScoreSnapshot>('/diagnosis/latest'),
-  getHistory: async (): Promise<HistoryEntry[] | null> => {
-    const result = await authFetch<HistoryEntry[]>('/diagnosis/history');
-    if (result.status === 'ok') return result.data;
-    if (result.status === 'not_found') return [];
-    return null;
-  },
   // N8: 특정 날짜(Asia/Seoul)의 통합 히스토리 — 날씨·분석·추천 + 동의 시 이미지/랜드마크.
   getHistoryByDate: async (date: string): Promise<CalendarDayHistory | null> => {
     const result = await authFetch<CalendarDayHistory>(`/diagnosis/history/${date}`);
@@ -306,10 +305,6 @@ export const api = {
     authFetch<Recommendation>(`/recommendations/${id}`).then((result) =>
       result.status === 'ok' ? result.data : null,
     ),
-  // 기존 추천 생성 (동기 — F1에서 제거 예정)
-  generateRecommendations: (diagnosisId: string) =>
-    safePostJson<Recommendation[]>('/recommendations/generate', { diagnosisId }),
-
   // ──────────────── F0 추가: 빠른 경로 (fast-path) ────────────────
 
   // F0/F1: 추천 빠른 경로 — CACHED|FALLBACK 즉시 + jobId로 LIVE 교체 가능
@@ -324,7 +319,7 @@ export const api = {
     ),
 
   // F0/F6: 날씨 기반 제품 빠른 경로 — CACHED|FALLBACK 즉시 + jobId로 LIVE 교체 가능
-  // 기존 generateWeatherProducts()와 응답 형태가 다름 (items 배열)
+  // (응답은 items 배열 래핑 — WeatherProductsFastResponse)
   getWeatherProductsFast: (coords?: { latitude: number; longitude: number }) =>
     safePostJson<WeatherProductsFastResponse>(
       '/products/weather-based',
@@ -421,12 +416,6 @@ export const api = {
 
   getProducts: (category?: Product['category']) =>
     safeFetch<Product[]>(category ? `/products?category=${category}` : '/products'),
-  // 기존 날씨 기반 추천 (동기 — F1/F6에서 fast path로 대체)
-  generateWeatherProducts: (coords?: { latitude: number; longitude: number }) =>
-    safePostJson<Product[]>('/products/weather-based', {
-      lat: coords?.latitude,
-      lon: coords?.longitude,
-    }),
 
   // ──────────────── 인증 (OTP, 가입, 로그인) ────────────────
 

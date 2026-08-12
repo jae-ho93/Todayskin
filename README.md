@@ -150,6 +150,9 @@ cd Todayskin
 # 프론트 (루트)
 cp .env.example .env && npm install && npm start
 
+# 프론트 검사 (CI와 동일)
+npm run typecheck && npm run lint && npm test
+
 # 백엔드 (별도 터미널)
 cd backend && cp .env.example .env && npm install
 docker compose up -d
