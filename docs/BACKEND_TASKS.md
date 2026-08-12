@@ -1,9 +1,9 @@
 # Todayskin Backend Tasks
 
-이 문서는 Todayskin 백엔드 **활성 작업 보드**다. 완료된 Task 이력·계약 기록은
-[`docs/BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md), 리팩토링 제안은
-[`docs/REFACTORING_BACKLOG.md`](REFACTORING_BACKLOG.md)에 있다.
-협업 규칙은 [`CONTRIBUTING.md`](../CONTRIBUTING.md), 아키텍처 원칙은 [`docs/ARCHITECTURE.md`](ARCHITECTURE.md)가 기준이다.
+이 문서는 Todayskin 백엔드·배포의 **활성 작업 보드**다. 지금 할 일은 전부 여기 있다.
+완료 이력·계약 기록은 [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md), 리팩토링 R1~R35의 실행 기록과
+판단 근거는 [`REFACTORING_BACKLOG.md`](REFACTORING_BACKLOG.md)에 있다.
+협업 규칙은 [`CONTRIBUTING.md`](../CONTRIBUTING.md), 아키텍처 원칙은 [`ARCHITECTURE.md`](ARCHITECTURE.md)가 기준이다.
 
 ## 목표
 
@@ -23,9 +23,18 @@ RDS·S3·CloudWatch 연동, Pino·Sentry·Helmet·JWT·Swagger·Jest를 적용�
 
 ## 현재 Open
 
+착수 순서: **N16 → N35 → N36 → N37.** N35~N37은 배포 파이프라인이 살아 있어야 검증할 수 있으므로
+N16이 선행이다. 각 Task는 브랜치 하나 = PR 하나이며, 코드 변경이 없는 인프라 설정 작업은
+설정 근거와 확인 결과를 PR 본문 또는 이 문서에 남긴다.
+
 ### N16. AWS 운영 리소스 프로비저닝·첫 배포 (미완료)
 
 브랜치: `chore/aws-production-bootstrap`
+
+**막힌 지점 (2026-08-12 확인).** `Deploy ECS Fargate` 워크플로가 `Build and push ECR images` 잡의
+`Configure AWS credentials` 단계에서 실패한다(`Credentials could not be loaded`).
+`Gate on CI result`는 정상 통과하므로 워크플로 자체는 문제가 없고, 아래 **GitHub OIDC role 미구성**이 원인이다.
+백엔드 경로가 바뀌지 않은 커밋에서는 guard job이 배포를 건너뛰므로 실패로 드러나지 않는다.
 
 > 네트워킹 확정(2026-08-12): **backend는 public subnet + ALB 유지 + NAT 미사용**
 > (아웃바운드는 IGW 경유). **`assignPublicIp=ENABLED`**로 ECS 프로비저닝 + migrate task 실행
@@ -47,6 +56,64 @@ RDS·S3·CloudWatch 연동, Pino·Sentry·Helmet·JWT·Swagger·Jest를 적용�
 - [x] `MockOtpProvider.recipientNumber` → `'1666-3538'` (개발 화면 정상화)
 - [x] provider 선택을 `OCTOMO_API_KEY` 유무 기준으로 변경 (로컬 실제 검증 가능)
 - [ ] **운영 필수**: OCTOMO 가입(무료) → `OCTOMO_API_KEY`·`OCTOMO_RECIPIENT_NUMBER` 등록
+- [ ] `OCTOMO_API_KEY`는 Secrets Manager `todayskin/prod/OCTOMO_API_KEY`에 넣고 task definition `secrets`로 주입한다. 나머지 둘은 비밀이 아니므로 `environment`에 둔다 (R1·R17 후속). 키 집합 누락은 `task-definition-env.spec.ts`가 검증한다
+
+### N35. ALB deregistration delay를 graceful shutdown보다 짧게 (R4 후속)
+
+선행: N16 · 코드 변경 없음 (인프라 설정)
+
+R4에서 SIGTERM 처리를 넣어 종료 시 진행 중인 요청을 기다린다(`stopTimeout` 120초). 그런데 ALB가
+타깃을 먼저 빼지 않으면 배포 중 새 요청이 죽는 컨테이너로 계속 들어간다. 드레인이 먼저 끝나야 한다.
+
+- [ ] 타깃 그룹 `deregistration_delay.timeout_seconds`를 `stopTimeout`(120s)보다 **작게** 설정한다
+- [ ] 배포를 한 번 돌려 롤링 교체 중 5xx가 발생하지 않는지 ALB 메트릭으로 확인한다
+
+완료 기준: 롤링 배포 1회에서 `HTTPCode_ELB_5XX_Count` 증가가 없다.
+
+### N36. 워커 ECS 서비스 분리 배포 (R13 후속)
+
+선행: N16 · 코드 변경 없음 (인프라 설정 + 변수)
+
+R13에서 BullMQ 워커를 API 프로세스에서 떼어냈다. 프로세스 역할은 `JOB_ROLE`로 정한다.
+**순서를 뒤집으면 잡을 아무도 처리하지 않는 구간이 생긴다.**
+
+- [ ] ① 워커 ECS 서비스를 만들고 GitHub Variable `ECS_SERVICE_WORKER`를 설정한다
+- [ ] ② 큐가 실제로 소비되는지 확인한다 (추천 생성 잡 1건 → COMPLETED)
+- [ ] ③ 그 다음에 backend task definition에 `JOB_ROLE=api`를 추가한다
+
+완료 기준: API task가 `JOB_ROLE=api`로 돌면서도 잡이 워커에서 정상 처리된다.
+
+### N37. 데이터 보존 스윕 활성화 (R11 후속)
+
+선행: N16, 마이그레이션 배포 완료 · 코드 변경 없음 (환경변수 + 운영 절차)
+
+R11에서 append-only 테이블에 보존 정책을 넣었다. 기본값이 `off`라 배포만으로는 아무것도 지워지지 않는다.
+**되돌릴 수 없는 작업이므로 순서를 지킨다.**
+
+- [ ] ① `RETENTION_SWEEP_MODE=dry-run`으로 켜서 삭제 대상 규모를 로그로 확인한다
+- [ ] ② 규모가 예상과 맞으면 RDS 스냅샷을 확보한다
+- [ ] ③ `delete`로 전환하고 첫 스윕 후 실제 삭제 건수를 대조한다
+
+완료 기준: dry-run 예측 건수와 실제 삭제 건수가 일치하고, 스냅샷이 확보돼 있다.
+
+## 보류 (조건 충족 후 착수)
+
+근거가 있어 남긴 항목이다. 조건이 충족되면 위 Open으로 올린다.
+
+### N38. 추론 서버 동시 처리 슬롯 상향 (R6 2단계)
+
+조건: **부하 테스트 실측 결과.** 아키텍처상 FastAPI 추론 서버(`backend/inference-service`) 담당이다.
+
+R6 1단계로 전역 락을 풀고 슬롯 수를 `INFERENCE_CONCURRENCY`(기본 1, 최대 4)로 환경변수화했다.
+2단계는 ECS 태스크 vCPU를 2로 올리고 `uvicorn --workers 2`로 프로세스를 나누는 것인데,
+모델이 프로세스별로 메모리를 차지하므로 메모리 상한 확인이 선행되어야 한다.
+부하 테스트 결과에 따라 **값만 올리는 것으로 끝날 수도 있다.**
+
+### R9 일부 — 상품 조회를 카테고리·등급으로 좁히기
+
+조건: **추천 규칙이 카탈로그 전체를 보지 않도록 바뀔 때.** 현재 규칙 선택은 전체 카탈로그를 전제한다.
+조회 비용은 TTL 10분 캐시로 이미 잡혀 있어 지금 좁힐 이득이 없다. 근거는
+[`REFACTORING_BACKLOG.md`](REFACTORING_BACKLOG.md) R9 상세에 있다.
 
 ## 완료 (Done)
 
@@ -58,14 +125,17 @@ RDS·S3·CloudWatch 연동, Pino·Sentry·Helmet·JWT·Swagger·Jest를 적용�
 | OTP MO 전환 — OCTOMO | ✅ | [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md) |
 | 개발 스토리지 `memory://` → http 정규화 | ✅ | [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md) |
 | 프론트 범위 완료 기록 (N15/N18/N19) | ✅ | [`FRONTEND_TASKS.md`](FRONTEND_TASKS.md) |
+| 리팩토링 R1~R35 (묶음 B1~B6) | ✅ | [`REFACTORING_BACKLOG.md`](REFACTORING_BACKLOG.md) |
 
-> `main` 기준 **API freeze** (N24~N34 완료, main `42897d5` / PR #59~#66).
-> 다음 구현은 FE (`docs/FRONTEND_TASKS.md`). EAS·구독 결제는 보류.
+> `main` 기준 **API freeze** (N24~N34 완료, main `42897d5` / PR #59~#66). EAS·구독 결제는 보류.
 
-## 리팩토링 백로그
+## 리팩토링 (완료)
 
-[`docs/REFACTORING_BACKLOG.md`](REFACTORING_BACKLOG.md) — R1~R35를 **작업 묶음 B1~B6**(즉시 보안 / 안전망 / 스케줄러·워커 / DB / 백엔드 구조 / 계약·프론트) 단위로 진행.
-**승인 전 구현 금지.** DB·API 계약 변경 항목은 별도 승인 후 착수.
+R1~R35를 묶음 B1~B6으로 나눠 전부 반영했다(2026-08-12, PR [#130](https://github.com/jae-ho93/Todayskin/pull/130)~[#137](https://github.com/jae-ho93/Todayskin/pull/137)).
+문제 진단·해법·하지 않기로 한 것의 근거는 [`REFACTORING_BACKLOG.md`](REFACTORING_BACKLOG.md)에 남겼다.
+같은 판단을 다시 하게 되면 그 문서를 먼저 읽는다.
+
+백엔드에 남긴 후속은 위 N35·N36·N37(Open)과 N38·R9 일부(보류)다. 그 밖에 코드 변경은 없다.
 
 ## 완료 정의
 

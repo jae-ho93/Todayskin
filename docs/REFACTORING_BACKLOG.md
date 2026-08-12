@@ -1,26 +1,39 @@
 # Todayskin Refactoring Backlog
 
-> Paseo 세션 **Todayskin Refactoring Proposal Mode** (`rapid-goose`, 브랜치 `analyze/todayskin-refactoring-proposal`, 2026-08-12)에서 도출한 전체 코드베이스 리팩토링 제안.
-> **승인 전 구현 금지** — 각 항목은 검토 후 `OK` / `REJECT` / `MODIFY`로 결정하고, 승인된 항목만 브랜치를 만들어 진행한다.
-> DB·API 계약 변경 항목은 별도 승인 없이 착수하지 않는다.
+> **상태: R1~R35 전부 완료 (2026-08-12).** 이 문서는 이제 **실행 기록**이다 — 각 항목의 문제 진단,
+> 선택한 해법, 하지 않기로 한 것과 그 근거가 남아 있다. 같은 판단을 다시 할 때 여기부터 읽는다.
 >
-> **요약:** Critical 6건 · High 15건 · Medium 11건 · Low 3건 (총 35건)
+> **신규·잔여 작업은 여기서 관리하지 않는다.** 실행할 일은 담당 보드로 간다 —
+> 백엔드·배포는 [`BACKEND_TASKS.md`](BACKEND_TASKS.md), 프론트는 [`FRONTEND_TASKS.md`](FRONTEND_TASKS.md).
+>
+> 출처: Paseo 세션 **Todayskin Refactoring Proposal Mode** (`rapid-goose`, 브랜치 `analyze/todayskin-refactoring-proposal`, 2026-08-12).
+> 규모: Critical 6건 · High 15건 · Medium 11건 · Low 3건 (총 35건).
 
 ## 진행 상황
 
-| 묶음 | 상태 | PR | 남은 일 |
-|---|---|---|---|
-| B1 | ✅ 완료 (2026-08-12) | [#130](https://github.com/jae-ho93/Todayskin/pull/130) | AWS 작업 2건(코드 밖): Secrets Manager `todayskin/prod/OCTOMO_API_KEY` 등록, ALB deregistration delay < `stopTimeout`(120s) 설정. R6 2단계(vCPU 증설 + 슬롯 상향)는 부하 테스트 후 판단 — 값은 `INFERENCE_CONCURRENCY`로 이미 환경변수화됨 |
-| B2 | ✅ 완료 (2026-08-12) | `refactor/r-batch-02-safety-net` | 없음. R16의 `useAsyncJob` 테스트는 훅 추출(R27, B6) 후에 추가한다 |
-| B3 | ✅ 완료 (2026-08-12) | `refactor/r-batch-03-scheduler-worker` | AWS/GitHub 작업(코드 밖): ① 워커 ECS 서비스 생성 + Variable `ECS_SERVICE_WORKER` 설정 → 큐 소비 확인 후 ② backend task definition에 `JOB_ROLE=api` 추가. 순서를 뒤집으면 잡이 처리되지 않는다 |
-| B4 | ✅ 완료 (2026-08-12) | `refactor/r-batch-04-db-migration` | 운영 작업(코드 밖): ① 마이그레이션 배포 후 R11 스윕을 `RETENTION_SWEEP_MODE=dry-run`으로 켜서 삭제 대상 규모 확인 → ② RDS 스냅샷 확보 → ③ `delete`로 전환. 기본값 `off`이므로 배포만으로는 아무 데이터도 지워지지 않는다 |
-| B5 | ✅ 완료 (2026-08-12) | `refactor/r-batch-05-backend-structure` | 운영 작업(코드 밖): R9 캐시 TTL 10분이므로 상품 시드 직후 즉시 반영이 필요하면 `POST /admin/products/cache/invalidate`를 호출한다. R30 타임아웃 조정이 필요하면 `GEMINI_TIMEOUT_MS`로 조절 |
-| B6 | ✅ 완료 (2026-08-12) | `refactor/r-batch-06-contract-frontend` | 남은 일(코드 밖 없음). 보류 항목 2건: R27 3번(StyleSheet 분리), R28의 수기 타입 → 생성 타입 전면 재export. 백엔드 DTO를 바꾸면 `npm run openapi:export --prefix backend && npm run openapi:types`를 돌려 커밋해야 CI가 통과한다 |
-| B6 사후 검증 | ✅ 완료 (2026-08-12) | `fix/b6-followup-behavior-parity` | 독립 검증에서 나온 동작 편차 6건 정리 — 아래 "B6 사후 검증" 참고 |
+모든 묶음이 `main`에 머지됐다. 코드 밖에서 해야 하는 후속 작업은 **보드의 Task로 옮겼고**
+아래 표는 어느 묶음이 어느 Task를 남겼는지만 가리킨다.
+
+| 묶음 | PR | 남긴 후속 Task |
+|---|---|---|
+| B1 즉시 보안·운영 | [#130](https://github.com/jae-ho93/Todayskin/pull/130) | N35(ALB 드레인) · N38(추론 슬롯, 보류) · OCTOMO 키는 기존 `BE-2026-08-12` |
+| B2 안전망 | `refactor/r-batch-02-safety-net` | 없음 |
+| B3 스케줄러·워커 | `refactor/r-batch-03-scheduler-worker` | N36(워커 서비스 분리 배포) |
+| B4 DB 마이그레이션 | `refactor/r-batch-04-db-migration` | N37(보존 스윕 활성화) |
+| B5 백엔드 구조 | `refactor/r-batch-05-backend-structure` | 없음 (R9 일부는 보류 — [BACKEND_TASKS](BACKEND_TASKS.md) 보류 절) |
+| B6 계약·프론트 구조 | [#135](https://github.com/jae-ho93/Todayskin/pull/135) | F63(프론트 잔여 3건, 보류) |
+| B6 사후 검증 | [#136](https://github.com/jae-ho93/Todayskin/pull/136) | 없음 — 아래 [B6 사후 검증](#b6-사후-검증-2026-08-12) 참고 |
+
+묶음별 포함 R과 편성 기준은 아래 [작업 묶음](#작업-묶음-batch)에 있다.
+
+운영 중 알아둘 것: R9 상품 캐시 TTL은 10분이라 시드 직후 즉시 반영이 필요하면
+`POST /admin/products/cache/invalidate`를 호출한다. R30 Gemini 타임아웃은 `GEMINI_TIMEOUT_MS`로 조절한다.
+백엔드 DTO를 바꾸면 `npm run openapi:export --prefix backend && npm run openapi:types`를 돌려
+커밋해야 R28의 드리프트 검사(CI)가 통과한다.
 
 ## 작업 묶음 (Batch)
 
-> **R 단위로 PR을 쪼개지 않는다.** 아래 묶음 단위로 검토·승인하고, 묶음 하나 = 브랜치 하나 = PR 하나로 진행한다.
+> R 단위로 PR을 쪼개지 않고 묶음 하나 = 브랜치 하나 = PR 하나로 진행했다.
 > 각 R 상세의 `브랜치:`는 소속 묶음 브랜치를 가리킨다.
 
 | 묶음 | 포함 R | 브랜치 | 진행 기준 |
@@ -56,22 +69,18 @@ B6 머지 후 원본 화면과 1:1 대조 + 독립 검증(게이트 8종 재실�
 만료 토큰으로 401 → refresh 실패 → `clearSession()` 경로가 열려 공개 조회 한 번이 조용한 로그아웃이 된다.
 그때는 `authFetch`에 refresh를 타지 않는 옵션을 둔다.
 
-## 남은 항목 (2026-08-12 기준)
+## 하지 않기로 한 것
 
-R1~R35 전부 `main`에 반영됐다. 아래는 **하지 않기로 판단한** 것들이며 미완성 상태로 방치된 작업이 아니다.
-각 항목의 판단 근거는 해당 R 상세에 적혀 있다.
+R1~R35는 전부 반영됐고, 아래 5건은 **판단해서 남긴 것**이다. 미완성 방치가 아니다.
+근거는 각 R 상세에 있고, 실행 여부는 보드에서 관리한다.
 
-| 항목 | 판단 |
-|---|---|
-| R6 2단계 — 추론 서버 vCPU·워커 증설 | 실측 선행. 슬롯 수는 `INFERENCE_CONCURRENCY`로 이미 환경변수화했으므로 부하 테스트 후 값만 올린다 |
-| R9 일부 — 상품 조회를 카테고리·등급으로 좁히기 | 현재 규칙 선택이 카탈로그 전체를 봐야 성립한다. 비용은 TTL 캐시로 이미 잡았다 |
-| R27 3번 — `StyleSheet`를 `*.styles.ts`로 분리 | 중복 제거가 아닌 파일 분할이라 diff를 키우는 만큼의 이득이 없다 |
-| R28 후반 — 수기 타입 → 생성 타입 전면 재export | 화면 전체를 건드린다. 드리프트는 CI가 막고 있으므로 급하지 않다 |
-| `login.tsx` · `social-phone.tsx`에 `usePhoneVerification` 적용 | B6 범위(설정·가입) 밖. 같은 훅을 그대로 쓸 수 있다 |
-
-코드 밖 작업(AWS·운영)은 위 [진행 상황](#진행-상황) 표의 "남은 일" 열에 묶음별로 적혀 있다.
-특히 B3(워커 서비스 생성 → `JOB_ROLE=api` 추가)과 B4(dry-run 확인 → 스냅샷 → `delete` 전환)는
-**순서를 뒤집으면 안 된다.**
+| 항목 | 판단 | 등록 |
+|---|---|---|
+| R6 2단계 — 추론 서버 vCPU·워커 증설 | 실측 선행. 슬롯 수는 `INFERENCE_CONCURRENCY`로 환경변수화했으므로 부하 테스트 후 값만 올린다 | N38 (보류) |
+| R9 일부 — 상품 조회를 카테고리·등급으로 좁히기 | 현재 규칙 선택이 카탈로그 전체를 봐야 성립한다. 비용은 TTL 캐시로 잡았다 | BACKEND_TASKS 보류 |
+| R27 3번 — `StyleSheet`를 `*.styles.ts`로 분리 | 중복 제거가 아닌 파일 분할이라 diff를 키우는 만큼의 이득이 없다 | F63 (보류) |
+| R28 후반 — 수기 타입 → 생성 타입 전면 재export | 화면 전체를 건드린다. 드리프트는 CI가 막고 있으므로 급하지 않다 | F63 (보류) |
+| `login.tsx` · `social-phone.tsx`에 `usePhoneVerification` 적용 | B6 범위(설정·가입) 밖. 같은 훅을 그대로 쓸 수 있다 | F63 (보류) |
 
 ## 선후관계 (순서가 중요한 것)
 
@@ -285,7 +294,7 @@ API 변경   없음 (기존 응답 필드를 사용만 시작)
 작업:
 
 - [x] **1단계(저위험):** 락을 제거하지 말고 `asyncio.Semaphore(N)` + 명시적 대기 타임아웃으로 바꾼다. PyTorch CPU 추론은 스레드 안전하므로(`torch.set_num_threads(1)`로 스레드당 BLAS 스레드를 고정하면) N을 vCPU 수에 맞춰 2~4로 올릴 수 있다. 세마포어 대기 시간을 `/metrics`에 히스토그램으로 추가하고, 대기 타임아웃 초과 시 429를 반환해 NestJS가 즉시 fallback하도록 한다. 락이 정말로 필요한 이유(모델 내부 가변 상태 등)가 있다면 그 부분만 좁은 범위로 감싼다.
-- [ ] **2단계(보류 — 실측 필요):** ECS 태스크 vCPU를 2로 올리고 `uvicorn --workers 2`로 프로세스를 나눈다. 모델이 프로세스별로 메모리를 차지하므로 메모리 상한 확인이 선행되어야 한다. → 1단계에서 `INFERENCE_CONCURRENCY`(기본 1, 최대 4)로 슬롯 수를 환경변수화했으므로, 부하 테스트 후 값만 올리면 된다. cpu/memory 증설은 그 결과에 따라 결정한다.
+- **보류 → `BACKEND_TASKS.md` N38 (조건: 부하 테스트 실측).** ECS 태스크 vCPU를 2로 올리고 `uvicorn --workers 2`로 프로세스를 나눈다. 모델이 프로세스별로 메모리를 차지하므로 메모리 상한 확인이 선행되어야 한다. → 1단계에서 `INFERENCE_CONCURRENCY`(기본 1, 최대 4)로 슬롯 수를 환경변수화했으므로, 부하 테스트 후 값만 올리면 된다. cpu/memory 증설은 그 결과에 따라 결정한다.
 - [x] 함께, `analyzer`가 startup 실패로 `None`인 상태에서 요청이 들어오면 `AttributeError` → 500이 되므로, `/health`가 `analyzer is None`일 때 실패를 반환하도록 하고 `analyze`는 503을 반환하게 한다.
 
 변경 범위:
@@ -413,7 +422,7 @@ API 변경   429 응답 코드 추가 (NestJS provider의 재시도/fallback 처
 2. `POST /admin/products/cache/invalidate` (ADMIN, 감사 로그 기록) — 시드 직후 즉시 반영이 필요할 때 쓴다.
    데이터를 새로 노출하지 않고 캐시만 비우는 엔드포인트다.
 
-- [ ] (보류) 특정 카테고리/등급만 필요한 경로를 `where`로 좁히는 건 하지 않았다. 현재 규칙 선택은 카탈로그 **전체**에서
+- **보류 → `BACKEND_TASKS.md` 보류 절 (조건: 규칙이 카탈로그 전체를 보지 않게 바뀔 때).** 특정 카테고리/등급만 필요한 경로를 `where`로 좁히는 건 하지 않았다. 현재 규칙 선택은 카탈로그 **전체**에서
       등급·카테고리 우선순위로 정렬해 고르므로, 좁혀 조회하면 선택 결과가 달라진다(동작 변경). 캐시로 DB 왕복이
       사라진 지금은 실익도 작다.
 
@@ -948,9 +957,9 @@ text
 - [x] `src/hooks/useAsyncJob.ts` — fast 응답과 잡 오케스트레이션 단일 구현. `index.tsx`와 `products.tsx`가 공유. 두 화면의 취소 처리가 서로 달랐고(언마운트 abort 누락) 테스트가 없었다 — 훅으로 합치면서 취소·언마운트·뒤늦은 결과 폐기를 테스트로 고정했다(R16이 미뤄둔 항목).
 - [x] 2. 화면별 데이터 훅(`useHomeDashboard`, `useWeatherProducts`) — 서버 상태를 판별 유니온 하나로 묶는다. `AsyncState`에 `empty`를 뒀다: "아직 촬영 없음"과 "조회 실패"를 화면이 구분해야 촬영 유도와 재시도를 각각 보여줄 수 있다.
 - [x] `settings.tsx`(useState 11개) / `signup.tsx`(15개)도 묶었다 — `usePhoneVerification`(인증 단계), `useNotificationPreferences`(낙관적 토글·롤백), `useConsents`. 로직 중복이 아니라 조합 불가능한 상태를 없애는 작업이라 위험이 있어, 훅마다 테스트를 먼저 붙였다.
-- [ ] 3. `StyleSheet`를 `*.styles.ts`로 분리한다. → **미실행.** 중복 제거가 아니라 파일 분할이라 이번 diff를 키우는 만큼의 이득이 없다고 판단했다.
+- **보류 → `FRONTEND_TASKS.md` F63.** 3. `StyleSheet`를 `*.styles.ts`로 분리한다. 중복 제거가 아니라 파일 분할이라 이번 diff를 키우는 만큼의 이득이 없다고 판단했다.
 - [x] React Query 같은 라이브러리 도입은 지금 단계에서 권하지 않는다 — 화면 수가 적고 위 1~2번만으로 중복이 해소된다.
-- [ ] 남은 일: `login.tsx` / `social-phone.tsx`도 같은 문자 인증 클러스터를 갖고 있어 `usePhoneVerification`을 쓸 수 있다. 이번 범위(설정·가입) 밖이라 남겨둔다.
+- **보류 → `FRONTEND_TASKS.md` F63.** `login.tsx` / `social-phone.tsx`도 같은 문자 인증 클러스터를 갖고 있어 `usePhoneVerification`을 쓸 수 있다. 이번 범위(설정·가입) 밖이라 남겨둔다.
 
 변경 범위:
 
@@ -960,7 +969,7 @@ text
 파일 수정   위 화면 전체
 ```
 
-위험: BEHAVIOR-PRESERVING REFACTOR. 이지만 범위가 넓다. 두 화면의 잡 처리 세부(타임아웃, 재시도 횟수)가 다를 수 있으므로 통합 전 대조가 필요하다. **[15](strict 모드)와 [16](테스트) 이후에 진행할 것을 강력히 권한다** — 그래야 컴파일러와 테스트가 회귀를 잡아준다.
+위험: BEHAVIOR-PRESERVING REFACTOR. 이지만 범위가 넓다. 두 화면의 잡 처리 세부(타임아웃, 재시도 횟수)가 다를 수 있으므로 통합 전 대조가 필요하다. **R15(strict 모드)와 R16(테스트) 이후에 진행할 것을 강력히 권한다** — 그래야 컴파일러와 테스트가 회귀를 잡아준다.
 
 완료 기준: R27 변경 제안이 반영되고 관련 회귀 테스트·CI가 통과한다. → 1·2번 완료(3번 스타일 분리는 보류).
 

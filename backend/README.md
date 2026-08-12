@@ -61,5 +61,5 @@ backend/
 | 스키마·시드 | `prisma/` |
 | 활성 작업 보드 | [docs/BACKEND_TASKS.md](../docs/BACKEND_TASKS.md) |
 | 완료 이력 | [docs/BACKEND_ARCHIVE.md](../docs/BACKEND_ARCHIVE.md) |
-| 리팩토링 백로그 R1~R35 | [docs/REFACTORING_BACKLOG.md](../docs/REFACTORING_BACKLOG.md) |
+| 리팩토링 R1~R35 판단 근거 (완료 기록) | [docs/REFACTORING_BACKLOG.md](../docs/REFACTORING_BACKLOG.md) |
 | 추론 서버 | `inference-service/README.md` |
