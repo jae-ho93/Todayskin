@@ -83,3 +83,46 @@ export function maskSensitiveData(value: string): string {
   result = maskCoordinates(result);
   return result;
 }
+
+// N48: 값 패턴만으로 못 잡는 민감정보(예: 불투명 토큰, OTP 코드)를 키 이름으로 잡는다.
+// 일반 'code'는 statusCode/errorCode 오탐이 많아 제외 — otpCode 등은 'otp'로 잡힌다.
+const SENSITIVE_KEY_PATTERN =
+  /(phone|birth|token|secret|password|authorization|api[_-]?key|otp)/i;
+
+const MAX_MASK_DEPTH = 8;
+
+/**
+ * N48: 객체/배열을 재귀 순회하며 민감정보를 마스킹한다 (감사 로그 metadata 저장용).
+ *
+ * - 문자열 값: maskSensitiveData 패턴 마스킹 (전화·생일·JWT·좌표·API key)
+ * - 민감 키(phone/birth/token/…): 패턴 마스킹으로 변화가 없으면 통째로 [REDACTED]
+ *   — 패턴이 놓치는 형태(국가코드 전화번호, 불투명 토큰)도 평문으로 남지 않는다
+ * - 원본 객체는 변경하지 않고 새 객체를 반환한다
+ */
+export function maskMetadataDeep(value: unknown, depth = 0): unknown {
+  if (depth > MAX_MASK_DEPTH) return '[REDACTED_DEPTH]';
+  if (typeof value === 'string') return maskSensitiveData(value);
+  if (Array.isArray(value)) {
+    return value.map((item) => maskMetadataDeep(item, depth + 1));
+  }
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      if (SENSITIVE_KEY_PATTERN.test(key)) {
+        if (typeof item === 'string') {
+          const masked = maskSensitiveData(item);
+          out[key] = masked !== item ? masked : '[REDACTED]';
+        } else if (item === null || item === undefined) {
+          out[key] = item;
+        } else {
+          // 숫자·객체 형태의 민감 값(예: OTP 코드 123456)은 부분 마스킹이 없다.
+          out[key] = '[REDACTED]';
+        }
+      } else {
+        out[key] = maskMetadataDeep(item, depth + 1);
+      }
+    }
+    return out;
+  }
+  return value;
+}
