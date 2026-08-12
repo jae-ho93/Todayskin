@@ -2,7 +2,9 @@
 
 검증: 내부 인증(401/503), 업로드 상한(413/415), 오류 매핑(422/500),
 정상 경로(200), 지표(/metrics).
+R6/R32: 추론 슬롯 혼잡(429), 미준비(503), /metrics 인증.
 """
+import asyncio
 import io
 
 import main
@@ -84,7 +86,7 @@ def test_503_inference_timeout(client, monkeypatch):
 
 
 def test_metrics_exposes_queue_execution_and_concurrency(client):
-    res = client.get("/metrics")
+    res = client.get("/metrics", headers=AUTH)
     assert res.status_code == 200
     assert "text/plain" in res.headers["content-type"]
     text = res.text
@@ -92,6 +94,8 @@ def test_metrics_exposes_queue_execution_and_concurrency(client):
     assert "inference_in_flight" in text
     assert "inference_queue_wait_seconds" in text
     assert "inference_execution_seconds" in text
+    assert "inference_queue_timeouts_total" in text
+    assert "inference_concurrency_limit 1" in text
 
 
 def test_metrics_records_status_counts(client):
@@ -103,9 +107,92 @@ def test_metrics_records_status_counts(client):
         m = re.search(rf'inference_requests_total{{status="{status}"}} (\d+)', text)
         return int(m.group(1)) if m else 0
 
-    before = client.get("/metrics").text
+    before = client.get("/metrics", headers=AUTH).text
     client.post("/infer", files=_files(_png(100)))  # 401 (인증 실패)
     client.post("/infer", files=_files(_png(100)), headers=AUTH)  # 200
-    after = client.get("/metrics").text
+    after = client.get("/metrics", headers=AUTH).text
     assert count(after, "200") == count(before, "200") + 1
     assert count(after, "401") == count(before, "401") + 1
+
+
+# ── R32: /metrics 인증 ────────────────────────────────────────────────
+
+
+def test_metrics_401_without_key(client):
+    assert client.get("/metrics").status_code == 401
+
+
+def test_metrics_401_with_wrong_key(client):
+    res = client.get("/metrics", headers={"X-Inference-Key": "wrong-secret"})
+    assert res.status_code == 401
+
+
+def test_metrics_503_when_secret_not_configured(client, monkeypatch):
+    monkeypatch.delenv("INFERENCE_SHARED_SECRET")
+    assert client.get("/metrics", headers=AUTH).status_code == 503
+
+
+def test_health_stays_public(client):
+    """ECS 컨테이너 헬스체크가 호출하므로 /health만 무인증을 유지한다."""
+    res = client.get("/health")
+    assert res.status_code == 200
+    assert res.json() == {"status": "ok"}
+
+
+# ── R6: 추론 슬롯 ─────────────────────────────────────────────────────
+
+
+def test_health_503_when_model_not_ready(client, monkeypatch):
+    monkeypatch.setattr(main, "analyzer", None)
+    assert client.get("/health").status_code == 503
+
+
+def test_infer_503_when_model_not_ready(client, monkeypatch):
+    monkeypatch.setattr(main, "analyzer_pool", None)
+    res = client.post("/infer", files=_files(_png(100)), headers=AUTH)
+    assert res.status_code == 503
+
+
+def test_429_when_slot_wait_times_out(client, monkeypatch):
+    """슬롯 대기 상한 초과 시 429 + Retry-After — NestJS가 즉시 fallback한다."""
+
+    class BusySlots:
+        async def acquire(self) -> None:
+            await asyncio.sleep(10)
+
+        def release(self) -> None:  # pragma: no cover - 도달하지 않는다
+            raise AssertionError("슬롯을 잡지 못했으므로 release되지 않아야 한다")
+
+    monkeypatch.setattr(main, "inference_slots", BusySlots())
+    monkeypatch.setenv("INFERENCE_QUEUE_TIMEOUT_SECONDS", "0.05")
+
+    before = _metric_value(client, "inference_queue_timeouts_total")
+    res = client.post("/infer", files=_files(_png(100)), headers=AUTH)
+    assert res.status_code == 429
+    assert res.headers["Retry-After"] == "1"
+    assert _metric_value(client, "inference_queue_timeouts_total") == before + 1
+
+
+def test_concurrency_env_builds_multiple_slots(make_client):
+    client = make_client(concurrency=2)
+    assert main.analyzer_pool.qsize() == 2
+    assert "inference_concurrency_limit 2" in client.get("/metrics", headers=AUTH).text
+    # 인스턴스가 각각 독립이어야 한다 (모델 인스턴스는 스레드 안전하지 않다).
+    instances = list(main.analyzer_pool.queue)
+    assert len({id(i) for i in instances}) == 2
+
+
+def test_concurrency_env_clamped_to_max(make_client):
+    client = make_client(concurrency=99)
+    assert f"inference_concurrency_limit {main.MAX_CONCURRENCY}" in client.get(
+        "/metrics", headers=AUTH
+    ).text
+
+
+def _metric_value(client, name: str) -> float:
+    import re
+
+    text = client.get("/metrics", headers=AUTH).text
+    m = re.search(rf"^{name} (\S+)$", text, re.MULTILINE)
+    assert m, f"{name} 지표가 없습니다"
+    return float(m.group(1))

@@ -23,6 +23,9 @@ export function createPinoLoggerOptions(
       paths: [
         'req.headers.authorization',
         'req.headers.cookie',
+        // R2: 외부 API key 헤더가 요청 로그에 남지 않게 한다.
+        'req.headers["x-goog-api-key"]',
+        'req.headers["x-inference-key"]',
         'req.body.phoneNumber',
         'req.body.password',
         'req.body.birthDate',

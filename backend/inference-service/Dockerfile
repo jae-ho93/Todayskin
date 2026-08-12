@@ -24,7 +24,17 @@ RUN (pip install --no-cache-dir torch==2.9.0 torchvision==0.24.0 \
     || pip install --no-cache-dir torch==2.9.0 torchvision==0.24.0) \
   && pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# R19: 비-root 실행. 이 서비스는 사용자가 업로드한 이미지를 네이티브 디코더로
+# 파싱하므로 공격 표면이 넓다 — root로 돌릴 이유가 없다.
+RUN groupadd --system --gid 10001 appuser \
+  && useradd --system --uid 10001 --gid 10001 --create-home appuser
+
+# R19: `COPY . .` 대신 런타임에 필요한 소스와 모델 자산만 복사한다
+# (tests/, __pycache__, 로컬 venv를 이미지에 넣지 않는다).
+COPY --chown=appuser:appuser *.py ./
+COPY --chown=appuser:appuser assets ./assets
+
+USER 10001
 
 EXPOSE 8000
 

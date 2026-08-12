@@ -16,7 +16,23 @@ import {
  *
  * N13: 내부망 전용 인증 — INFERENCE_SHARED_SECRET을 X-Inference-Key 헤더로 보낸다.
  * inference-service는 같은 값이 아니면 401, secret 미설정이면 503으로 거부한다.
+ *
+ * R6: 추론 슬롯이 모두 사용 중이면 inference-service가 대기 상한을 넘긴 요청을
+ * 429로 거부한다. 클라이언트 타임아웃까지 붙잡히지 않으므로 짧게 한 번 재시도하고,
+ * 그래도 혼잡하면 InferenceBusyError로 구분해 던진다.
  */
+
+/** R6: 추론 서버 혼잡(429). 재시도 후에도 슬롯을 얻지 못한 경우. */
+export class InferenceBusyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InferenceBusyError';
+  }
+}
+
+/** 429 재시도 대기 상한 — 클라이언트 타임아웃(30s) 예산을 넘기지 않게 짧게 잡는다. */
+const MAX_RETRY_DELAY_MS = 2000;
+
 @Injectable()
 export class PythonInferenceProvider implements InferenceProvider {
   private readonly logger = new Logger(PythonInferenceProvider.name);
@@ -27,13 +43,6 @@ export class PythonInferenceProvider implements InferenceProvider {
   ) {}
 
   async infer(images: InferenceImages): Promise<InferenceResult> {
-    const formData = new FormData();
-    formData.append(
-      'front',
-      new Blob([new Uint8Array(images.front.buffer)], { type: images.front.mimetype }),
-      'front.jpg',
-    );
-
     // N13: shared secret 헤더. 미설정(빈 문자열)이면 헤더를 생략하고,
     // inference-service가 401/503으로 거부하게 둔다.
     const headers: Record<string, string> = {};
@@ -41,18 +50,21 @@ export class PythonInferenceProvider implements InferenceProvider {
       headers['x-inference-key'] = this.sharedSecret;
     }
 
-    let res: Response;
-    try {
-      res = await fetch(`${this.baseUrl}/infer`, {
-        method: 'POST',
-        headers,
-        body: formData,
-        signal: AbortSignal.timeout(30000),
-      });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      this.logger.warn(`Inference service request failed: ${message}`);
-      throw new Error(`Inference service request failed: ${message}`);
+    let res = await this.post(images, headers);
+
+    // R6: 혼잡(429)은 일시적이므로 Retry-After만큼 기다렸다가 한 번만 재시도한다.
+    if (res.status === 429) {
+      const delayMs = this.retryDelayMs(res.headers.get('retry-after'));
+      this.logger.warn(
+        `Inference service busy (429) — retrying once in ${delayMs}ms`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      res = await this.post(images, headers);
+      if (res.status === 429) {
+        throw new InferenceBusyError(
+          'Inference service is saturated (HTTP 429 after retry)',
+        );
+      }
     }
 
     if (!res.ok) {
@@ -71,6 +83,38 @@ export class PythonInferenceProvider implements InferenceProvider {
     }
 
     return this.toInferenceResult(data);
+  }
+
+  /** 이미지 버퍼는 요청마다 새 FormData로 만든다(재시도 시 body 재사용 불가). */
+  private async post(
+    images: InferenceImages,
+    headers: Record<string, string>,
+  ): Promise<Response> {
+    const formData = new FormData();
+    formData.append(
+      'front',
+      new Blob([new Uint8Array(images.front.buffer)], { type: images.front.mimetype }),
+      'front.jpg',
+    );
+
+    try {
+      return await fetch(`${this.baseUrl}/infer`, {
+        method: 'POST',
+        headers,
+        body: formData,
+        signal: AbortSignal.timeout(30000),
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      this.logger.warn(`Inference service request failed: ${message}`);
+      throw new Error(`Inference service request failed: ${message}`);
+    }
+  }
+
+  private retryDelayMs(retryAfter: string | null): number {
+    const seconds = Number(retryAfter);
+    if (!Number.isFinite(seconds) || seconds <= 0) return 500;
+    return Math.min(seconds * 1000, MAX_RETRY_DELAY_MS);
   }
 
   private toInferenceResult(data: unknown): InferenceResult {

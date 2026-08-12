@@ -3,6 +3,7 @@ import {
   maskBirthDate,
   maskJwtToken,
   maskCoordinates,
+  maskApiKeys,
   maskSensitiveData,
 } from './redact.logger';
 
@@ -53,7 +54,39 @@ describe('민감정보 마스킹', () => {
     });
   });
 
+  describe('maskApiKeys (R2)', () => {
+    it('쿼리스트링 key 마스킹', () => {
+      const result = maskApiKeys(
+        'https://generativelanguage.googleapis.com/v1beta/models/x:generateContent?key=AIzaSyRealSecret',
+      );
+      expect(result).toContain('?key=[REDACTED]');
+      expect(result).not.toContain('AIzaSyRealSecret');
+    });
+
+    it('헤더 표기의 API key 값 마스킹', () => {
+      expect(maskApiKeys('x-goog-api-key: AIzaSyRealSecret')).toBe(
+        'x-goog-api-key: [REDACTED]',
+      );
+      expect(maskApiKeys('x-inference-key=shared-secret-value')).toBe(
+        'x-inference-key=[REDACTED]',
+      );
+    });
+
+    it('key가 없으면 원본 반환', () => {
+      expect(maskApiKeys('Gemini request failed: HTTP 500')).toBe(
+        'Gemini request failed: HTTP 500',
+      );
+    });
+  });
+
   describe('maskSensitiveData (통합)', () => {
+    it('API key도 함께 마스킹된다', () => {
+      const result = maskSensitiveData(
+        'Gemini 호출 실패: POST https://x/y?key=AIzaSyRealSecret (x-goog-api-key: AIzaSyRealSecret)',
+      );
+      expect(result).not.toContain('AIzaSyRealSecret');
+    });
+
     it('모든 민감정보를 한 번에 마스킹', () => {
       const input = '전화: 01012345678, 생일: 1990-01-15, 토큰: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature123, 좌표: 37.5665';
       const result = maskSensitiveData(input);

@@ -374,9 +374,14 @@ export class GeminiClient {
 
     let res: Response;
     try {
-      res = await fetch(`${this.endpoint}?key=${encodeURIComponent(this.apiKey)}`, {
+      // R2: API key를 쿼리스트링이 아니라 헤더로 보낸다. URL은 액세스 로그·프록시
+      // 로그·APM 트레이스·예외의 request URL에 그대로 남기 때문이다.
+      res = await fetch(this.endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': this.apiKey,
+        },
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(15000),
       });

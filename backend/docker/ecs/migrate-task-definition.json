@@ -15,6 +15,7 @@
       "name": "migrate",
       "image": "ACCOUNT_ID.dkr.ecr.ap-northeast-2.amazonaws.com/todayskin-backend:IMAGE_TAG",
       "essential": true,
+      "user": "10001",
       "command": [
         "sh",
         "-c",
