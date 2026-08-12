@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { errorName } from '../../../common/errors/error-name.util';
+import { withRetry } from '../../../common/retry/retry.util';
 import { fetchWithTimeout } from './fetch-with-timeout';
 
 /** 기상청 생활기상지수(자외선) V5 endpoint */
@@ -28,13 +29,28 @@ export interface UvForecast {
  */
 export interface UvForecastWithTime extends UvForecast {
   observedAt: Date | null;
+  /**
+   * N42: 값이 비어 있는 이유가 "수집 실패"인지 "예보값 없음"인지 구분한다.
+   * 진단 경로는 결과를 영구 저장하므로 둘을 구별해야 재시도도 하고, 화면도
+   * "측정 불가"와 "수집 실패"를 다르게 보여줄 수 있다.
+   */
+  failed: boolean;
 }
 
-const EMPTY_FORECAST_WITH_TIME: UvForecastWithTime = {
+const EMPTY_VALUES = {
   current: null,
   peak: null,
   peakHour: null,
   observedAt: null,
+} as const;
+
+/** 호출이 실패했다(타임아웃·HTTP 오류). 재시도할 가치가 있다. */
+const FAILED_FORECAST: UvForecastWithTime = { ...EMPTY_VALUES, failed: true };
+
+/** 호출은 됐지만 쓸 값이 없다(키 미설정 등). 재시도해도 결과가 같다. */
+const EMPTY_FORECAST_WITH_TIME: UvForecastWithTime = {
+  ...EMPTY_VALUES,
+  failed: false,
 };
 
 /** "-" / "" / null → null, 그 외 float 파싱. 실패 시 null. */
@@ -67,11 +83,21 @@ export class KmaClient {
     this.apiKey = configService.get<string>('KMA_API_KEY', '');
   }
 
-  async fetchUvIndex(areaNo: string): Promise<UvForecastWithTime> {
+  /**
+   * @param retries 일시 실패 시 재시도 횟수. 기본 0 — 응답 경로는 재시도하지 않는다.
+   *   결과를 영구 저장하는 진단 경로만 켠다 — N42.
+   */
+  async fetchUvIndex(areaNo: string, retries = 0): Promise<UvForecastWithTime> {
     if (!this.apiKey) {
       return EMPTY_FORECAST_WITH_TIME;
     }
+    return withRetry(() => this.fetchOnce(areaNo), {
+      retries,
+      shouldRetry: (result) => result.failed,
+    });
+  }
 
+  private async fetchOnce(areaNo: string): Promise<UvForecastWithTime> {
     // 이 시각의 발표자료가 아직 없을 수 있어 3시간 전 정시로 조회
     const base = new Date(Date.now() - 3 * 3600 * 1000);
     const queryTime = formatKmaQueryTime(base);
@@ -92,11 +118,12 @@ export class KmaClient {
         // httpx 예외 문자열엔 serviceKey가 담긴 URL이 그대로 포함되므로
         // 절대 통째로 로깅하지 않는다. 상태 코드만 로깅.
         this.logger.warn(`KMA UV fetch failed: HTTP ${res.status}`);
-        return EMPTY_FORECAST_WITH_TIME;
+        return FAILED_FORECAST;
       }
       const data = (await res.json()) as KmaResponse;
       const item = extractFirstItem(data);
       if (!item) {
+        // 응답은 왔는데 예보 항목이 없다. 재시도해도 같은 결과다.
         return EMPTY_FORECAST_WITH_TIME;
       }
 
@@ -115,11 +142,17 @@ export class KmaClient {
       }
 
       // queryTime(yyyyMMddHH, KST)을 관측 시각으로 사용한다.
-      return { current, peak, peakHour, observedAt: parseKmaTime(queryTime) };
+      return {
+        current,
+        peak,
+        peakHour,
+        observedAt: parseKmaTime(queryTime),
+        failed: false,
+      };
     } catch (e) {
       // 타입/네트워크 문제는 전부 unavailable 폴백
       this.logger.warn(`KMA UV fetch failed: ${errorName(e)}`);
-      return EMPTY_FORECAST_WITH_TIME;
+      return FAILED_FORECAST;
     }
   }
 }

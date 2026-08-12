@@ -24,6 +24,9 @@ const NON_METRIC_FIELDS = new Set([
   'airkoreaStation',
   'source',
   'diagnoses',
+  // N42: 지표가 아니라 "그 지표를 왜 못 받았는가"를 말하는 메타 컬럼.
+  'uvCollectionFailed',
+  'airCollectionFailed',
 ]);
 
 const snapshotRow = (over: Partial<WeatherSnapshot> = {}): WeatherSnapshot =>

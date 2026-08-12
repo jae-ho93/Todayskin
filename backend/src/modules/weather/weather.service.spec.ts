@@ -39,6 +39,7 @@ describe('WeatherService', () => {
     peak: null,
     peakHour: null,
     observedAt: null,
+    failed: false,
     ...over,
   });
 
@@ -51,6 +52,7 @@ describe('WeatherService', () => {
     so2: null,
     co: null,
     observedAt: null,
+    failed: false,
     ...over,
   });
 
@@ -142,9 +144,9 @@ describe('WeatherService', () => {
 
     const result = await service.getCurrentWeather(37.5665, 126.978);
 
-    expect(stationClient.fetchNearestStation).toHaveBeenCalledWith(37.5665, 126.978);
+    expect(stationClient.fetchNearestStation).toHaveBeenCalledWith(37.5665, 126.978, 0);
     expect(kmaClient.fetchUvIndex).toHaveBeenCalled();
-    expect(airKoreaClient.fetchAirQuality).toHaveBeenCalledWith('중구');
+    expect(airKoreaClient.fetchAirQuality).toHaveBeenCalledWith('중구', 0);
     // F56: 시/도는 근사표 정식 명칭, 구/군은 측정소 주소 토큰에서
     expect(result.regionName).toBe('서울특별시');
     expect(result.districtName).toBe('중구');
@@ -202,7 +204,7 @@ describe('WeatherService', () => {
     const result = await service.getCurrentWeather(37.5172, 127.0473);
     expect(result.regionName).toBe('서울특별시');
     // 폴백 시 강남구 측정소명 사용
-    expect(airKoreaClient.fetchAirQuality).toHaveBeenCalledWith('강남구');
+    expect(airKoreaClient.fetchAirQuality).toHaveBeenCalledWith('강남구', 0);
   });
 
   /**
@@ -222,7 +224,7 @@ describe('WeatherService', () => {
 
     expect(result.regionName).toBe('부산광역시');
     expect(result.districtName).toBeNull();
-    expect(airKoreaClient.fetchAirQuality).toHaveBeenCalledWith('중구');
+    expect(airKoreaClient.fetchAirQuality).toHaveBeenCalledWith('중구', 0);
   });
 
   it('N41: 측정소 조회가 성공하면 그 구 이름을 쓴다', async () => {
@@ -237,7 +239,7 @@ describe('WeatherService', () => {
     const result = await service.getCurrentWeather(35.16526, 129.1635);
 
     expect(result.districtName).toBe('해운대구');
-    expect(airKoreaClient.fetchAirQuality).toHaveBeenCalledWith('좌동');
+    expect(airKoreaClient.fetchAirQuality).toHaveBeenCalledWith('좌동', 0);
   });
 
   /**
@@ -380,8 +382,8 @@ describe('WeatherService', () => {
     expect(result?.id).toBe('snap-meta');
     // 스케줄러 워밍 경로: 측정소 조회 없이 UV+대기질만 호출한다.
     expect(stationClient.fetchNearestStation).not.toHaveBeenCalled();
-    expect(kmaClient.fetchUvIndex).toHaveBeenCalledWith('1111000000');
-    expect(airKoreaClient.fetchAirQuality).toHaveBeenCalledWith('종로구');
+    expect(kmaClient.fetchUvIndex).toHaveBeenCalledWith('1111000000', 1);
+    expect(airKoreaClient.fetchAirQuality).toHaveBeenCalledWith('종로구', 1);
     // 저장 row의 지역/측정소 메타는 전달받은 근사표 값을 사용한다.
     const arg = prisma.weatherSnapshot.create.mock.calls[0][0];
     expect(arg.data.regionName).toBe('서울특별시');
@@ -389,6 +391,87 @@ describe('WeatherService', () => {
     expect(arg.data.kmaAreaNo).toBe('1111000000');
     // N41: 스케줄러 경로 스냅샷의 구 이름이 전부 null이던 문제.
     expect(arg.data.districtName).toBe('종로구');
+  });
+
+  /**
+   * N42: 진단 스냅샷의 대기질이 전부 null로 남았다. 이 경로는 캐시를 쓰지 않고
+   * 결과를 영구 저장하므로, 일시 실패 한 번이 그 기록에 영원히 남는다.
+   */
+  describe('N42: 진단 경로의 수집 실패 처리', () => {
+    // 재시도 자체는 클라이언트 안에서 일어난다(retry.util.spec.ts가 검증).
+    // 여기서는 "어느 경로가 재시도를 켜는가"라는 정책만 고정한다.
+    it('진단 경로는 세 외부 호출 모두 재시도를 켠다', async () => {
+      kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 3 }));
+      airKoreaClient.fetchAirQuality.mockResolvedValue(air({ pm25: 5 }));
+      prisma.weatherSnapshot.findFirst.mockResolvedValue(null);
+      prisma.weatherSnapshot.create.mockResolvedValue({ id: 'snap-retry' });
+
+      await service.getOrCreateSnapshot(37.5, 127.0);
+
+      expect(stationClient.fetchNearestStation).toHaveBeenCalledWith(37.5, 127.0, 1);
+      expect(kmaClient.fetchUvIndex).toHaveBeenCalledWith(expect.any(String), 1);
+      expect(airKoreaClient.fetchAirQuality).toHaveBeenCalledWith(
+        expect.any(String),
+        1,
+      );
+    });
+
+    it('응답 경로는 재시도하지 않는다 — 외부 API가 느릴 때 모두의 지연이 늘어난다', async () => {
+      kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 3 }));
+      airKoreaClient.fetchAirQuality.mockResolvedValue(air({ failed: true }));
+
+      await service.getCurrentWeather(37.5, 127.0);
+
+      expect(airKoreaClient.fetchAirQuality).toHaveBeenCalledWith(
+        expect.any(String),
+        0,
+      );
+    });
+
+    it('재시도해도 실패하면 부분 저장하되 실패 사실을 남긴다', async () => {
+      kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 3 }));
+      airKoreaClient.fetchAirQuality.mockResolvedValue(air({ failed: true }));
+      prisma.weatherSnapshot.findFirst.mockResolvedValue(null);
+      prisma.weatherSnapshot.create.mockResolvedValue({ id: 'snap-partial' });
+
+      await service.getOrCreateSnapshot(37.5, 127.0);
+
+      const arg = prisma.weatherSnapshot.create.mock.calls[0][0];
+      // 자외선과 관측 시각은 실제 값이므로 통째로 버리지 않는다.
+      expect(arg.data.uvIndex).toBe(3);
+      expect(arg.data.pm25).toBeNull();
+      // 화면이 "값 없음"과 구별할 수 있도록 실패를 남긴다 (F70).
+      expect(arg.data.airCollectionFailed).toBe(true);
+      expect(arg.data.uvCollectionFailed).toBe(false);
+    });
+
+    it('값 없음(failed=false)은 수집 실패로 기록하지 않는다', async () => {
+      kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 3 }));
+      airKoreaClient.fetchAirQuality.mockResolvedValue(air({ failed: false }));
+      prisma.weatherSnapshot.findFirst.mockResolvedValue(null);
+      prisma.weatherSnapshot.create.mockResolvedValue({ id: 'snap-empty' });
+
+      await service.getOrCreateSnapshot(37.5, 127.0);
+
+      const arg = prisma.weatherSnapshot.create.mock.calls[0][0];
+      expect(arg.data.airCollectionFailed).toBe(false);
+    });
+
+    it('수집 실패율을 지표로 남긴다', async () => {
+      kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 3 }));
+      airKoreaClient.fetchAirQuality.mockResolvedValue(air({ failed: true }));
+      prisma.weatherSnapshot.findFirst.mockResolvedValue(null);
+      prisma.weatherSnapshot.create.mockResolvedValue({ id: 'snap-metric' });
+
+      await service.getOrCreateSnapshot(37.5, 127.0);
+
+      expect(redisService.incrementCounter).toHaveBeenCalledWith(
+        'metric:weather:collect:total',
+      );
+      expect(redisService.incrementCounter).toHaveBeenCalledWith(
+        'metric:weather:collect:air_failed',
+      );
+    });
   });
 
   it('N25: 기본 지역(좌표 없음)은 UV와 대기질을 병렬로 모두 호출한다', async () => {

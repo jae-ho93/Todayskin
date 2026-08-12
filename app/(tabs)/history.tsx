@@ -318,10 +318,15 @@ function WeatherSummaryGrid({ weather }: { weather: CalendarWeather }) {
   const airColor = (status: AirStatus | null | undefined): string =>
     status ? AIR_STATUS_COLOR[status] : colors.textTertiary;
 
+  // F70: 값이 없을 때 이유를 구별해 보여준다. 수집 실패를 `-`로만 그리면
+  // 사용자는 앱이 값을 못 불러오는 것으로 읽는다.
+  const missing = (collectionFailed?: boolean): string =>
+    collectionFailed ? '수집실패' : '—';
+
   const items: {
     icon: keyof typeof Ionicons.glyphMap;
     label: string;
-    value: string | null;
+    value: string;
     color: string;
   }[] = [
     {
@@ -332,25 +337,34 @@ function WeatherSummaryGrid({ weather }: { weather: CalendarWeather }) {
           ? String(weather.uvIndexPeak)
           : weather.uvIndex != null
             ? String(weather.uvIndex)
-            : null,
+            : missing(weather.uvCollectionFailed),
       color: uvLevel ? UV_LEVEL_COLOR[uvLevel] : colors.textTertiary,
     },
     {
       icon: 'ellipse-outline',
       label: '미세먼지',
-      value: weather.pm10 != null ? String(Math.round(weather.pm10)) : null,
+      value:
+        weather.pm10 != null
+          ? String(Math.round(weather.pm10))
+          : missing(weather.airCollectionFailed),
       color: airColor(weather.pm10Status),
     },
     {
       icon: 'layers-outline',
       label: '초미세먼지',
-      value: weather.pm25 != null ? String(Math.round(weather.pm25)) : null,
+      value:
+        weather.pm25 != null
+          ? String(Math.round(weather.pm25))
+          : missing(weather.airCollectionFailed),
       color: airColor(weather.pm25Status),
     },
     {
       icon: 'cloud-outline',
       label: '오존',
-      value: weather.ozonePpm != null ? String(weather.ozonePpm) : null,
+      value:
+        weather.ozonePpm != null
+          ? String(weather.ozonePpm)
+          : missing(weather.airCollectionFailed),
       color: airColor(weather.ozoneStatus),
     },
   ];
@@ -365,7 +379,7 @@ function WeatherSummaryGrid({ weather }: { weather: CalendarWeather }) {
             </View>
             <View style={styles.weatherCellText}>
               <Text style={styles.weatherValue} numberOfLines={1}>
-                {it.value ?? '—'}
+                {it.value}
               </Text>
               <Text style={styles.weatherLabel} numberOfLines={1}>
                 {it.label}

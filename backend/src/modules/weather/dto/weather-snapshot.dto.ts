@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsEnum,
   IsInt,
   IsISO8601,
@@ -46,6 +47,21 @@ export class WeatherSnapshotDto {
   })
   @IsEnum(WeatherSource)
   source!: WeatherSource;
+
+  @ApiPropertyOptional({
+    description:
+      'N42: 자외선 수집이 실패했는지. true면 값이 비어 있는 이유가 "측정값 없음"이 아니라 "수집 실패"다.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  uvCollectionFailed?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'N42: 대기질 수집이 실패했는지.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  airCollectionFailed?: boolean;
 
   @ApiPropertyOptional({
     type: Number,

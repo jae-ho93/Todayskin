@@ -203,9 +203,27 @@ function WeatherCard({ weather: w, capturedAt }: { weather: CalendarWeather; cap
       </View>
       <Text style={styles.weatherTime}>{formatCapturedAt(capturedAt)} 촬영</Text>
       <View style={styles.weatherMetrics}>
-        <WeatherMetric scale="uv" label="자외선" value={w.uvIndex} status={w.uvStatus} />
-        <WeatherMetric scale="air" label="초미세먼지" value={w.pm25} status={w.pm25Status} />
-        <WeatherMetric scale="air" label="미세먼지" value={w.pm10} status={w.pm10Status} />
+        <WeatherMetric
+          scale="uv"
+          label="자외선"
+          value={w.uvIndex}
+          status={w.uvStatus}
+          collectionFailed={w.uvCollectionFailed}
+        />
+        <WeatherMetric
+          scale="air"
+          label="초미세먼지"
+          value={w.pm25}
+          status={w.pm25Status}
+          collectionFailed={w.airCollectionFailed}
+        />
+        <WeatherMetric
+          scale="air"
+          label="미세먼지"
+          value={w.pm10}
+          status={w.pm10Status}
+          collectionFailed={w.airCollectionFailed}
+        />
       </View>
     </Card>
   );
@@ -214,12 +232,17 @@ function WeatherCard({ weather: w, capturedAt }: { weather: CalendarWeather; cap
 // F64: 자외선은 낮음~위험, 대기질은 좋음~매우나쁨. 스케일을 판별 유니온으로 받아
 // 지표에 맞지 않는 등급을 넘기면 컴파일이 실패하게 한다.
 function WeatherMetric(
-  props: { label: string; value?: number | null } & (
+  props: {
+    label: string;
+    value?: number | null;
+    /** N42/F70: 값이 없는 이유가 수집 실패인지. `-`와 구별해 보여준다. */
+    collectionFailed?: boolean;
+  } & (
     | { scale: 'air'; status?: AirStatus | null }
     | { scale: 'uv'; status?: UvLevel | null }
   ),
 ) {
-  const { label, value } = props;
+  const { label, value, collectionFailed } = props;
   const isUv = props.scale === 'uv';
   const color = props.status
     ? isUv
@@ -236,7 +259,8 @@ function WeatherMetric(
     <View style={styles.weatherMetric}>
       <Text style={styles.weatherMetricLabel}>{label}</Text>
       <Text style={[styles.weatherMetricValue, { color }]}>
-        {value ?? '-'} {statusLabel ? `(${statusLabel})` : ''}
+        {value ?? (collectionFailed ? '수집실패' : '-')}{' '}
+        {statusLabel ? `(${statusLabel})` : ''}
       </Text>
     </View>
   );
