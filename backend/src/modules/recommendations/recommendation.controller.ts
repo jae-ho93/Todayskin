@@ -8,7 +8,14 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiAcceptedResponse,
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
+import { ApiArrayOrCursorPage } from '../../common/pagination/cursor-page.swagger';
 import { RecommendationService } from './recommendation.service';
 import { RecommendationDto } from './dto/recommendation.dto';
 import { RecommendationQueryDto } from './dto/recommendation-query.dto';
@@ -20,6 +27,7 @@ import { JobService } from '../jobs/job.service';
 import { JobType } from '../jobs/enums/job-type.enum';
 import { EnqueueJobResponseDto } from '../jobs/dto/job-response.dto';
 import { RecommendationFastResponseDto } from './dto/recommendation-fast-response.dto';
+import { RecommendationPageDto } from './dto/recommendation-page.dto';
 
 /**
  * RecommendationController — 기존 FastAPI /recommendations 이식.
@@ -39,6 +47,7 @@ export class RecommendationController {
     description:
       '오늘의 추천 카탈로그(전역, 유저 비종속). 근거등급(A/B/C) 필터 가능. A=공인 가이드라인, B=개별 임상/관찰 연구, C=개인 시계열 통계적 관찰.',
   })
+  @ApiArrayOrCursorPage(RecommendationDto, RecommendationPageDto)
   async list(@Query() query: RecommendationQueryDto) {
     return this.recommendationService.listGlobal(query.grade, {
       limit: query.limit,
@@ -54,6 +63,7 @@ export class RecommendationController {
   })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ type: [RecommendationDto] })
   @HttpCode(200)
   async generate(
     @CurrentUser() user: JwtPayload,
@@ -72,6 +82,7 @@ export class RecommendationController {
   })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ type: RecommendationFastResponseDto })
   @HttpCode(200)
   async generateFast(
     @CurrentUser() user: JwtPayload,
@@ -88,6 +99,7 @@ export class RecommendationController {
   })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
+  @ApiAcceptedResponse({ type: EnqueueJobResponseDto })
   @HttpCode(202)
   async generateAsync(
     @CurrentUser() user: JwtPayload,
@@ -107,6 +119,7 @@ export class RecommendationController {
   })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ type: RecommendationDto })
   async getById(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,

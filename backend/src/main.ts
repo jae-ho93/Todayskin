@@ -1,13 +1,14 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import helmet from 'helmet';
 import * as Sentry from '@sentry/node';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { initSentry, flushSentry } from './common/logging/sentry.config';
+import { buildOpenApiConfig } from './openapi.config';
 import { resolveJobRole } from './config/job-role';
 
 async function bootstrap() {
@@ -64,13 +65,7 @@ async function bootstrap() {
 
   // N0: 운영 환경에서는 Swagger 노출을 차단한다.
   if (!isProduction) {
-    const swaggerConfig = new DocumentBuilder()
-      .setTitle('Todayskin API')
-      .setDescription('날씨 연동 AI 피부 진단 및 맞춤형 화장품 추천 서비스')
-      .setVersion('0.1.0')
-      .addBearerAuth()
-      .build();
-    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    const document = SwaggerModule.createDocument(app, buildOpenApiConfig());
     SwaggerModule.setup('api/docs', app, document);
   }
 

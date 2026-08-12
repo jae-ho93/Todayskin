@@ -1,3 +1,9 @@
+// R28: 이 파일의 인터페이스들은 백엔드 DTO를 손으로 옮겨 적은 것이다. 계약의 정본은
+// `api.generated.ts`(백엔드 OpenAPI 스펙에서 자동 생성)이며, CI의 api-contract-drift
+// 잡이 둘 중 생성물 쪽이 최신인지 검사한다. 백엔드 DTO를 바꿨다면
+// `npm run openapi:export --prefix backend && npm run openapi:types`를 돌리고,
+// 여기 수기 타입도 함께 맞춘다. 신규 타입은 가급적 생성 타입에서 가져다 쓴다.
+
 // 서비스 제안서 7.1 근거 등급 체계와 1:1 대응
 export type EvidenceGrade = 'A' | 'B' | 'C';
 

@@ -24,6 +24,26 @@ jobs:
       - run: npm run lint
       - run: npm test
 
+  # R28: 백엔드 DTO ↔ 프론트 타입 드리프트 차단.
+  # 백엔드에서 OpenAPI 스펙을 다시 뽑고 프론트 타입을 다시 생성해, 커밋된 산출물과
+  # 다르면 실패한다. 즉 DTO를 바꾸고 `npm run openapi:export && npm run openapi:types`를
+  # 돌리지 않으면 머지되지 않는다. preview 모드라 DB·Redis 없이 수 초면 끝난다.
+  api-contract-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --prefix backend
+      - run: npm run prisma:generate --prefix backend
+      - run: npm run openapi:export --prefix backend
+      - run: npm ci
+      - run: npm run openapi:types
+      - name: 생성물이 커밋본과 같은지 확인
+        run: git diff --exit-code -- backend/openapi.json src/types/api.generated.ts
+
   # inference-service 계약 테스트 (N13/R6/R32). analyzer/part_mapping을 stub하므로
   # torch·mediapipe 설치 없이 수 초 안에 끝난다.
   inference-contract-test:

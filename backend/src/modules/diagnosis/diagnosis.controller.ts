@@ -14,13 +14,17 @@ import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
   ApiConsumes,
+  ApiCreatedResponse,
+  ApiOkResponse,
   ApiOperation,
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
+import { ApiArrayOrCursorPage } from '../../common/pagination/cursor-page.swagger';
 import { DiagnosisService } from './diagnosis.service';
 import { SkinScoreSnapshotDto } from './dto/skin-score-snapshot.dto';
 import { HistoryEntryDto } from './dto/history-entry.dto';
+import { HistoryEntryPageDto } from './dto/history-entry-page.dto';
 import {
   CalendarDayHistoryDto,
   ScoreSeriesDto,
@@ -49,6 +53,7 @@ export class DiagnosisController {
   @ApiOperation({ summary: '가장 최근 진단 조회 (본인)' })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ type: SkinScoreSnapshotDto })
   async getLatest(@CurrentUser() user: JwtPayload): Promise<SkinScoreSnapshotDto> {
     return this.diagnosisService.getLatest(user.sub);
   }
@@ -59,6 +64,7 @@ export class DiagnosisController {
   })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ type: ScoreSeriesDto })
   async getScoreSeries(
     @CurrentUser() user: JwtPayload,
     @Query() query: ScoreSeriesQueryDto,
@@ -73,6 +79,7 @@ export class DiagnosisController {
   @ApiOperation({ summary: '진단 이력 (본인, 최신순)' })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
+  @ApiArrayOrCursorPage(HistoryEntryDto, HistoryEntryPageDto)
   async getHistory(
     @CurrentUser() user: JwtPayload,
     @Query() query: CursorPaginationQueryDto,
@@ -95,6 +102,7 @@ export class DiagnosisController {
   })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ type: CalendarDayHistoryDto })
   async getHistoryByDate(
     @CurrentUser() user: JwtPayload,
     @Param('date') date: string,
@@ -114,6 +122,7 @@ export class DiagnosisController {
       limits: { fileSize: 10 * 1024 * 1024, files: 1, parts: 2 },
     }),
   )
+  @ApiCreatedResponse({ type: SkinScoreSnapshotDto })
   @HttpCode(201)
   async submit(
     @CurrentUser() user: JwtPayload,

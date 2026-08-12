@@ -1,5 +1,11 @@
 import { Body, Controller, Get, HttpCode, Post, Put, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiAcceptedResponse,
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { NotificationService } from './notification.service';
 import {
   NotificationPreferenceDto,
@@ -32,6 +38,7 @@ export class NotificationController {
       '본인 알림 설정을 반환한다. DB에 row가 없으면 기본값을 반환한다(404가 아님).',
   })
   @ApiBearerAuth()
+  @ApiOkResponse({ type: NotificationPreferenceDto })
   async getPreference(
     @CurrentUser() user: JwtPayload,
   ): Promise<NotificationPreferenceDto> {
@@ -45,6 +52,7 @@ export class NotificationController {
       '본인 알림 설정을 부분 갱신한다. 전달된 필드만 갱신하고, row가 없으면 기본값에서 생성한다.',
   })
   @ApiBearerAuth()
+  @ApiOkResponse({ type: NotificationPreferenceDto })
   @HttpCode(200)
   async updatePreference(
     @CurrentUser() user: JwtPayload,
@@ -60,6 +68,7 @@ export class NotificationController {
       '즉시 jobId를 반환한다. 결과는 GET /jobs/:id 또는 SSE /jobs/:id/events로 조회한다.',
   })
   @ApiBearerAuth()
+  @ApiAcceptedResponse({ type: EnqueueJobResponseDto })
   @HttpCode(202)
   async sendAsync(
     @CurrentUser() user: JwtPayload,

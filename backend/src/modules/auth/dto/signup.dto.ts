@@ -11,7 +11,7 @@ import { Gender } from '../enums/gender.enum';
 export const PHONE_PATTERN = /^01[016789]-?\d{3,4}-?\d{4}$/;
 
 export class SignupDto {
-  @ApiProperty({ example: '010-1234-5678', description: '휴대폰 번호' })
+  @ApiProperty({ type: String, example: '010-1234-5678', description: '휴대폰 번호' })
   @IsString()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @Matches(PHONE_PATTERN, { message: '올바른 휴대폰 번호 형식이 아닙니다 (예: 010-1234-5678)' })
@@ -25,7 +25,7 @@ export class SignupDto {
   @Matches(/\S/, { message: '이름은 공백만 입력할 수 없습니다' })
   name!: string;
 
-  @ApiProperty({ example: '2000-01-01', description: '생년월일 (YYYY-MM-DD)' })
+  @ApiProperty({ type: String, example: '2000-01-01', description: '생년월일 (YYYY-MM-DD)' })
   @IsString()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsISO8601({ strict: true }, { message: '생년월일 형식이 올바르지 않습니다 (예: 2000-01-01)' })

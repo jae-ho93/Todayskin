@@ -27,6 +27,7 @@ export class CursorPageDto<T> {
   items!: T[];
 
   @ApiPropertyOptional({
+    type: String,
     nullable: true,
     description: '다음 페이지 커서. 없으면 null',
   })

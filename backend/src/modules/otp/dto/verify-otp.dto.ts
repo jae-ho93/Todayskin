@@ -9,7 +9,7 @@ const PHONE_PATTERN = /^01[016789]-?\d{3,4}-?\d{4}$/;
  * OTP 검증 요청 DTO.
  */
 export class VerifyOtpDto {
-  @ApiProperty({ example: '010-1234-5678' })
+  @ApiProperty({ type: String, example: '010-1234-5678' })
   @IsString()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @Matches(PHONE_PATTERN, {

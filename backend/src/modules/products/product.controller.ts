@@ -8,11 +8,14 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiArrayOrCursorPage } from '../../common/pagination/cursor-page.swagger';
 import { ProductService } from './product.service';
 import { ProductQueryDto } from './dto/product-query.dto';
 import { WeatherBasedRequestDto } from './dto/weather-based-request.dto';
 import { WeatherProductsResponseDto } from './dto/weather-products-response.dto';
+import { ProductDto } from './dto/product.dto';
+import { ProductPageDto } from './dto/product-page.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../../common/strategies/jwt.strategy';
@@ -31,6 +34,7 @@ export class ProductController {
     summary: '제품 카탈로그 목록',
     description: '제품 카탈로그. category(moisture/elasticity/brightening/barrier) 필터 가능.',
   })
+  @ApiArrayOrCursorPage(ProductDto, ProductPageDto)
   async list(@Query() query: ProductQueryDto) {
     return this.productService.list(query.category, {
       limit: query.limit,
@@ -48,6 +52,7 @@ export class ProductController {
   })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ type: WeatherProductsResponseDto })
   @HttpCode(200)
   async weatherBased(
     @CurrentUser() user: JwtPayload,

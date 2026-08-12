@@ -7,7 +7,7 @@ import {
   Sse,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Observable, interval, map, startWith, switchMap, takeWhile } from 'rxjs';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -32,6 +32,7 @@ export class JobController {
     description:
       'PENDING → COMPLETED/FAILED. COMPLETED면 result, FAILED면 error를 포함한다. 본인 job만 조회 가능.',
   })
+  @ApiOkResponse({ type: JobResponseDto })
   async getById(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,

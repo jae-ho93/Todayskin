@@ -1,6 +1,11 @@
 
 import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
-import { ApiOperation, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
+import {
+  ApiOkResponse,
+  ApiOperation,
+  ApiPropertyOptional,
+  ApiTags,
+} from '@nestjs/swagger';
 import { IsNumber, IsOptional, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 import { WeatherService } from './weather.service';
@@ -43,6 +48,7 @@ export class WeatherController {
     description:
       '기상청 자외선 + 에어코리아 대기오염 결합 스냅샷. lat/lon이 있으면 근접 지역, 없으면 기본 지역. 각 지표는 API 실패 시 null(측정 불가)로 응답한다.',
   })
+  @ApiOkResponse({ type: WeatherSnapshotDto })
   async getCurrentWeather(
     @Query() query: WeatherQueryDto,
   ): Promise<WeatherSnapshotDto> {

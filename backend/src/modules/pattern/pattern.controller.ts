@@ -1,5 +1,11 @@
 import { Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiAcceptedResponse,
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { PatternService } from './pattern.service';
 import { PatternSummaryDto } from './dto/pattern-summary.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -33,6 +39,7 @@ export class PatternController {
   })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ type: PatternSummaryDto })
   async getPattern(@CurrentUser() user: JwtPayload): Promise<PatternSummaryDto> {
     return this.patternService.getPattern(user.sub);
   }
@@ -45,6 +52,7 @@ export class PatternController {
   })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
+  @ApiAcceptedResponse({ type: EnqueueJobResponseDto })
   @HttpCode(202)
   async analyzeAsync(
     @CurrentUser() user: JwtPayload,
