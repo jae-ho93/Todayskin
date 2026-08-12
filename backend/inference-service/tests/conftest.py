@@ -74,6 +74,24 @@ def _install_stubs() -> None:
     part_mapping_mod.map_to_app_schema = map_to_app_schema
     sys.modules["part_mapping"] = part_mapping_mod
 
+    # N49: quality도 cv2/numpy 의존이라 stub한다. 계약 테스트에서는
+    # quality_issue 전역으로 판정 결과를 주입하고, 실제 판정 로직은
+    # test_quality.py가 real module로 검증한다.
+    quality_mod = types.ModuleType("quality")
+    quality_mod.quality_issue = None
+
+    class QualityIssue:
+        def __init__(self, code: str, message: str) -> None:
+            self.code = code
+            self.message = message
+
+    def evaluate_quality(image_bytes: bytes):
+        return quality_mod.quality_issue
+
+    quality_mod.QualityIssue = QualityIssue
+    quality_mod.evaluate_quality = evaluate_quality
+    sys.modules["quality"] = quality_mod
+
 
 _install_stubs()
 
@@ -84,6 +102,8 @@ import main  # noqa: E402  (stub 설치 후 import)
 def client():
     os.environ["INFERENCE_SHARED_SECRET"] = TEST_SECRET
     os.environ.pop("INFERENCE_CONCURRENCY", None)
+    # N49: 이전 테스트가 주입한 품질 판정을 초기화한다.
+    sys.modules["quality"].quality_issue = None
     from fastapi.testclient import TestClient
 
     with TestClient(main.app) as c:

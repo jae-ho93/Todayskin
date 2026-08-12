@@ -7,6 +7,7 @@ import {
   BadRequestException,
   ConflictException,
   ServiceUnavailableException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { notDeletedWhere } from '../../common/soft-delete/soft-delete.policy';
@@ -24,6 +25,7 @@ import {
   INFERENCE_PROVIDER,
 } from './providers/inference-provider.interface';
 import type { InferenceProvider } from './providers/inference-provider.interface';
+import { InferenceRejectedError } from './providers/python-inference.provider';
 import { WeatherService } from '../weather/weather.service';
 import { ConsentService } from '../consent/consent.service';
 import { IdempotencyService } from '../idempotency/idempotency.service';
@@ -101,6 +103,18 @@ const ALLOWED_PARTS = new Set([
   'lips',
   'jaw',
 ]);
+
+/**
+ * N49: 품질 게이트 사유 코드별 사용자 안내 카피.
+ * FastAPI의 내부 메시지 대신 서비스 톤에 맞는 카피로 응답한다.
+ * 목록에 없는 코드는 provider가 전달한 메시지를 그대로 쓴다.
+ */
+const QUALITY_REJECTION_COPY: Record<string, string> = {
+  TOO_DARK: '사진이 너무 어두워요. 밝은 곳에서 다시 촬영해주세요.',
+  BLURRY: '사진이 흔들렸어요. 초점을 맞춰 다시 촬영해주세요.',
+  TOO_SMALL: '사진 해상도가 너무 낮아요. 카메라로 다시 촬영해주세요.',
+  NO_FACE: '사진에서 얼굴을 찾지 못했어요. 얼굴이 잘 보이게 다시 촬영해주세요.',
+};
 
 /**
  * DiagnosisService — 진단 도메인 비즈니스 로직.
@@ -235,10 +249,19 @@ export class DiagnosisService {
     opts?: { lat?: number; lon?: number; wentOutside?: boolean },
   ): Promise<SkinScoreSnapshotDto> {
     // 4. 추론. Provider 실패(실제 서버 장애)는 503으로 전파.
+    //    N49: 품질 게이트 거부(422)는 서버 장애가 아니라 입력 문제 —
+    //    사유 코드와 함께 422로 전달해 FE가 재촬영 안내를 띄우게 한다.
     let inference;
     try {
       inference = await this.inferenceProvider.infer(images);
     } catch (e) {
+      if (e instanceof InferenceRejectedError) {
+        throw new UnprocessableEntityException({
+          message: QUALITY_REJECTION_COPY[e.code] ?? e.message,
+          error: 'Unprocessable Entity',
+          code: e.code,
+        });
+      }
       this.logger.warn(`Inference failed: ${e instanceof Error ? e.message : String(e)}`);
       throw new ServiceUnavailableException(
         '진단 추론을 수행할 수 없어요. 잠시 후 다시 시도해주세요.',

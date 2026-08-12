@@ -164,6 +164,38 @@ async function authFetch<T>(path: string, timeoutMs?: number): Promise<FetchResu
   }
 }
 
+/** N49/F78: 품질 게이트 사유 코드. 서버 body.code로 내려온다. */
+export type DiagnosisQualityCode = 'TOO_DARK' | 'BLURRY' | 'TOO_SMALL' | 'NO_FACE';
+
+const QUALITY_CODES: ReadonlySet<string> = new Set([
+  'TOO_DARK',
+  'BLURRY',
+  'TOO_SMALL',
+  'NO_FACE',
+]);
+
+/**
+ * N49/F78: 사진 품질 미달로 서버가 분석을 거부(422)한 경우.
+ * 일반 오류와 달리 "다시 시도"가 아니라 "다시 촬영"을 안내해야 한다.
+ */
+export class DiagnosisQualityError extends Error {
+  constructor(
+    public readonly code: DiagnosisQualityCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'DiagnosisQualityError';
+  }
+}
+
+function extractQualityCode(data: unknown): DiagnosisQualityCode | null {
+  const code = (data as { code?: unknown } | null)?.code;
+  if (typeof code === 'string' && QUALITY_CODES.has(code)) {
+    return code as DiagnosisQualityCode;
+  }
+  return null;
+}
+
 function extractErrorMessage(data: unknown, status: number): string {
   const detail = (data as { detail?: unknown } | null)?.detail;
   if (typeof detail === 'string') return detail;
@@ -325,7 +357,16 @@ export const api = {
       throw e;
     }
     const data = await res.json().catch(() => null);
-    if (!res.ok) throw new Error(extractErrorMessage(data, res.status));
+    if (!res.ok) {
+      // N49/F78: 품질 게이트 거부(422 + code)는 재촬영 안내 UI로 분기한다.
+      if (res.status === 422) {
+        const code = extractQualityCode(data);
+        if (code) {
+          throw new DiagnosisQualityError(code, extractErrorMessage(data, res.status));
+        }
+      }
+      throw new Error(extractErrorMessage(data, res.status));
+    }
     return data as SkinScoreSnapshot;
   },
   // 기존 추천 (동기 생성 — F1에서 제거 예정)

@@ -2607,6 +2607,13 @@ export interface operations {
                     "application/json": components["schemas"]["SkinScoreSnapshotDto"];
                 };
             };
+            /** @description N49: 사진 품질 미달 또는 얼굴 미인식 — body.code(TOO_DARK/BLURRY/TOO_SMALL/NO_FACE)로 재촬영 안내를 분기한다 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     DiagnosisController_remove: {

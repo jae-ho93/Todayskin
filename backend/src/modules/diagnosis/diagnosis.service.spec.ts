@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   NotFoundException,
   ServiceUnavailableException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { DiagnosisService } from './diagnosis.service';
 import {
@@ -12,6 +13,7 @@ import {
   InferenceImages,
   InferenceResult,
 } from './providers/inference-provider.interface';
+import { InferenceRejectedError } from './providers/python-inference.provider';
 import { WeatherService } from '../weather/weather.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ConsentService } from '../consent/consent.service';
@@ -228,6 +230,41 @@ describe('DiagnosisService', () => {
     it('InferenceProvider 실패 시 503', async () => {
       inferenceProvider.infer.mockRejectedValue(new Error('server down'));
       await expect(service.submit(1, validImages)).rejects.toThrow(ServiceUnavailableException);
+    });
+
+    it('N49: 품질 게이트 거부는 503이 아니라 422 + 사유 코드다', async () => {
+      inferenceProvider.infer.mockRejectedValue(
+        new InferenceRejectedError('TOO_DARK', '사진이 너무 어둡습니다'),
+      );
+      const error = await service
+        .submit(1, validImages)
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(UnprocessableEntityException);
+      const body = (error as UnprocessableEntityException).getResponse() as {
+        code?: string;
+        message?: string;
+      };
+      expect(body.code).toBe('TOO_DARK');
+      // 서비스 카피로 교체된다 (FastAPI 내부 메시지 그대로 노출하지 않음).
+      expect(body.message).toContain('어두워요');
+    });
+
+    it('N49: 알 수 없는 거부 코드는 provider 메시지를 그대로 쓴다', async () => {
+      inferenceProvider.infer.mockRejectedValue(
+        new InferenceRejectedError('REJECTED', '이미지를 분석할 수 없습니다'),
+      );
+      const error = await service
+        .submit(1, validImages)
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(UnprocessableEntityException);
+      const body = (error as UnprocessableEntityException).getResponse() as {
+        code?: string;
+        message?: string;
+      };
+      expect(body.code).toBe('REJECTED');
+      expect(body.message).toBe('이미지를 분석할 수 없습니다');
     });
 
     it('N14: 동시 진단 요청(in-flight 예약)은 409 Conflict', async () => {

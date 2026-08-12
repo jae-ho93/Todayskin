@@ -16,6 +16,7 @@ import {
   ApiBearerAuth,
   ApiConsumes,
   ApiCreatedResponse,
+  ApiUnprocessableEntityResponse,
   ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
@@ -125,6 +126,10 @@ export class DiagnosisController {
     }),
   )
   @ApiCreatedResponse({ type: SkinScoreSnapshotDto })
+  @ApiUnprocessableEntityResponse({
+    description:
+      'N49: 사진 품질 미달 또는 얼굴 미인식 — body.code(TOO_DARK/BLURRY/TOO_SMALL/NO_FACE)로 재촬영 안내를 분기한다',
+  })
   @HttpCode(201)
   async submit(
     @CurrentUser() user: JwtPayload,

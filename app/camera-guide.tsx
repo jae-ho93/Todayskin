@@ -5,7 +5,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { api } from '../src/api/client';
+import { api, DiagnosisQualityError } from '../src/api/client';
+import type { DiagnosisQualityCode } from '../src/api/client';
 import { useToast } from '../src/components/Toast';
 import { useUserLocation } from '../src/hooks/useUserLocation';
 import { prepareUploadImage } from '../src/lib/upload-image';
@@ -21,6 +22,33 @@ const TIPS = [
   { icon: 'cut-outline' as const, text: '앞머리를 넘겨 이마가 보이게 촬영해주세요' },
 ];
 
+// F78: 품질 게이트(N49) 사유 코드별 재촬영 안내.
+const QUALITY_GUIDE: Record<
+  DiagnosisQualityCode,
+  { icon: keyof typeof Ionicons.glyphMap; title: string; tip: string }
+> = {
+  TOO_DARK: {
+    icon: 'sunny-outline',
+    title: '사진이 너무 어두워요',
+    tip: '조명을 켜거나 밝은 곳으로 이동한 뒤 다시 촬영해주세요.',
+  },
+  BLURRY: {
+    icon: 'scan-outline',
+    title: '사진이 흔들렸어요',
+    tip: '휴대폰을 고정하고, 초점이 얼굴에 맞은 걸 확인한 뒤 촬영해주세요.',
+  },
+  TOO_SMALL: {
+    icon: 'image-outline',
+    title: '사진 해상도가 낮아요',
+    tip: '저장된 사진 대신 카메라로 직접 촬영하면 해상도가 충분해요.',
+  },
+  NO_FACE: {
+    icon: 'person-outline',
+    title: '얼굴을 찾지 못했어요',
+    tip: '가이드 선 안에 얼굴 전체가 들어오게 정면을 응시해주세요.',
+  },
+};
+
 // 화면 3: 얼굴 촬영 가이드
 export default function CameraGuideScreen() {
   // F31: 닫기(X) 버튼이 상태바(다이나믹 아일랜드·배터리)와 겹치지 않도록 상단 인셋을 명시적으로 확보한다.
@@ -29,6 +57,8 @@ export default function CameraGuideScreen() {
   const [phase, setPhase] = useState<'intro' | 'capture' | 'analyzing'>('intro');
   const [permission, requestPermission] = useCameraPermissions();
   const [error, setError] = useState<string | null>(null);
+  // F78: 품질 게이트 거부(422 + code) — 사유별 재촬영 안내 모달로 보여준다.
+  const [qualityIssue, setQualityIssue] = useState<DiagnosisQualityCode | null>(null);
   const [wentOutside, setWentOutside] = useState<boolean | null>(null);
   const cameraRef = useRef<CameraView>(null);
   const { coords } = useUserLocation();
@@ -126,6 +156,12 @@ export default function CameraGuideScreen() {
       });
       router.replace('/diagnosis-result');
     } catch (e) {
+      if (e instanceof DiagnosisQualityError) {
+        // F78: "다시 시도"가 아니라 "다시 촬영"이 필요한 오류 — 사유별 안내로 분기.
+        setQualityIssue(e.code);
+        setPhase(originPhase);
+        return;
+      }
       setError(e instanceof Error ? e.message : '분석 결과를 저장하지 못했어요. 다시 시도해주세요.');
       setPhase(originPhase);
     }
@@ -155,6 +191,50 @@ export default function CameraGuideScreen() {
     const asset = result.assets[0];
     await submitPhoto({ uri: asset.uri, width: asset.width, height: asset.height });
   };
+
+  // F78: 품질 게이트 재촬영 안내 — intro/capture 어느 화면에서 실패했든 띄운다.
+  const qualityModal = qualityIssue !== null && (
+    <Modal
+      visible
+      transparent
+      animationType="fade"
+      onRequestClose={() => setQualityIssue(null)}
+    >
+      <View style={styles.consentOverlay}>
+        <View style={styles.consentCard}>
+          <View style={styles.qualityIconWrap}>
+            <Ionicons
+              name={QUALITY_GUIDE[qualityIssue].icon}
+              size={32}
+              color={colors.sageDark}
+            />
+          </View>
+          <Text style={styles.consentTitle}>{QUALITY_GUIDE[qualityIssue].title}</Text>
+          <Text style={styles.consentBody}>{QUALITY_GUIDE[qualityIssue].tip}</Text>
+          <Pressable
+            onPress={() => {
+              setQualityIssue(null);
+              setError(null);
+              setPhase('capture');
+            }}
+            style={styles.consentCta}
+          >
+            <Text style={styles.consentCtaText}>다시 촬영하기</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              setQualityIssue(null);
+              setError(null);
+              void handlePickFromLibrary();
+            }}
+            style={styles.consentLater}
+          >
+            <Text style={styles.consentLaterText}>사진첩에서 다시 선택하기</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
 
   if (phase === 'intro') {
     return (
@@ -309,6 +389,7 @@ export default function CameraGuideScreen() {
           </View>
         </View>
       </Modal>
+      {qualityModal}
     </>
   );
   }
@@ -346,6 +427,7 @@ export default function CameraGuideScreen() {
 
   return (
     <View style={styles.flex}>
+      {qualityModal}
       <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="front" />
 
       {/* 얼굴 윤곽 오버레이 */}
@@ -532,6 +614,17 @@ const styles = StyleSheet.create({
   consentCtaText: { ...typography.headline, color: colors.textInverse },
   consentLater: { alignItems: 'center', paddingVertical: spacing.sm },
   consentLaterText: { ...typography.bodySm, color: colors.textSecondary },
+
+  // F78: 품질 게이트 재촬영 안내 모달
+  qualityIconWrap: {
+    alignSelf: 'center',
+    width: 64,
+    height: 64,
+    borderRadius: radius.full,
+    backgroundColor: colors.sageLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   // 카메라 촬영 화면
   overlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
