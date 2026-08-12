@@ -237,6 +237,10 @@ model Diagnosis {
   // N8: MediaPipe 얼굴 랜드마크(정규화 좌표). 조회는 저장 동의 시에만 노출.
   // shape: { version: string, points: number[][] } — points는 [[x,y], ...].
   landmarks          Json?
+  // 신규(검증 단계): YOLO 여드름 구역 리포트 텍스트. 바운딩 박스 없이 한글 문장만.
+  acneReport         String?         @map("acne_report")
+  // 신규(검증 단계): 5클래스(건선/아토피/주사/지루/정상) 질환 분류. shape: { label, confidence }.
+  diseaseClassification Json?        @map("disease_classification")
   createdAt          DateTime        @default(now()) @map("created_at")
   deletedAt          DateTime?       @map("deleted_at")
   purgeAfter         DateTime?       @map("purge_after")

@@ -48,12 +48,22 @@ export interface SkinPartMetric {
   note?: string;
 }
 
+// 5클래스(건선/아토피/주사/지루/정상) 질환 분류. confidence: 0-1.
+export interface DiseaseClassification {
+  label: string;
+  confidence: number;
+}
+
 export interface SkinScoreSnapshot {
   id: string;
   capturedAt: string; // ISO timestamp
   overallScore: number; // 0-100 종합 점수
   thumbnailUri?: string;
   parts: SkinPartMetric[];
+  // 신규(검증 단계): YOLO 여드름 구역 리포트(텍스트) + 5클래스 질환 분류.
+  // 둘 다 없을 수 있다 -- 없으면 UI에서 해당 패널을 숨긴다.
+  acneReport?: string | null;
+  diseaseClassification?: DiseaseClassification | null;
 }
 
 export type RecommendationTiming = '외출 후' | '자기 전' | '언제든';

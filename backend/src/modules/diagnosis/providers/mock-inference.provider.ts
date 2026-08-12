@@ -45,6 +45,9 @@ export class MockInferenceProvider implements InferenceProvider {
           [0.55, 0.7],
         ],
       },
+      // 신규(검증 단계): YOLO 여드름 구역 리포트 + 5클래스 질환 분류 목업값.
+      acneReport: '이마에 비염증성 여드름 1개, 염증성 여드름 1개가 있습니다.',
+      diseaseClassification: { label: '정상', confidence: 0.98 },
     };
   }
 }

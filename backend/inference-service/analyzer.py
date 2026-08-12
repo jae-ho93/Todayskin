@@ -15,7 +15,9 @@ import torch
 from PIL import Image
 from torchvision import transforms
 
+from acne_detector import AcneDetector
 from crop import crop_facepart, load_templates
+from disease_classifier import DiseaseClassifier
 from landmarks import FaceLandmarkDetector
 from model import SkinModel
 from normalize import compute_normalization, warp_image
@@ -66,6 +68,14 @@ class SkinAnalyzer:
         self.templates = load_templates()
         self.detector = FaceLandmarkDetector()
 
+        # 신규: YOLO 여드름 탐지기 + 5클래스(건선/아토피/주사/지루/정상) 질환 분류기.
+        # 둘 다 원본 업로드 이미지에 그대로 돈다(9부위 등급 모델의 warp 캔버스가 아님) --
+        # 두 모델 다 AI Hub 원본 사진으로 학습됐지 우리 자체 정규화 파이프라인을 거치지 않았다.
+        self.acne_detector = AcneDetector(assets_dir / "acne_yolov8n.pt")
+        self.disease_classifier = DiseaseClassifier(
+            assets_dir / "disease_classifier.pt", assets_dir / "disease_classes.json",
+            device=self.device)
+
     def close(self):
         self.detector.close()
 
@@ -112,6 +122,10 @@ class SkinAnalyzer:
         for part_name, score in scores["parts"].items():
             results[part_name]["score"] = score
 
+        # 신규 모델 2종: 원본(워프 전) 이미지 + 원본 좌표계 랜드마크로 그대로 추론한다.
+        acne_result = self.acne_detector.analyze(img, pts)
+        disease_result = self.disease_classifier.classify(img)
+
         # N8/F36: 원본 이미지 기준 0~1 정규화 좌표의 얼굴 랜드마크(478점).
         # 프론트는 원본 사진 위에 viewBox 0 0 1 1로 오버레이하므로, 워프 캔버스(800x900)
         # 좌표가 아니라 원본 픽셀을 이미지 크기로 나눈 0~1 값으로 저장해야 정렬된다.
@@ -124,4 +138,6 @@ class SkinAnalyzer:
                 "version": "mediapipe-face-landmarker-v1",
                 "points": landmarks_points,
             },
+            "acne_report": acne_result,
+            "disease_classification": disease_result,
         }

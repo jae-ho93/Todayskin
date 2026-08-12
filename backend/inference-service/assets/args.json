@@ -1,12 +1,12 @@
 {
-  "backbone_name": "mobilenet_v3_large",
-  "run_name": "mobilenet_v3_large",
+  "backbone_name": "efficientnet_b0",
+  "run_name": "efficientnet_b0",
   "train_devices": "all",
   "eval_devices": "all",
   "dev_fraction": 0.1,
   "epochs": 25,
-  "batch_size": 64,
-  "lr": 0.0005,
+  "batch_size": 48,
+  "lr": 0.0004,
   "backbone_lr_mult": 0.1,
   "weight_decay": 0.0001,
   "reg_loss_weight": 2.0,
@@ -16,6 +16,6 @@
   "dropout": 0.3,
   "label_smoothing": 0.1,
   "freeze_epochs": 2,
-  "warmup_freeze_layers": 17,
-  "finetune_freeze_layers": 14
+  "warmup_freeze_layers": 9,
+  "finetune_freeze_layers": 7
 }

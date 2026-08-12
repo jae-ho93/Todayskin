@@ -3,7 +3,10 @@ import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  LayoutChangeEvent,
   Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -58,6 +61,9 @@ export default function DiagnosisResultScreen() {
   const [selectedPart, setSelectedPart] = useState<SkinPartMetric | null>(null);
   const [series, setSeries] = useState<ScoreSeries | null>(null);
   const [recommendations, setRecommendations] = useState<CalendarRecommendation[]>([]);
+  // 얼굴 일러스트 ↔ 여드름/질환 분석 리포트 스와이프 페이지 상태.
+  const [pageWidth, setPageWidth] = useState(0);
+  const [activePage, setActivePage] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,6 +123,17 @@ export default function DiagnosisResultScreen() {
 
   const grade = overallGrade(skinScore.overallScore);
   const gradeColor = gradeToColor(grade);
+  const hasExtraReport = Boolean(skinScore.acneReport || skinScore.diseaseClassification);
+
+  function onFacePageLayout(e: LayoutChangeEvent) {
+    setPageWidth(e.nativeEvent.layout.width);
+  }
+
+  function onFacePageScrollEnd(e: NativeSyntheticEvent<NativeScrollEvent>) {
+    if (!pageWidth) return;
+    const page = Math.round(e.nativeEvent.contentOffset.x / pageWidth);
+    setActivePage(page);
+  }
 
   return (
     <View style={styles.flex}>
@@ -152,26 +169,90 @@ export default function DiagnosisResultScreen() {
           )}
         </View>
 
-        <View style={styles.faceWrap}>
-          <FaceIllustration gender={gender} />
-          {skinScore.parts.map((p) => {
-            const pos = FACE_PART_PIN_POSITION[p.part];
-            if (!pos) return null;
-            const color = gradeToColor(p.grade);
-            return (
-              <Pressable
-                key={p.part}
-                onPress={() => setSelectedPart(p)}
-                hitSlop={10}
-                style={[
-                  styles.pin,
-                  { left: `${pos.xPct}%`, top: `${pos.yPct}%`, backgroundColor: color },
-                ]}
-              />
-            );
-          })}
-        </View>
-        <Text style={styles.faceHint}>표시를 눌러 부위별 상세 정보를 확인하세요</Text>
+        {hasExtraReport ? (
+          <View onLayout={onFacePageLayout}>
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={onFacePageScrollEnd}
+            >
+              <View style={[styles.facePage, { width: pageWidth || undefined }]}>
+                <View style={styles.faceWrap}>
+                  <FaceIllustration gender={gender} />
+                  {skinScore.parts.map((p) => {
+                    const pos = FACE_PART_PIN_POSITION[p.part];
+                    if (!pos) return null;
+                    const color = gradeToColor(p.grade);
+                    return (
+                      <Pressable
+                        key={p.part}
+                        onPress={() => setSelectedPart(p)}
+                        hitSlop={10}
+                        style={[
+                          styles.pin,
+                          { left: `${pos.xPct}%`, top: `${pos.yPct}%`, backgroundColor: color },
+                        ]}
+                      />
+                    );
+                  })}
+                </View>
+                <Text style={styles.faceHint}>표시를 눌러 부위별 상세 정보를 확인하세요</Text>
+              </View>
+
+              <View style={[styles.facePage, { width: pageWidth || undefined }]}>
+                <View style={styles.reportCard}>
+                  <View style={styles.reportBetaBadge}>
+                    <Text style={styles.reportBetaBadgeText}>베타 · 검증 중인 분석</Text>
+                  </View>
+                  {skinScore.diseaseClassification && (
+                    <View style={styles.reportSection}>
+                      <Text style={styles.reportSectionTitle}>피부 질환 분류</Text>
+                      <Text style={styles.reportSectionBody}>
+                        {skinScore.diseaseClassification.label} (확신도{' '}
+                        {Math.round(skinScore.diseaseClassification.confidence * 100)}%)
+                      </Text>
+                    </View>
+                  )}
+                  {skinScore.acneReport && (
+                    <View style={styles.reportSection}>
+                      <Text style={styles.reportSectionTitle}>여드름 분석</Text>
+                      <Text style={styles.reportSectionBody}>{skinScore.acneReport}</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.faceHint}>← 옆으로 밀어 얼굴 보기로 돌아가기</Text>
+              </View>
+            </ScrollView>
+            <View style={styles.pageDots}>
+              <View style={[styles.pageDot, activePage === 0 && styles.pageDotActive]} />
+              <View style={[styles.pageDot, activePage === 1 && styles.pageDotActive]} />
+            </View>
+          </View>
+        ) : (
+          <>
+            <View style={styles.faceWrap}>
+              <FaceIllustration gender={gender} />
+              {skinScore.parts.map((p) => {
+                const pos = FACE_PART_PIN_POSITION[p.part];
+                if (!pos) return null;
+                const color = gradeToColor(p.grade);
+                return (
+                  <Pressable
+                    key={p.part}
+                    onPress={() => setSelectedPart(p)}
+                    hitSlop={10}
+                    style={[
+                      styles.pin,
+                      { left: `${pos.xPct}%`, top: `${pos.yPct}%`, backgroundColor: color },
+                    ]}
+                  />
+                );
+              })}
+            </View>
+            <Text style={styles.faceHint}>표시를 눌러 부위별 상세 정보를 확인하세요</Text>
+          </>
+        )}
 
         {/* 오늘의 추천 (F33) — 기록에 있던 추천을 결과에서 바로 보여준다 */}
         {recommendations.length > 0 && (
@@ -344,6 +425,34 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     textAlign: 'center',
   },
+
+  // 얼굴 일러스트 ↔ 여드름/질환 리포트 스와이프 페이지
+  facePage: { paddingHorizontal: spacing.lg, gap: spacing.sm },
+  pageDots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: spacing.xs },
+  pageDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.gray200 },
+  pageDotActive: { backgroundColor: colors.sage },
+  reportCard: {
+    width: '88%',
+    aspectRatio: 150 / 200,
+    alignSelf: 'center',
+    marginTop: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    gap: spacing.md,
+    ...shadow.card,
+  },
+  reportBetaBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.sage + '22',
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+  },
+  reportBetaBadgeText: { ...typography.caption, color: colors.sage, fontWeight: '700' },
+  reportSection: { gap: spacing.xs },
+  reportSectionTitle: { ...typography.bodySm, color: colors.textSecondary, fontWeight: '600' },
+  reportSectionBody: { ...typography.body, color: colors.textPrimary },
 
   // 오늘의 추천
   recSection: { gap: spacing.sm },

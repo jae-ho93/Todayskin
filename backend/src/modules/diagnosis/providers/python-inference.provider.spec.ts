@@ -34,7 +34,8 @@ describe('PythonInferenceProvider', () => {
     const provider = new PythonInferenceProvider('http://127.0.0.1:8000', 'test-shared-secret');
     const result = await provider.infer(images);
 
-    expect(result).toEqual(validResponse);
+    // acneReport/diseaseClassification: inference-service 응답에 없으면 null로 채워진다.
+    expect(result).toEqual({ ...validResponse, acneReport: null, diseaseClassification: null });
     expect(global.fetch).toHaveBeenCalledWith(
       'http://127.0.0.1:8000/infer',
       expect.objectContaining({
@@ -43,6 +44,23 @@ describe('PythonInferenceProvider', () => {
         headers: expect.objectContaining({ 'x-inference-key': 'test-shared-secret' }),
       }),
     );
+  });
+
+  it('acneReport/diseaseClassification이 있으면 그대로 통과', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ...validResponse,
+        acneReport: '이마에 비염증성 여드름 1개가 있습니다.',
+        diseaseClassification: { label: '정상', confidence: 0.98 },
+      }),
+    }) as unknown as typeof fetch;
+
+    const provider = new PythonInferenceProvider('http://127.0.0.1:8000', 'test-shared-secret');
+    const result = await provider.infer(images);
+
+    expect(result.acneReport).toBe('이마에 비염증성 여드름 1개가 있습니다.');
+    expect(result.diseaseClassification).toEqual({ label: '정상', confidence: 0.98 });
   });
 
   it('HTTP 오류 응답 시 예외', async () => {
