@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
-import { colors, typography } from '../theme';
+import { colors, MAX_FONT_SCALE, typography } from '../theme';
 
 interface CircularGaugeProps {
   value: number; // 0-100
@@ -48,8 +48,15 @@ export function CircularGauge({
         />
       </Svg>
       <View style={styles.center} pointerEvents="none">
-        <Text style={styles.value}>{Math.round(clamped)}</Text>
-        {label ? <Text style={styles.label}>{label}</Text> : null}
+        {/* F76: 고정 크기 원 안이라 OS 큰 글꼴에서 넘치지 않게 상한을 건다 */}
+        <Text style={styles.value} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+          {Math.round(clamped)}
+        </Text>
+        {label ? (
+          <Text style={styles.label} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+            {label}
+          </Text>
+        ) : null}
       </View>
     </View>
   );

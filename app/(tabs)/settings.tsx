@@ -27,7 +27,7 @@ import {
 } from '../../src/features/settings/reminder';
 import { useSkinReminder } from '../../src/features/settings/useSkinReminder';
 import { clearSession } from '../../src/lib/session';
-import { colors, radius, spacing, typography } from '../../src/theme';
+import { colors, MAX_FONT_SCALE, radius, spacing, typography } from '../../src/theme';
 import type { ConsentPurpose, User } from '../../src/types';
 
 function maskPhone(phone: string | null): string {
@@ -226,6 +226,7 @@ export default function SettingsScreen() {
                                 styles.reminderChipText,
                                 selected && styles.reminderChipTextSelected,
                               ]}
+                              maxFontSizeMultiplier={MAX_FONT_SCALE}
                             >
                               {formatReminderTime(option)}
                             </Text>

@@ -8,7 +8,7 @@ import {
   UV_LEVEL_COLOR,
   UV_LEVEL_LABEL,
 } from '../lib/air-status';
-import { colors, radius, spacing, typography } from '../theme';
+import { colors, MAX_FONT_SCALE, radius, spacing, typography } from '../theme';
 
 /**
  * F64: 자외선과 대기질은 등급 어휘가 다르다(낮음~위험 / 좋음~매우나쁨).
@@ -26,7 +26,12 @@ export function StatusBadge(props: StatusBadgeProps) {
     return (
       <View style={[styles.badge, styles.badgeUnavailable]}>
         <View style={[styles.dot, styles.dotUnavailable]} />
-        <Text style={[styles.text, styles.textUnavailable]}>{label} 측정 불가</Text>
+        <Text
+          style={[styles.text, styles.textUnavailable]}
+          maxFontSizeMultiplier={MAX_FONT_SCALE}
+        >
+          {label} 측정 불가
+        </Text>
       </View>
     );
   }
@@ -41,7 +46,7 @@ export function StatusBadge(props: StatusBadgeProps) {
   return (
     <View style={[styles.badge, { backgroundColor: background }]}>
       <View style={[styles.dot, { backgroundColor: color }]} />
-      <Text style={[styles.text, { color }]}>
+      <Text style={[styles.text, { color }]} maxFontSizeMultiplier={MAX_FONT_SCALE}>
         {label} {statusLabel}
       </Text>
     </View>

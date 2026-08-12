@@ -11,7 +11,7 @@ import { useToast } from '../../src/components/Toast';
 import { WeatherCard } from '../../src/components/WeatherCard';
 import { useHomeDashboard } from '../../src/features/home/useHomeDashboard';
 import { getSession } from '../../src/lib/session';
-import { colors, radius, shadow, spacing, typography } from '../../src/theme';
+import { colors, MAX_FONT_SCALE, radius, shadow, spacing, typography } from '../../src/theme';
 
 export default function HomeDashboard() {
   const [userName, setUserName] = useState<string | null>(null);
@@ -139,7 +139,10 @@ export default function HomeDashboard() {
         onPress={() => router.push('/camera-guide')}
       >
         <Ionicons name="camera-outline" size={20} color={colors.textInverse} />
-        <Text style={styles.fabText}>자기 전 세안 후 촬영하기</Text>
+        {/* F76: 화면 하단 고정 FAB — 큰 글꼴에서 홈 콘텐츠를 덮지 않게 상한을 건다 */}
+        <Text style={styles.fabText} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+          자기 전 세안 후 촬영하기
+        </Text>
       </Pressable>
     </View>
   );

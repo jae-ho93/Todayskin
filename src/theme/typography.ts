@@ -16,3 +16,10 @@ export const typography = {
   caption: { fontFamily: systemFont, fontSize: 11, fontWeight: '500' as const, lineHeight: 14 },
   badge: { fontFamily: systemFont, fontSize: 11, fontWeight: '700' as const, lineHeight: 14 },
 } as const;
+
+/**
+ * F76: OS 큰 글꼴 설정 대응 — 고정 크기 레이아웃(게이지·배지·칩·탭바 등) 안의
+ * 텍스트에 거는 확대 상한. 본문·안내 문구에는 걸지 않는다(접근성 유지).
+ * 사용: <Text maxFontSizeMultiplier={MAX_FONT_SCALE} …>
+ */
+export const MAX_FONT_SCALE = 1.3;
