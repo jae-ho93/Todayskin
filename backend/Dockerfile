@@ -39,6 +39,9 @@ RUN groupadd --system --gid 10001 appuser \
 # 운영 의존성 + 빌드 결과물 + Prisma client(migration 실행에 필요)
 # 소유권을 appuser로 맞춘다 — entrypoint 실행과 prisma engine 캐시 접근에 필요하다.
 COPY --from=prod-deps --chown=appuser:appuser /app/node_modules ./node_modules
+# N54: 생성된 Prisma client는 builder에서만 만들어진다(prod-deps는 --omit=dev라
+# generate 불가). 이것이 빠지면 부팅 즉시 MODULE_NOT_FOUND('.prisma/client/default').
+COPY --from=builder --chown=appuser:appuser /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=appuser:appuser /app/dist ./dist
 COPY --from=builder --chown=appuser:appuser /app/prisma ./prisma
 COPY --from=builder --chown=appuser:appuser /app/prisma.config.ts ./prisma.config.ts

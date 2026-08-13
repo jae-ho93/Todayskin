@@ -354,16 +354,97 @@ curl -X POST https://<api-host>/admin/products/cache/invalidate \
 - `GET /health/live` · `GET /health/ready` — N6에서 분리 완료 (ready는 DB/config 필수, Redis 선택)
 - inference: `GET /health`
 
+## 배포 당일 체크리스트 (N54)
+
+> AWS 계정·자격 증명이 준비된 날, 이 순서대로만 진행하면 된다.
+> 코드·이미지·문서는 로컬 검증까지 끝난 상태다(아래 "로컬 검증 결과" 참고).
+
+| # | 작업 | 확인 기준 | 예상 소요 |
+|---|------|-----------|-----------|
+| 1 | 인프라 프로비저닝 — VPC/subnet·SG(inference는 backend SG reference), ECR 2개, RDS(퍼블릭 접근 OFF), S3(SSE), CloudWatch 로그 그룹, Secrets Manager `todayskin/prod/*`, OIDC IAM role | 콘솔에서 리소스 생성 완료 | 2~3시간 |
+| 2 | GitHub 설정 — Secret `AWS_ROLE_ARN`, Variables(`AWS_REGION`·`ECR_*`·`ECS_*` 전부), `production` environment + required reviewer | Settings에서 값 확인 | 20분 |
+| 3 | Secrets Manager 값 입력 — `DATABASE_URL`·`REDIS_URL`·JWT 2종·`KMA/AIRKOREA/GEMINI` 키·`OCTOMO_API_KEY`·`S3_BUCKET`·`INFERENCE_SERVICE_URL`·`INFERENCE_SHARED_SECRET`·`ALLOWED_ORIGINS` | task definition의 `secrets[]` ARN과 일치 | 30분 |
+| 4 | task definition 4종의 `ACCOUNT_ID`/role ARN/secret ARN 치환 확인 | `backend/docker/ecs/*.json` | 15분 |
+| 5 | ECS cluster + service 생성 (backend는 public subnet + `assignPublicIp=ENABLED` + ALB, inference는 내부 전용) | 서비스 RUNNING | 1시간 |
+| 6 | `main`에 push → CI 통과 → Deploy ECS 워크플로 승인 | Actions에서 migrate → backend → inference 순 성공 | 20분 + 승인 |
+| 7 | 프로덕션 스모크 — `/health/live`·`/health/ready` 200, 실기기에서 OTP 로그인 → 측정 → 결과 1회 | ready의 dependencies 전부 up | 20분 |
+| 8 | (선택) `RETENTION_SWEEP_MODE=dry-run` 배포 후 로그 확인 | `retention_sweep` 로그 | 다음날 확인 |
+
+주의: 6에서 migrate가 실패하면 rollout이 자동 중단된다 — 원인 수정 커밋으로 재시도한다.
+7의 ready가 503이면 응답 본문의 `dependencies[]`에서 down인 항목이 원인이다(아래 런북).
+
+## 장애 런북 (1페이지)
+
+**증상 → 확인 순서 → 롤백 판단.** 로그는 CloudWatch `/ecs/todayskin-backend`(Pino JSON) 기준.
+
+### A. 배포 직후 태스크가 계속 재시작
+
+1. ECS 서비스 이벤트 → task stopped reason 확인
+2. `Config registry error:` 로그 → 필수 env/secret 누락 또는 production에서 mock flag true.
+   Secrets Manager 값·task definition `secrets[]`를 맞추고 재배포 (이미지 문제 아님)
+3. `MODULE_NOT_FOUND` 등 부팅 크래시 → 이미지 문제. **즉시 롤백** (아래 절차)
+4. OOM(exit 137) → task memory 상향 후 재배포
+
+### B. `/health/ready` 503 (live는 200)
+
+1. ready 응답 본문의 `dependencies[]`에서 down 항목 확인
+2. `database` down → RDS 상태·SG·`DATABASE_URL` 확인
+3. `migrations` down → migrate task 로그(`/ecs/todayskin-migrate`) 확인. diff 불일치면 스키마 커밋 누락
+4. `inference` down → inference 서비스 RUNNING 여부·SG reference·`INFERENCE_SERVICE_URL` 확인
+5. `octomo`/`required_config` down → 해당 secret 값 확인
+6. 5분 내 해소 불가 + 직전 버전은 정상이었다 → **롤백**
+
+### C. 5xx 급증 / 응답 지연
+
+1. CloudWatch에서 최근 배포 시각과 5xx 시작 시각 비교 — 배포 직후면 **롤백 우선, 원인 분석은 그 다음**
+2. 배포와 무관하면: RDS CPU/커넥션 → Redis → 정부 API 응답(날씨 캐시는 실패해도 앱은 동작) 순으로 확인
+3. 특정 엔드포인트만 느리면 Pino 로그의 `responseTime`으로 좁힌다
+
+### D. AI 분석만 실패 (측정이 안 됨)
+
+1. backend 로그에서 `/diagnosis` 오류 → inference 호출 실패인지 확인
+2. inference 태스크 로그 확인 — 모델 로드 실패·OOM(이미지는 CPU 추론, 메모리 여유 필요)
+3. inference만 롤백 가능 (`image_tag` 지정, `skip_migrate=true`)
+
+### 롤백 절차 (5분)
+
+1. Actions → **Deploy ECS Fargate** → Run workflow
+2. `image_tag` = 직전 정상 commit SHA · `skip_migrate` = `true`
+3. `production` 승인 → `services-stable` 대기
+4. 스키마가 원인이면: 되돌리는 **새 migration**을 포함한 커밋으로 정상 release (snapshot 복구는 최후 수단)
+
+**롤백 판단 기준**: 부팅 크래시·ready 실패·5xx 급증이 배포 직후 발생 = 즉시 롤백.
+env/secret 설정 문제 = 롤백 불필요(설정 수정 후 재배포). 데이터 정합성 의심 = 롤백 전에 RDS snapshot 먼저.
+
 ## 이미지 빌드 (수동)
 
 ```bash
-# NestJS
-docker build -t todayskin-backend:$(git rev-parse HEAD) -f backend/Dockerfile backend
+# NestJS — Fargate 타깃은 linux/amd64 (Apple Silicon에서는 --platform 필수)
+docker build --platform linux/amd64 \
+  -t todayskin-backend:$(git rev-parse HEAD) -f backend/Dockerfile backend
 
 # inference
-docker build -t todayskin-inference:$(git rev-parse HEAD) \
+docker build --platform linux/amd64 \
+  -t todayskin-inference:$(git rev-parse HEAD) \
   -f backend/inference-service/Dockerfile backend/inference-service
 ```
+
+### 로컬 검증 결과 (N54, 2026-08-13)
+
+자격 증명 없이 로컬에서 실측한 배포 준비 상태:
+
+- **이미지 빌드 성공** (`linux/amd64`): backend **206MB**, inference **710MB**
+- **프로덕션 부팅 스모크**: `NODE_ENV=production` + 필수 env(`DATABASE_URL`·JWT 2종·
+  `OCTOMO_API_KEY`·`S3_BUCKET`·`INFERENCE_SERVICE_URL`)로 컨테이너 기동 →
+  `/health/live` **200** · `/health/ready` **200** (dependencies: database·migrations(25)·
+  required_config·inference·octomo·redis 전부 up)
+- **env 검증 실측**: `INFERENCE_SERVICE_URL` 누락 시 ready 503 + 원인 명시,
+  `MOCK_INFERENCE=true`면 `Config registry error: mock flag must be false/empty in production`으로 부팅 거부
+- **inference 스모크**: 컨테이너 기동 10초 내 `/health` 200
+- **발견·수정한 버그**: 프로덕션 이미지에 생성된 Prisma client(`node_modules/.prisma`)가
+  누락되어 부팅 즉시 `MODULE_NOT_FOUND` — prod-deps 스테이지는 `--omit=dev`라 `prisma generate`가
+  불가능한데 runner가 그 node_modules만 복사했다. builder 스테이지의 `.prisma`를 함께 복사하도록
+  `backend/Dockerfile` 수정 (스모크 테스트가 아니었으면 **배포 당일에 발견됐을 버그**)
 
 ## 후속 작업
 
