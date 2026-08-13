@@ -13,6 +13,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { notDeletedWhere } from '../../common/soft-delete/soft-delete.policy';
 import { errorMessage } from '../../common/errors/error-name.util';
 import { metricsFromSnapshot } from '../weather/mappers/weather-snapshot.mapper';
+import { WeatherStatusPolicy } from '../weather/policies/weather-status.policy';
 import {
   buildCursorPage,
   CursorPageDto,
@@ -58,6 +59,23 @@ import { Diagnosis, DiagnosisStatus, Prisma, SkinMetric, WeatherSnapshot } from 
 import { randomUUID } from 'node:crypto';
 import { DEFAULT_PRESIGN_EXPIRES_SECONDS } from '../storage/image-storage.service';
 import type { PresignedImage } from '../storage/image-storage.service';
+
+/** N55: 지역 하루치 대기질 최댓값 — getAirPeaksByRegion의 반환 단위. */
+interface AirPeaks {
+  pm10Peak: number | null;
+  pm25Peak: number | null;
+  ozonePeak: number | null;
+}
+
+/** null/undefined-안전 max. pattern.service.ts의 maxOr와 동일 로직. */
+function maxOrNull(
+  a: number | null | undefined,
+  b: number | null | undefined,
+): number | null {
+  if (a == null) return b ?? null;
+  if (b == null) return a;
+  return Math.max(a, b);
+}
 
 type CalendarDiagnosisRow = Prisma.DiagnosisGetPayload<{
   include: {
@@ -135,6 +153,9 @@ const QUALITY_REJECTION_COPY: Record<string, string> = {
 @Injectable()
 export class DiagnosisService {
   private readonly logger = new Logger(DiagnosisService.name);
+  // weather.service.ts와 동일하게 직접 인스턴스화한다 — 순수 계산 클래스라 DI 프로바이더로
+  // 등록돼 있지 않다.
+  private readonly statusPolicy = new WeatherStatusPolicy();
 
   /** 동일 사용자의 최근 진단 제출 간 중복 요청 방지 윈도(초). */
   private static readonly DEDUP_WINDOW_SECONDS = 60;
@@ -507,11 +528,29 @@ export class DiagnosisService {
       ? await this.presignCalendarImages(diagnoses)
       : new Map<string, PresignedImage>();
 
+    // N55: 대기질(미세먼지·초미세먼지·오존)의 "오늘 최고"는 이 날 하루 동안 쌓인
+    // WeatherSnapshot 전체의 최댓값으로 근사한다(pattern.service.ts의 collectDailyPeaks와
+    // 같은 이유 — 실시간 관측이라 한 번의 조회로는 하루치 최고를 알 수 없다).
+    // 진단마다 다시 조회하지 않도록 지역별로 한 번에 배치 조회한다.
+    const regionNames = [
+      ...new Set(
+        diagnoses
+          .map((d) => d.weatherSnapshot?.regionName)
+          .filter((r): r is string => !!r),
+      ),
+    ];
+    const airPeaksByRegion = await this.getAirPeaksByRegion(
+      regionNames,
+      start,
+      endExclusive,
+    );
+
     const items = diagnoses.map((diagnosis) =>
       this.toCalendarDiagnosisDto(
         diagnosis,
         canViewMedia,
         signedByDiagnosisId.get(diagnosis.id) ?? null,
+        airPeaksByRegion,
       ),
     );
 
@@ -762,6 +801,7 @@ export class DiagnosisService {
     d: CalendarDiagnosisRow,
     canViewMedia: boolean,
     signedImage: PresignedImage | null,
+    airPeaksByRegion: Map<string, AirPeaks>,
   ): CalendarDiagnosisDto {
     const dto = new CalendarDiagnosisDto();
     dto.id = d.id;
@@ -771,7 +811,10 @@ export class DiagnosisService {
     dto.modelVersion = d.modelVersion;
     dto.parts = d.skinMetrics.map((m) => this.metricToDto(m));
     dto.weather = d.weatherSnapshot
-      ? this.toCalendarWeatherDto(d.weatherSnapshot)
+      ? this.toCalendarWeatherDto(
+          d.weatherSnapshot,
+          airPeaksByRegion.get(d.weatherSnapshot.regionName),
+        )
       : null;
     dto.wentOutside = d.wentOutside;
     dto.recommendations = d.recommendations.map((r) =>
@@ -804,7 +847,10 @@ export class DiagnosisService {
     return dto;
   }
 
-  private toCalendarWeatherDto(w: WeatherSnapshot): CalendarWeatherDto {
+  private toCalendarWeatherDto(
+    w: WeatherSnapshot,
+    airPeaks?: AirPeaks,
+  ): CalendarWeatherDto {
     const dto = new CalendarWeatherDto();
     dto.observedAt = w.observedAt.toISOString();
     dto.regionName = w.regionName;
@@ -815,7 +861,50 @@ export class DiagnosisService {
     dto.airCollectionFailed = w.airCollectionFailed;
     dto.nowcastCollectionFailed = w.nowcastCollectionFailed;
     // R22: 지표 16개 복사는 공용 매퍼가 한다.
-    return Object.assign(dto, metricsFromSnapshot(w));
+    Object.assign(dto, metricsFromSnapshot(w));
+
+    // N55: 배치 조회에 값이 없으면(예: 지역명 누락) 이 스냅샷 자체 값으로 폴백한다 —
+    // 최소한 uvIndexPeak와 같은 수준의 정보는 항상 보이게 한다.
+    dto.pm10Peak = airPeaks?.pm10Peak ?? w.pm10 ?? null;
+    dto.pm10StatusPeak = this.statusPolicy.pm10Status(dto.pm10Peak);
+    dto.pm25Peak = airPeaks?.pm25Peak ?? w.pm25 ?? null;
+    dto.pm25StatusPeak = this.statusPolicy.pm25Status(dto.pm25Peak);
+    dto.ozonePeak = airPeaks?.ozonePeak ?? w.ozonePpm ?? null;
+    dto.ozoneStatusPeak = this.statusPolicy.ozoneStatus(dto.ozonePeak);
+
+    return dto;
+  }
+
+  /**
+   * N55: (지역, [start, endExclusive) 범위) 안의 WeatherSnapshot 전체에서
+   * 미세먼지·초미세먼지·오존 최댓값을 지역별로 한 번에 뽑는다.
+   * pattern.service.ts의 collectDailyPeaks와 같은 배치 조회 전략(N+1 방지) —
+   * 진단 개수와 무관하게 쿼리 1회.
+   */
+  private async getAirPeaksByRegion(
+    regionNames: string[],
+    start: Date,
+    endExclusive: Date,
+  ): Promise<Map<string, AirPeaks>> {
+    const map = new Map<string, AirPeaks>();
+    if (regionNames.length === 0) return map;
+
+    const snapshots = await this.prisma.weatherSnapshot.findMany({
+      where: {
+        regionName: { in: regionNames },
+        observedAt: { gte: start, lt: endExclusive },
+      },
+      select: { regionName: true, pm10: true, pm25: true, ozonePpm: true },
+    });
+    for (const s of snapshots) {
+      const cur = map.get(s.regionName);
+      map.set(s.regionName, {
+        pm10Peak: maxOrNull(cur?.pm10Peak, s.pm10),
+        pm25Peak: maxOrNull(cur?.pm25Peak, s.pm25),
+        ozonePeak: maxOrNull(cur?.ozonePeak, s.ozonePpm),
+      });
+    }
+    return map;
   }
 
   private toCalendarRecommendationDto(r: {

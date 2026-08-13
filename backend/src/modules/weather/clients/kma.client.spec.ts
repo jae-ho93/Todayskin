@@ -202,3 +202,56 @@ describe('KmaClient.fetchNowcast (N53)', () => {
     expect(result.humidity).toBeNull();
   });
 });
+
+// ── N54: 자외선 "오늘 최고"가 이미 지난 시간대를 포함해야 한다 ──────────
+describe('KmaClient.fetchUvIndex (N54)', () => {
+  const config = (key: string) =>
+    ({ get: () => key }) as unknown as ConfigService;
+
+  const uvResponse = (item: Record<string, string>) => ({
+    ok: true,
+    json: async () => ({ response: { body: { items: { item } } } }),
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+  });
+
+  it('저녁에 조회해도 이미 지난 정오의 실제 최고치를 "오늘 최고"로 잡는다', async () => {
+    // UTC 12:00 = KST 21:00 — 예전 구현(3시간 전~자정만 스캔)이라면 정오(h12)를 놓친다.
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-13T12:00:00Z'));
+    global.fetch = jest.fn().mockResolvedValue(
+      uvResponse({
+        h0: '0',
+        h3: '1',
+        h6: '3',
+        h9: '7',
+        h12: '9', // 오늘의 실제 최고 — 이미 지난 시간대
+        h15: '6',
+        h18: '2',
+        h21: '1',
+      }),
+    ) as unknown as typeof fetch;
+
+    const client = new KmaClient(config('test-key'));
+    const result = await client.fetchUvIndex('area-1');
+
+    expect(result.peak).toBe(9);
+    expect(result.peakHour).toBe(12);
+    // "지금"(21시)에 가장 가까운 슬롯(h21)이 현재값이어야 한다.
+    expect(result.current).toBe(1);
+    expect(result.failed).toBe(false);
+  });
+
+  it('API 키가 없으면 호출 없이 빈 결과(failed=false)를 반환한다', async () => {
+    global.fetch = jest.fn() as unknown as typeof fetch;
+
+    const client = new KmaClient(config(''));
+    const result = await client.fetchUvIndex('area-1');
+
+    expect(result.failed).toBe(false);
+    expect(result.peak).toBeNull();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+});

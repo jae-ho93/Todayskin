@@ -109,6 +109,11 @@ describe('DiagnosisService', () => {
       recommendation: {
         deleteMany: jest.fn(),
       },
+      // N55: getAirPeaksByRegion 배치 조회. 기본은 빈 배열(대기질 최고값 없음) —
+      // 필요한 테스트에서만 개별적으로 mockResolvedValue를 덮어쓴다.
+      weatherSnapshot: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       $transaction: jest.fn(),
     };
     auditLog = { log: jest.fn().mockResolvedValue(undefined) };
@@ -639,6 +644,64 @@ describe('DiagnosisService', () => {
       expect(result.diagnoses[0].image).toBeNull();
       expect(result.diagnoses[0].landmarks).toBeNull();
       expect(imageStorage.presignImages).not.toHaveBeenCalled();
+    });
+
+    it('N55: 미세먼지·초미세먼지·오존은 이 스냅샷 값이 아니라 그날 지역 전체의 최댓값을 쓴다', async () => {
+      consentService.hasActive.mockResolvedValue(false);
+      prisma.diagnosis.findMany.mockResolvedValue([
+        {
+          id: 'snap-day',
+          userId: 1,
+          capturedAt: new Date('2026-08-05T16:30:00.000Z'),
+          overallScore: 81,
+          status: 'COMPLETED',
+          modelVersion: 'mock-v0.1.0',
+          landmarks: null,
+          skinMetrics: [],
+          weatherSnapshot: {
+            observedAt: new Date('2026-08-06T03:00:00.000Z'),
+            regionName: '서울특별시',
+            source: 'LIVE',
+            uvIndex: 5,
+            uvStatus: 'moderate',
+            uvIndexPeak: 7,
+            uvStatusPeak: 'bad',
+            uvIndexPeakHour: 14,
+            // 이 스냅샷 자체 값은 낮지만, 그날 다른 시각 스냅샷엔 더 높은 값이 있다.
+            ozonePpm: 0.02,
+            ozoneStatus: 'good',
+            pm25: 10,
+            pm25Status: 'good',
+            pm10: 15,
+            pm10Status: 'good',
+            caiValue: null,
+            caiStatus: null,
+            no2Value: null,
+            so2Value: null,
+            coValue: null,
+          },
+          recommendations: [],
+          image: { deletedAt: null },
+        },
+      ]);
+      // 같은 지역, 같은 날의 다른 수집 스냅샷들 — 오후에 대기질이 더 나빴던 경우.
+      prisma.weatherSnapshot.findMany.mockResolvedValue([
+        { regionName: '서울특별시', pm10: 15, pm25: 10, ozonePpm: 0.02 },
+        { regionName: '서울특별시', pm10: 90, pm25: 40, ozonePpm: 0.16 },
+        { regionName: '서울특별시', pm10: 60, pm25: 25, ozonePpm: 0.1 },
+      ]);
+
+      const result = await service.getHistoryByDate(1, '2026-08-06');
+      const weather = result.diagnoses[0].weather;
+
+      expect(weather?.pm10Peak).toBe(90);
+      expect(weather?.pm10StatusPeak).toBe('bad');
+      expect(weather?.pm25Peak).toBe(40);
+      expect(weather?.pm25StatusPeak).toBe('bad');
+      expect(weather?.ozonePeak).toBeCloseTo(0.16);
+      expect(weather?.ozoneStatusPeak).toBe('veryBad');
+      // 이 스냅샷 자체 값(낮음)은 여전히 그대로 남아있어야 한다 — peak는 별도 필드다.
+      expect(weather?.pm10).toBe(15);
     });
 
     it('N26: 저장 동의지만 이미지가 soft-deleted면 image·landmarks 모두 숨긴다 (이미지 없음)', async () => {

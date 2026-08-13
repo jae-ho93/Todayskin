@@ -498,8 +498,23 @@ export class WeatherService {
         orderBy: { collectedAt: 'desc' },
       });
       if (existing) {
-        this.logger.debug(`WeatherSnapshot reused: ${existing.id}`);
-        return existing;
+        // N54: 예전에는 기존 row를 그대로 반환했는데, UV가 "오늘 자정" 기준 고정
+        // observedAt을 쓰게 되면서(N54) UV가 더는 resolveObservedAt의 최신 후보가
+        // 아니게 됐다 — air/nowcast가 갱신되지 않는 동안은 같은 관측분 버킷이 계속
+        // 재사용되고, 그 사이 새로 계산된 uvIndexPeak(예: 하루 최고치 보정)가 영영
+        // row에 반영되지 못했다. 같은 관측 구간이면 row는 재사용하되(중복 생성 방지가
+        // 원래 목적), 지표 값은 이번에 새로 수집한 값으로 항상 갱신한다.
+        this.logger.debug(`WeatherSnapshot refreshed: ${existing.id}`);
+        return tx.weatherSnapshot.update({
+          where: { id: existing.id },
+          data: {
+            ...metricsFromCollected(c, this.policy),
+            uvCollectionFailed: c.uv.failed,
+            airCollectionFailed: c.air.failed,
+            nowcastCollectionFailed: c.nowcast.failed,
+            source,
+          },
+        });
       }
 
       return tx.weatherSnapshot.create({

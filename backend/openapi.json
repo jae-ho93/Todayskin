@@ -3260,6 +3260,14 @@
             "type": "string",
             "nullable": true
           },
+          "ozonePeak": {
+            "type": "number",
+            "nullable": true
+          },
+          "ozoneStatusPeak": {
+            "type": "string",
+            "nullable": true
+          },
           "pm25": {
             "type": "number",
             "nullable": true
@@ -3268,11 +3276,27 @@
             "type": "string",
             "nullable": true
           },
+          "pm25Peak": {
+            "type": "number",
+            "nullable": true
+          },
+          "pm25StatusPeak": {
+            "type": "string",
+            "nullable": true
+          },
           "pm10": {
             "type": "number",
             "nullable": true
           },
           "pm10Status": {
+            "type": "string",
+            "nullable": true
+          },
+          "pm10Peak": {
+            "type": "number",
+            "nullable": true
+          },
+          "pm10StatusPeak": {
             "type": "string",
             "nullable": true
           },

@@ -301,26 +301,35 @@ function WeatherCard({ weather: w, capturedAt }: { weather: CalendarWeather; cap
         </View>
       </View>
       <Text style={styles.weatherTime}>{formatCapturedDate(capturedAt)}</Text>
+      {/* 마이 히스토리 카드와 같은 값(오늘 최고 기준)을 보여준다 — 카드/상세가 서로
+          다른 숫자를 보여주면 안 되므로, 값이 없을 때만 그 시각 값으로 폴백한다. */}
       <View style={styles.weatherMetrics}>
         <WeatherMetric
           scale="uv"
           label="자외선"
-          value={w.uvIndex}
-          status={w.uvStatus}
+          value={w.uvIndexPeak ?? w.uvIndex}
+          status={w.uvStatusPeak ?? w.uvStatus}
           collectionFailed={w.uvCollectionFailed}
         />
         <WeatherMetric
           scale="air"
           label="초미세먼지"
-          value={w.pm25}
-          status={w.pm25Status}
+          value={w.pm25Peak ?? w.pm25}
+          status={w.pm25StatusPeak ?? w.pm25Status}
           collectionFailed={w.airCollectionFailed}
         />
         <WeatherMetric
           scale="air"
           label="미세먼지"
-          value={w.pm10}
-          status={w.pm10Status}
+          value={w.pm10Peak ?? w.pm10}
+          status={w.pm10StatusPeak ?? w.pm10Status}
+          collectionFailed={w.airCollectionFailed}
+        />
+        <WeatherMetric
+          scale="air"
+          label="오존"
+          value={w.ozonePeak ?? w.ozonePpm}
+          status={w.ozoneStatusPeak ?? w.ozoneStatus}
           collectionFailed={w.airCollectionFailed}
         />
       </View>

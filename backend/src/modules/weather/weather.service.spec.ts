@@ -32,6 +32,7 @@ describe('WeatherService', () => {
     weatherSnapshot: {
       findFirst: jest.Mock;
       create: jest.Mock;
+      update: jest.Mock;
       findUnique: jest.Mock;
     };
     $transaction: jest.Mock;
@@ -74,6 +75,7 @@ describe('WeatherService', () => {
       weatherSnapshot: {
         findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({ id: 'snap-1' }),
+        update: jest.fn().mockResolvedValue({ id: 'snap-1' }),
         findUnique: jest.fn(),
       },
       $transaction: jest.fn(),
@@ -579,14 +581,25 @@ describe('WeatherService', () => {
     expect(prisma.weatherSnapshot.create).not.toHaveBeenCalled();
   });
 
-  it('getOrCreateSnapshot은 dedup hit 시 기존 row를 반환한다', async () => {
-    kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 5 }));
+  it('getOrCreateSnapshot은 dedup hit 시 같은 row를 새로 수집한 값으로 갱신한다', async () => {
+    // N54: 예전엔 dedup hit이면 새로 수집한 값을 버리고 기존 row를 그대로
+    // 돌려줬다 — UV의 observedAt이 "오늘 자정" 고정이 되면서 그 창이 넓어져
+    // 최신 uvIndexPeak가 영영 반영되지 않는 버그로 이어졌다. 이제는 같은
+    // row(id)를 유지하되(중복 생성 방지) 지표는 항상 새로 수집한 값으로 덮어쓴다.
+    kmaClient.fetchUvIndex.mockResolvedValue(uv({ current: 5, peak: 9 }));
     airKoreaClient.fetchAirQuality.mockResolvedValue(air({ pm25: 12 }));
     prisma.weatherSnapshot.findFirst.mockResolvedValue({ id: 'existing' });
+    prisma.weatherSnapshot.update.mockResolvedValue({ id: 'existing', uvIndexPeak: 9 });
 
     const result = await service.getOrCreateSnapshot();
     expect(result?.id).toBe('existing');
     expect(prisma.weatherSnapshot.create).not.toHaveBeenCalled();
+    expect(prisma.weatherSnapshot.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'existing' },
+        data: expect.objectContaining({ uvIndex: 5, uvIndexPeak: 9 }),
+      }),
+    );
   });
 
   // ── T12 Redis 날씨 캐시 ──────────────────────────────

@@ -15,12 +15,15 @@ const KMA_NOWCAST_ENDPOINT =
 /** 한국 표준시(UTC+9) */
 const KST_OFFSET_MIN = 9 * 60;
 
+/** N54: 오늘(KST) 하루 전체를 커버하는 3시간 격자 슬롯. 자정을 기준으로 조회하므로
+ *  offset(h뒤 숫자)이 곧 KST 시각과 같다. */
+const TODAY_SLOT_HOURS = [0, 3, 6, 9, 12, 15, 18, 21] as const;
+
 export interface UvForecast {
   current: number | null;
   /**
-   * 응답에 담긴 오늘 슬롯 중 최댓값. 조회 기준(base)이 3시간 전이고 응답이 3시간
-   * 격자라, 오전에 지나간 시간대는 애초에 응답에 없다. 즉 "그날 24시간의 최댓값"이
-   * 아니라 "3시간 전부터 자정까지 중 최댓값"이다.
+   * N54: 오늘(KST) 00~21시 3시간 격자 예보 전체(h0~h21) 중 최댓값 — 이미 지나간
+   * 시간대도 포함한, 진짜 "그날 24시간(사실상 0~23시)의 최댓값"이다.
    */
   peak: number | null;
   /** 그 최댓값이 나오는 KST 시각(0~23시) */
@@ -96,11 +99,10 @@ function safeFloat(value: unknown): number | null {
  * 정부 API 호출 실패 시 목업값으로 채우지 않고 빈 UvForecast를 반환해
  * 상위에서 해당 지표를 측정 불가 상태로 처리한다.
  *
- * 응답에는 3시간 간격 미래 예보(h0~h75)가 전부 들어있어, 현재값과 함께
- * "오늘 남은 시간대 중 실제 최댓값"을 추가 호출 없이 같이 뽑는다.
- * 고정 시간대를 피크로 가정하면 이미 그 시간을 지났거나 실제 최고치가
- * 다른 시간대일 때 "피크가 현재보다 낮게" 나오는 모순이 생길 수 있어
- * 항상 오늘 남은 슬롯 전체를 스캔한다.
+ * N54: 오늘(KST) 자정을 기준으로 조회해 h0~h21(00~21시) 예보를 한 번에 받는다 —
+ * 예보 API라 이미 지난 시간대도 값이 남아있어, 추가 호출 없이 "지금과 가장 가까운
+ * 슬롯"과 "오늘 하루 전체 중 최댓값"을 둘 다 뽑는다. 자정 기준으로 조회를 고정하면
+ * 오후~저녁에 조회해도(N39 이전 버그처럼) 이미 지나간 정오의 실제 최고치를 놓치지 않는다.
  */
 @Injectable()
 export class KmaClient {
@@ -204,9 +206,15 @@ export class KmaClient {
   }
 
   private async fetchOnce(areaNo: string): Promise<UvForecastWithTime> {
-    // 이 시각의 발표자료가 아직 없을 수 있어 3시간 전 정시로 조회
-    const base = new Date(Date.now() - 3 * 3600 * 1000);
-    const queryTime = formatKmaQueryTime(base);
+    // N54: 오늘(KST) 자정을 기준으로 조회한다. 응답은 그 시각 기준 h0~h75(3시간 격자)
+    // "미래" 예보라, 자정을 기준으로 삼으면 h0~h21이 오늘 00~21시 전체를 커버한다 —
+    // 오전 시간대가 이미 지났어도 예보값 자체는 그대로 응답에 남아있다(관측이 아니라
+    // 예보라서). 예전엔 "3시간 전" 기준으로 조회해 "오늘 남은 시간대 중 최댓값"만
+    // 뽑았는데, 오후~저녁에 조회하면 이미 지나간 정오의 실제 최고치를 놓쳐 "오늘 최고"가
+    // 실제보다 낮게 나오는 버그가 있었다. 자정은 항상 과거 시각이라 "아직 발표 전"
+    // 걱정도 없다(자정 직후 몇 분은 예외 — 그 경우 값이 비어 EMPTY로 폴백된다).
+    const now = new Date();
+    const queryTime = formatKstMidnight(now);
 
     const params = new URLSearchParams({
       serviceKey: this.apiKey,
@@ -233,17 +241,23 @@ export class KmaClient {
         return EMPTY_FORECAST_WITH_TIME;
       }
 
-      // query_time을 3시간 전으로 조회했으므로 h0가 아니라
-      // h3(=query_time+3시간 ≈ 지금 시점 값)를 읽어야 실제 현재 시각 예보와 맞는다
-      const current = safeFloat(item.h3);
-
+      const nowKstHour = toKst(now).getUTCHours();
+      let current: number | null = null;
+      let currentHourDiff = Infinity;
       let peak: number | null = null;
       let peakHour: number | null = null;
-      for (const [offset, hour] of todayRemainingSlots(base)) {
-        const value = safeFloat(item[`h${offset}`]);
-        if (value !== null && (peak === null || value > peak)) {
+      for (const hour of TODAY_SLOT_HOURS) {
+        const value = safeFloat(item[`h${hour}`]);
+        if (value === null) continue;
+        if (peak === null || value > peak) {
           peak = value;
           peakHour = hour;
+        }
+        // 자정 기준 슬롯이라 offset === KST hour. "지금"에 가장 가까운 슬롯을 현재값으로 쓴다.
+        const diff = Math.abs(hour - nowKstHour);
+        if (diff < currentHourDiff) {
+          currentHourDiff = diff;
+          current = value;
         }
       }
 
@@ -324,6 +338,21 @@ function formatKmaQueryTime(date: Date): string {
   const d = String(kst.getUTCDate()).padStart(2, '0');
   const h = String(kst.getUTCHours()).padStart(2, '0');
   return `${y}${m}${d}${h}`;
+}
+
+/** date가 속한 KST 달력일의 자정(00:00 KST) 순간을 나타내는 Date. */
+function kstMidnightDate(date: Date): Date {
+  const kst = toKst(date);
+  const y = kst.getUTCFullYear();
+  const m = kst.getUTCMonth();
+  const d = kst.getUTCDate();
+  // toKst와 반대 방향으로 KST_OFFSET_MIN만큼 되돌려 실제 UTC 순간으로 환산한다.
+  return new Date(Date.UTC(y, m, d, 0, 0, 0) - KST_OFFSET_MIN * 60 * 1000);
+}
+
+/** N54: date가 속한 오늘(KST) 자정에 해당하는 KMA time 파라미터(yyyyMMdd00). */
+function formatKstMidnight(date: Date): string {
+  return formatKmaQueryTime(kstMidnightDate(date));
 }
 
 /** KMA time 파라미터(yyyyMMddHH, KST) → UTC Date */
