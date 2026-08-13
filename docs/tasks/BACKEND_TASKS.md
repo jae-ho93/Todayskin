@@ -52,7 +52,9 @@ RDS·S3·CloudWatch 연동, Pino·Helmet·JWT·Swagger·Jest를 적용한다.
       `/health/live`·`/health/ready` 200 확인 (mock 거부·env 검증이 실제로 작동하는지 실측)
 - [x] `docs/guides/DEPLOYMENT.md`에 **배포 당일 체크리스트**(순서·확인 항목·예상 소요) 추가
 - [x] `docs/guides/DEPLOYMENT.md`에 **장애 런북 1페이지** 추가 (N50의 문서 파트 선반영 — 증상 → 확인 순서 → 롤백 판단)
-- [x] `.github/dependabot.yml` 추가 (npm 루트·backend, pip inference-service, github-actions — weekly)
+- [x] ~~`.github/dependabot.yml` 추가~~ → **되돌림 (같은 날 팀 결정)**: 첫 스캔이 PR 19개를
+      쏟아냈고, 해커톤(1주) 프로젝트에는 CI의 `npm audit`(high 이상 머지 차단)로 충분하다고
+      판단해 제거했다. 장기 운영으로 전환하면 그때 다시 추가한다.
 
 완료 기준: 이미지 2종이 로컬에서 빌드·기동되고, 문서만 보고 배포 당일 작업을 수행할 수 있다. ✅
 
