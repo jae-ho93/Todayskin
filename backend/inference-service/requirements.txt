@@ -6,7 +6,7 @@ pillow==11.3.0
 numpy==2.2.6
 fastapi==0.118.3
 uvicorn[standard]==0.37.0
-python-multipart==0.0.20
+python-multipart==0.0.32
 # YOLO 여드름 병변 탐지기(acne_detector.py). ultralytics는 자체적으로 opencv-python(GUI 빌드)도
 # 함께 설치하지만(opencv-python-headless와 별개 배포판이라 pip이 대체 불가), 둘 다 같은 버전이면
 # cv2 임포트는 정상 동작하고 Dockerfile에 이미 libgl1이 설치돼 있어 문제 없음 (직접 확인함).
