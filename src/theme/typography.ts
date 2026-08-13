@@ -1,20 +1,23 @@
-// 헤드라인은 굵은 산세리프(Pretendard Bold 지향), 본문은 레귤러
-// Pretendard 폰트 파일을 assets/fonts 에 추가하고 App 진입점에서 useFonts로 로드하면
-// fontFamily: 'Pretendard-Bold' / 'Pretendard-Regular' 로 교체 가능. 현재는 시스템 폰트 사용.
+// F83: Pretendard 정적 3종(Regular·SemiBold·Bold) — 한국 프로덕트 사실상 표준, OFL 라이선스.
+// 가중치가 폰트 파일에 이미 들어 있으므로 fontWeight는 'normal'로 둔다
+// (Android에서 Bold 파일 위에 synthetic bold가 겹치는 것 방지).
+// 로딩은 app/_layout.tsx의 useFonts — 실패 시 시스템 폰트로 폴백된다.
 
-import { Platform } from 'react-native';
-
-const systemFont = Platform.select({ ios: 'System', android: 'sans-serif', default: undefined });
+const family = {
+  regular: 'Pretendard-Regular',
+  semiBold: 'Pretendard-SemiBold',
+  bold: 'Pretendard-Bold',
+} as const;
 
 export const typography = {
-  displayLg: { fontFamily: systemFont, fontSize: 28, fontWeight: '700' as const, lineHeight: 36 },
-  displaySm: { fontFamily: systemFont, fontSize: 22, fontWeight: '700' as const, lineHeight: 30 },
-  headline: { fontFamily: systemFont, fontSize: 18, fontWeight: '700' as const, lineHeight: 24 },
-  subtitle: { fontFamily: systemFont, fontSize: 15, fontWeight: '600' as const, lineHeight: 20 },
-  body: { fontFamily: systemFont, fontSize: 15, fontWeight: '400' as const, lineHeight: 22 },
-  bodySm: { fontFamily: systemFont, fontSize: 13, fontWeight: '400' as const, lineHeight: 18 },
-  caption: { fontFamily: systemFont, fontSize: 11, fontWeight: '500' as const, lineHeight: 14 },
-  badge: { fontFamily: systemFont, fontSize: 11, fontWeight: '700' as const, lineHeight: 14 },
+  displayLg: { fontFamily: family.bold, fontSize: 28, fontWeight: 'normal' as const, lineHeight: 36 },
+  displaySm: { fontFamily: family.bold, fontSize: 22, fontWeight: 'normal' as const, lineHeight: 30 },
+  headline: { fontFamily: family.bold, fontSize: 18, fontWeight: 'normal' as const, lineHeight: 24 },
+  subtitle: { fontFamily: family.semiBold, fontSize: 15, fontWeight: 'normal' as const, lineHeight: 20 },
+  body: { fontFamily: family.regular, fontSize: 15, fontWeight: 'normal' as const, lineHeight: 22 },
+  bodySm: { fontFamily: family.regular, fontSize: 13, fontWeight: 'normal' as const, lineHeight: 18 },
+  caption: { fontFamily: family.semiBold, fontSize: 11, fontWeight: 'normal' as const, lineHeight: 14 },
+  badge: { fontFamily: family.bold, fontSize: 11, fontWeight: 'normal' as const, lineHeight: 14 },
 } as const;
 
 /**
