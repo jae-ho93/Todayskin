@@ -43,6 +43,21 @@ function timeoutSignal(ms: number): AbortSignal {
   return controller.signal;
 }
 
+// F81: 사용자 취소(external)와 타임아웃 중 먼저 오는 쪽으로 요청을 중단한다.
+// AbortSignal.any()는 Hermes 버전에 따라 없을 수 있어 직접 결합한다.
+function combinedSignal(timeoutMs: number, external?: AbortSignal): AbortSignal {
+  if (!external) return timeoutSignal(timeoutMs);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const abort = () => {
+    clearTimeout(timer);
+    controller.abort();
+  };
+  if (external.aborted) abort();
+  else external.addEventListener('abort', abort, { once: true });
+  return controller.signal;
+}
+
 async function authHeaders(): Promise<Record<string, string>> {
   const token = await getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -124,6 +139,7 @@ async function fetchWithAuth(
     body?: BodyInit | null;
     timeoutMs?: number;
     contentType?: string;
+    signal?: AbortSignal;
   } = {},
   allowRetry = true,
 ): Promise<Response> {
@@ -135,7 +151,7 @@ async function fetchWithAuth(
         ...(await authHeaders()),
       },
       body: init.body,
-      signal: timeoutSignal(init.timeoutMs ?? 4000),
+      signal: combinedSignal(init.timeoutMs ?? 4000, init.signal),
     });
 
   const res = await doFetch();
@@ -185,6 +201,17 @@ export class DiagnosisQualityError extends Error {
   ) {
     super(message);
     this.name = 'DiagnosisQualityError';
+  }
+}
+
+/**
+ * F81: 사용자가 분석 대기 중 직접 취소한 경우.
+ * 타임아웃(같은 AbortError 계열)과 구분해 오류 화면 대신 조용히 복귀시킨다.
+ */
+export class DiagnosisCanceledError extends Error {
+  constructor() {
+    super('분석을 취소했어요');
+    this.name = 'DiagnosisCanceledError';
   }
 }
 
@@ -323,11 +350,15 @@ export const api = {
   deleteDiagnosis: (id: string) => authDelete(`/diagnosis/${id}`),
   // 정면 촬영 1장을 서버로 전송해 진단을 생성·저장한다. 쓰기 요청이므로 실패 시 에러를 던진다.
   // wentOutside=true일 때만 서버가 날씨 스냅샷을 진단에 연결한다(실내에만 있었으면 날씨를 엮지 않음).
-  submitDiagnosis: async (photo: {
-    front: string;
-    wentOutside: boolean;
-    coords?: { latitude: number; longitude: number };
-  }) => {
+  submitDiagnosis: async (
+    photo: {
+      front: string;
+      wentOutside: boolean;
+      coords?: { latitude: number; longitude: number };
+    },
+    // F81: 사용자 취소용. 취소되면 DiagnosisCanceledError를 던진다.
+    opts?: { signal?: AbortSignal },
+  ) => {
     const formData = new FormData();
     formData.append(
       'front',
@@ -344,11 +375,15 @@ export const api = {
     try {
       res = await fetchWithAuth(
         `/diagnosis?${params.toString()}`,
-        { method: 'POST', body: formData, timeoutMs: 45000 },
+        { method: 'POST', body: formData, timeoutMs: 45000, signal: opts?.signal },
         // 진단 추론 뒤 KMA/AirKorea 스냅샷을 연결한다. 외부 API의 최악 대기
         // 예산(각 8초)보다 짧게 끊으면 서버 저장은 성공하고 앱만 실패로 보일 수 있다.
       );
     } catch (e) {
+      // F81: 같은 AbortError라도 사용자 취소는 오류가 아니다 — 타입을 바꿔 조용히 복귀시킨다.
+      if (opts?.signal?.aborted) {
+        throw new DiagnosisCanceledError();
+      }
       // F74: 45초 타임아웃(abort)이 "Aborted" 같은 기술 문구로 노출되지 않게
       // 원인을 알 수 있는 카피로 바꿔 던진다.
       if (isAbortError(e)) {

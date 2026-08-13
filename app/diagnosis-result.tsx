@@ -19,7 +19,7 @@ import { EvidenceBadge } from '../src/components/EvidenceBadge';
 import { FACE_PART_PIN_POSITION, FaceIllustration } from '../src/components/FaceIllustration';
 import { getLabReportEnabled } from '../src/features/settings/lab';
 import { useAsyncJob, unwrapJobItems } from '../src/hooks/useAsyncJob';
-import { currentMonthBounds } from '../src/lib/kst-date';
+import { resolveScoreContext } from '../src/lib/score-context';
 import { getSession } from '../src/lib/session';
 import { gradeToColor } from '../src/lib/skinGrade';
 import { colors, radius, shadow, spacing, typography } from '../src/theme';
@@ -67,7 +67,9 @@ export default function DiagnosisResultScreen() {
     Promise.all([
       api.getSkinScore(),
       getSession(),
-      api.getScoreSeries(currentMonthBounds()),
+      // F81: 월 경계(1일 측정 등)에서도 직전 측정·첫 측정 여부를 알 수 있게
+      // 이번 달이 아니라 서버 기본(최근 90일) 시리즈를 쓴다.
+      api.getScoreSeries(),
       getLabReportEnabled(),
     ]).then(async ([result, session, scoreSeries, labReportEnabled]) => {
       if (cancelled) return;
@@ -100,18 +102,13 @@ export default function DiagnosisResultScreen() {
     // 매 렌더 재실행을 유발하지 않는다 — 여기 나열은 exhaustive-deps 충족용.
   }, [watch]);
 
-  // 직전 진단 대비 종합점수 변화 배지.
-  const change = useMemo(() => {
-    if (!skinScore || !series) return null;
-    const points = series.points;
-    const idx = points.findIndex((p) => p.diagnosisId === skinScore.id);
-    if (idx <= 0) return null;
-    const prev = points[idx - 1];
-    if (!prev) return null;
-    const diff = Math.round(skinScore.overallScore - prev.overallScore);
-    if (diff === 0) return { label: '지난 측정과 동일', up: null as boolean | null };
-    return { label: `${diff > 0 ? '▲' : '▼'} ${Math.abs(diff)}점`, up: diff > 0 };
-  }, [skinScore, series]);
+  // F81: 직전 진단 대비 변화 배지 + "첫 측정" 여부(기준점 안내용)를 한 번에 계산.
+  const scoreContext = useMemo(
+    () =>
+      resolveScoreContext(series?.points, skinScore?.id ?? '', skinScore?.overallScore ?? 0),
+    [series, skinScore],
+  );
+  const change = scoreContext.change;
 
   if (loading) {
     return (
@@ -180,6 +177,18 @@ export default function DiagnosisResultScreen() {
             </View>
           )}
         </View>
+
+        {/* F81: 첫 측정 기준점 안내 — "이 점수가 무엇 기준인지"에 대한 답 */}
+        {scoreContext.isFirstMeasurement && (
+          <View style={styles.baselineCard}>
+            <Ionicons name="flag-outline" size={18} color={colors.sageDark} />
+            <Text style={styles.baselineText}>
+              첫 측정이 끝났어요. 이 점수는 좋고 나쁨의 판정이 아니라{' '}
+              <Text style={styles.baselineBold}>나와 비교할 시작점</Text>이에요. 매일
+              기록할수록 어제의 나와의 비교가 정확해져요.
+            </Text>
+          </View>
+        )}
 
         {hasExtraReport ? (
           <View onLayout={onFacePageLayout}>
@@ -290,6 +299,15 @@ export default function DiagnosisResultScreen() {
           </View>
         )}
 
+        {/* F81: 조명·각도가 이상했다면 바로 다시 잴 수 있는 보조 동선 */}
+        <Pressable
+          onPress={() => router.replace('/camera-guide')}
+          hitSlop={8}
+          style={styles.retakeCta}
+        >
+          <Ionicons name="camera-outline" size={16} color={colors.sageDark} />
+          <Text style={styles.retakeCtaText}>다시 측정하기</Text>
+        </Pressable>
         <Text style={styles.savedHint}>결과는 기록 탭에서 언제든 다시 볼 수 있어요</Text>
         <Text style={styles.disclaimer}>측정·추정값입니다. 의학적 진단이 아닙니다.</Text>
       </ScrollView>
@@ -418,6 +436,18 @@ const styles = StyleSheet.create({
   changeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   changeText: { ...typography.caption, fontWeight: '600' },
 
+  // F81: 첫 측정 기준점 안내
+  baselineCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    backgroundColor: colors.sageLight,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+  },
+  baselineText: { ...typography.bodySm, color: colors.textPrimary, flex: 1 },
+  baselineBold: { fontWeight: '700', color: colors.sageDark },
+
   faceWrap: {
     width: '88%',
     aspectRatio: 150 / 200,
@@ -486,6 +516,22 @@ const styles = StyleSheet.create({
   recTextWrap: { flex: 1, gap: 2 },
   recTitle: { ...typography.bodySm, color: colors.textPrimary, fontWeight: '600' },
   recExplanation: { ...typography.caption, color: colors.textSecondary },
+
+  // F81: 재측정 보조 CTA
+  retakeCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    alignSelf: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.sage,
+    marginTop: spacing.sm,
+  },
+  retakeCtaText: { ...typography.subtitle, color: colors.sageDark },
 
   savedHint: { ...typography.caption, color: colors.textTertiary, textAlign: 'center', marginTop: spacing.sm },
   disclaimer: { ...typography.caption, color: colors.textTertiary, textAlign: 'center' },

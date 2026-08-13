@@ -5,7 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { api, DiagnosisQualityError } from '../src/api/client';
+import { api, DiagnosisCanceledError, DiagnosisQualityError } from '../src/api/client';
 import type { DiagnosisQualityCode } from '../src/api/client';
 import { useToast } from '../src/components/Toast';
 import { useUserLocation } from '../src/hooks/useUserLocation';
@@ -55,6 +55,10 @@ export default function CameraGuideScreen() {
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const [phase, setPhase] = useState<'intro' | 'capture' | 'analyzing'>('intro');
+  // F81: 분석 대기 화면의 단계 표시. 업로드와 AI 분석은 단일 HTTP 요청이라
+  // 구분할 수 없으므로(가짜 진행 금지) 실제로 구분되는 두 단계만 보여준다.
+  const [analyzeStep, setAnalyzeStep] = useState<'prepare' | 'analyze'>('prepare');
+  const abortRef = useRef<AbortController | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [error, setError] = useState<string | null>(null);
   // F78: 품질 게이트 거부(422 + code) — 사유별 재촬영 안내 모달로 보여준다.
@@ -163,7 +167,10 @@ export default function CameraGuideScreen() {
 
   const submitPhoto = async (photo: { uri: string; width?: number; height?: number }) => {
     const originPhase = phase;
+    const controller = new AbortController();
+    abortRef.current = controller;
     setPhase('analyzing');
+    setAnalyzeStep('prepare');
     setError(null);
     try {
       // F72: 원본(최대 10MB)을 그대로 올리면 업로드가 느리다 — 장변 1440px로 줄여 전송.
@@ -172,13 +179,35 @@ export default function CameraGuideScreen() {
         prepareUploadImage(photo.uri, photo.width, photo.height),
         wentOutside ? waitForCoords() : Promise.resolve(undefined),
       ]);
-      await api.submitDiagnosis({
-        front,
-        wentOutside: wentOutside ?? false,
-        coords: wentOutside ? (resolvedCoords ?? undefined) : undefined,
-      });
+      // F81: 준비 단계에서 취소됐으면 사진을 서버로 보내지 않는다.
+      if (controller.signal.aborted) {
+        showToast('분석을 취소했어요');
+        setPhase(originPhase);
+        return;
+      }
+      setAnalyzeStep('analyze');
+      await api.submitDiagnosis(
+        {
+          front,
+          wentOutside: wentOutside ?? false,
+          coords: wentOutside ? (resolvedCoords ?? undefined) : undefined,
+        },
+        { signal: controller.signal },
+      );
+      // F81: 취소 직전에 서버 응답이 먼저 도착한 레이스 — 이미 저장됐으므로 사실대로 알린다.
+      if (controller.signal.aborted) {
+        showToast('분석이 이미 끝나 기록에 저장됐어요');
+        setPhase(originPhase);
+        return;
+      }
       router.replace('/diagnosis-result');
     } catch (e) {
+      if (e instanceof DiagnosisCanceledError) {
+        // F81: 사용자 취소는 오류가 아니다 — 토스트만 띄우고 원래 화면으로.
+        showToast('분석을 취소했어요');
+        setPhase(originPhase);
+        return;
+      }
       if (e instanceof DiagnosisQualityError) {
         // F78: "다시 시도"가 아니라 "다시 촬영"이 필요한 오류 — 사유별 안내로 분기.
         setQualityIssue(e.code);
@@ -187,6 +216,8 @@ export default function CameraGuideScreen() {
       }
       setError(e instanceof Error ? e.message : '분석 결과를 저장하지 못했어요. 다시 시도해주세요.');
       setPhase(originPhase);
+    } finally {
+      abortRef.current = null;
     }
   };
 
@@ -418,13 +449,56 @@ export default function CameraGuideScreen() {
   }
 
   if (phase === 'analyzing') {
+    // F81: 무엇을 기다리는지 단계로 보여주고, 언제든 취소할 수 있게 한다.
+    const steps = [
+      { key: 'prepare', label: '사진 준비', desc: '전송할 사진을 정리하고 있어요' },
+      { key: 'analyze', label: 'AI 분석', desc: '피부 상태를 부위별로 살펴보고 있어요' },
+    ] as const;
+    const activeIdx = analyzeStep === 'prepare' ? 0 : 1;
     return (
       <View style={styles.analyzingWrap}>
         <View style={styles.analyzingIconWrap}>
           <ActivityIndicator size="large" color={colors.sageDark} />
         </View>
         <Text style={styles.analyzingTitle}>분석 중입니다</Text>
-        <Text style={styles.analyzingBody}>AI가 피부 상태를 분석하고 있어요.{'\n'}잠시만 기다려주세요.</Text>
+        <View style={styles.stepList}>
+          {steps.map((step, idx) => {
+            const done = idx < activeIdx;
+            const active = idx === activeIdx;
+            return (
+              <View key={step.key} style={styles.stepRow}>
+                <View style={styles.stepIcon}>
+                  {done ? (
+                    <Ionicons name="checkmark-circle" size={20} color={colors.sageDark} />
+                  ) : active ? (
+                    <ActivityIndicator size="small" color={colors.sageDark} />
+                  ) : (
+                    <Ionicons name="ellipse-outline" size={18} color={colors.gray300} />
+                  )}
+                </View>
+                <View style={styles.stepTextWrap}>
+                  <Text
+                    style={[
+                      styles.stepLabel,
+                      active && styles.stepLabelActive,
+                      done && styles.stepLabelDone,
+                    ]}
+                  >
+                    {step.label}
+                  </Text>
+                  {active && <Text style={styles.stepDesc}>{step.desc}</Text>}
+                </View>
+              </View>
+            );
+          })}
+        </View>
+        <Pressable
+          onPress={() => abortRef.current?.abort()}
+          hitSlop={8}
+          style={styles.analyzeCancelButton}
+        >
+          <Text style={styles.analyzeCancelText}>취소</Text>
+        </Pressable>
       </View>
     );
   }
@@ -742,4 +816,23 @@ const styles = StyleSheet.create({
   },
   analyzingTitle: { ...typography.displaySm, color: colors.textPrimary },
   analyzingBody: { ...typography.body, color: colors.textSecondary, textAlign: 'center' },
+
+  // F81: 분석 단계 표시 + 취소
+  stepList: { gap: spacing.md, marginTop: spacing.sm, minWidth: 220 },
+  stepRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  stepIcon: { width: 24, alignItems: 'center', paddingTop: 1 },
+  stepTextWrap: { flex: 1, gap: 2 },
+  stepLabel: { ...typography.body, color: colors.textTertiary },
+  stepLabelActive: { color: colors.textPrimary, fontWeight: '600' },
+  stepLabelDone: { color: colors.sageDark },
+  stepDesc: { ...typography.caption, color: colors.textSecondary },
+  analyzeCancelButton: {
+    marginTop: spacing.lg,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  analyzeCancelText: { ...typography.subtitle, color: colors.textSecondary },
 });
