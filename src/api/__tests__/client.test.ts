@@ -1,4 +1,4 @@
-import { api } from '../client';
+import { api, DiagnosisCanceledError } from '../client';
 import * as session from '../../lib/session';
 
 /**
@@ -155,6 +155,51 @@ describe('authFetch 상태 구분', () => {
 
     const [, init] = fetchMock.mock.calls[0];
     expect((init?.headers as Record<string, string>).Authorization).toBeUndefined();
+  });
+});
+
+describe('submitDiagnosis 취소·타임아웃 구분 (F81)', () => {
+  function abortError(): Error {
+    const err = new Error('Aborted');
+    err.name = 'AbortError';
+    return err;
+  }
+
+  it('사용자가 취소하면 DiagnosisCanceledError를 던진다', async () => {
+    const controller = new AbortController();
+    fetchMock.mockImplementationOnce(async () => {
+      // 요청이 나간 직후 사용자가 취소 버튼을 누른 상황.
+      controller.abort();
+      throw abortError();
+    });
+
+    await expect(
+      api.submitDiagnosis(
+        { front: 'file://front.jpg', wentOutside: false },
+        { signal: controller.signal },
+      ),
+    ).rejects.toBeInstanceOf(DiagnosisCanceledError);
+  });
+
+  it('취소 없이 abort(타임아웃)면 네트워크 안내 문구로 던진다', async () => {
+    fetchMock.mockRejectedValueOnce(abortError());
+
+    await expect(
+      api.submitDiagnosis({ front: 'file://front.jpg', wentOutside: false }),
+    ).rejects.toThrow('네트워크가 느려 분석이 오래 걸리고 있어요');
+  });
+
+  it('이미 취소된 신호로는 요청이 즉시 취소로 끝난다', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    fetchMock.mockRejectedValueOnce(abortError());
+
+    await expect(
+      api.submitDiagnosis(
+        { front: 'file://front.jpg', wentOutside: false },
+        { signal: controller.signal },
+      ),
+    ).rejects.toBeInstanceOf(DiagnosisCanceledError);
   });
 });
 
