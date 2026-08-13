@@ -20,6 +20,11 @@ import { RetryButton } from '../../src/components/RetryButton';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { AIR_STATUS_COLOR, UV_LEVEL_COLOR } from '../../src/lib/air-status';
 import { formatDateKo, monthBounds, todayKst } from '../../src/lib/kst-date';
+import {
+  buildWeeklySummary,
+  weeklySummaryBounds,
+  type WeeklySummary,
+} from '../../src/lib/weekly-summary';
 import { colors, MAX_FONT_SCALE, radius, spacing, typography } from '../../src/theme';
 import type {
   AirStatus,
@@ -41,6 +46,8 @@ export default function HistoryScreen() {
   // F75: 조회 실패(null)를 "데이터 없음"과 구분해 재시도를 제공한다.
   const [seriesFailed, setSeriesFailed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // F80: 주간 요약 — 보고 있는 달과 무관하게 항상 오늘 기준 14일로 계산한다.
+  const [weekly, setWeekly] = useState<WeeklySummary | null>(null);
 
   // 선택 날짜의 통합 히스토리 (N8)
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -54,10 +61,15 @@ export default function HistoryScreen() {
   const initialLoadDoneRef = useRef(false);
 
   const load = useCallback(async () => {
-    const series = await api.getScoreSeries(monthBounds(currentMonth));
+    const [series, weeklySeries] = await Promise.all([
+      api.getScoreSeries(monthBounds(currentMonth)),
+      api.getScoreSeries(weeklySummaryBounds(today)),
+    ]);
     setScoreSeries(series);
     setSeriesFailed(series === null);
-  }, [currentMonth]);
+    // 조회 실패(null)면 카드를 숨긴다 — 추이 카드의 재시도가 같은 load를 다시 부른다.
+    setWeekly(weeklySeries ? buildWeeklySummary(weeklySeries.points, today) : null);
+  }, [currentMonth, today]);
 
   const loadDay = useCallback(async (date: string) => {
     const seq = ++dayRequestSeq.current;
@@ -194,6 +206,64 @@ export default function HistoryScreen() {
   return (
     <ScreenContainer refreshing={refreshing} onRefresh={handleRefresh}>
       <Text style={styles.title}>마이 히스토리</Text>
+
+      {/* F80: 주간 요약 — 이번 주 측정 횟수·평균·전주 대비 변화 */}
+      {weekly && (
+        <Card style={styles.weeklyCard}>
+          <View style={styles.weeklyHeader}>
+            <Text style={styles.weeklyTitle}>이번 주 요약</Text>
+            <Text style={styles.weeklyRange}>최근 7일</Text>
+          </View>
+          {weekly.count === 0 ? (
+            <Text style={styles.weeklyEmpty}>
+              이번 주는 아직 측정이 없어요. 오늘 밤 30초면 충분해요.
+            </Text>
+          ) : (
+            <View style={styles.weeklyStatsRow}>
+              <View style={styles.weeklyStat}>
+                <Text style={styles.weeklyStatValue} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+                  {weekly.count}회
+                </Text>
+                <Text style={styles.weeklyStatLabel} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+                  측정
+                </Text>
+              </View>
+              <View style={styles.weeklyDivider} />
+              <View style={styles.weeklyStat}>
+                <Text style={styles.weeklyStatValue} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+                  {weekly.avgScore}점
+                </Text>
+                <Text style={styles.weeklyStatLabel} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+                  평균 점수
+                </Text>
+              </View>
+              <View style={styles.weeklyDivider} />
+              <View style={styles.weeklyStat}>
+                <Text
+                  style={[
+                    styles.weeklyStatValue,
+                    weekly.delta !== null && weekly.delta > 0 && { color: colors.statusGood },
+                    weekly.delta !== null && weekly.delta < 0 && { color: colors.coralDark },
+                    (weekly.delta === null || weekly.delta === 0) && { color: colors.textTertiary },
+                  ]}
+                  maxFontSizeMultiplier={MAX_FONT_SCALE}
+                >
+                  {weekly.delta === null
+                    ? '—'
+                    : weekly.delta > 0
+                      ? `▲ ${weekly.delta}점`
+                      : weekly.delta < 0
+                        ? `▼ ${Math.abs(weekly.delta)}점`
+                        : '±0점'}
+                </Text>
+                <Text style={styles.weeklyStatLabel} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+                  {weekly.delta === null ? '지난주 기록 없음' : '지난주 대비'}
+                </Text>
+              </View>
+            </View>
+          )}
+        </Card>
+      )}
 
       {seriesFailed ? (
         <Card style={styles.emptyCard}>
@@ -508,6 +578,18 @@ function MediaThumb({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
 const styles = StyleSheet.create({
   title: { ...typography.displaySm, color: colors.textPrimary },
   sectionTitle: { ...typography.headline, color: colors.textPrimary },
+  // F80: 주간 요약 카드
+  weeklyCard: { gap: spacing.sm },
+  weeklyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  weeklyTitle: { ...typography.subtitle, color: colors.textPrimary },
+  weeklyRange: { ...typography.caption, color: colors.textTertiary },
+  weeklyEmpty: { ...typography.bodySm, color: colors.textSecondary },
+  weeklyStatsRow: { flexDirection: 'row', alignItems: 'center' },
+  weeklyStat: { flex: 1, alignItems: 'center', gap: 2 },
+  weeklyDivider: { width: 1, height: 28, backgroundColor: colors.border },
+  weeklyStatValue: { ...typography.headline, color: colors.textPrimary },
+  weeklyStatLabel: { ...typography.caption, color: colors.textTertiary },
+
   trendCard: { gap: spacing.sm },
   trendLabel: { ...typography.subtitle, color: colors.textPrimary },
   trendRange: { ...typography.caption, color: colors.textTertiary },
