@@ -145,7 +145,22 @@ export default function DiagnosisDetailScreen() {
       </Card>
 
       {/* 날씨 — 촬영 당시 스냅샷 기준, 스코어 바로 아래 */}
-      {d.weather && <WeatherCard weather={d.weather} capturedAt={d.capturedAt} />}
+      {d.weather ? (
+        <WeatherCard weather={d.weather} capturedAt={d.capturedAt} />
+      ) : (
+        <Card style={styles.noWeatherCard}>
+          <Ionicons
+            name={d.wentOutside ? 'cloud-offline-outline' : 'home-outline'}
+            size={18}
+            color={colors.textTertiary}
+          />
+          <Text style={styles.noWeatherText}>
+            {d.wentOutside
+              ? '외출 시점의 날씨 정보를 가져오지 못했어요'
+              : '외출하지 않아 날씨 기록이 없어요'}
+          </Text>
+        </Card>
+      )}
 
       {/* 부위 분석 2×3 그리드 */}
       {d.parts.length > 0 && (
@@ -160,16 +175,45 @@ export default function DiagnosisDetailScreen() {
                   <View style={[styles.partGradeBadge, { backgroundColor: color + '22' }]}>
                     <Text style={[styles.partGradeText, { color }]}>{p.grade}</Text>
                   </View>
-                  <Text style={styles.partValue} numberOfLines={1}>
-                    {p.moisture != null ? `수분 ${Math.round(p.moisture)}` : '수분 —'}
-                  </Text>
-                  <Text style={styles.partValue} numberOfLines={1}>
-                    {p.elasticity != null ? `탄력 ${Math.round(p.elasticity)}` : '탄력 —'}
-                  </Text>
+                  {p.moisture != null && (
+                    <Text style={styles.partValue} numberOfLines={1}>{`수분 ${Math.round(p.moisture)}`}</Text>
+                  )}
+                  {p.elasticity != null && (
+                    <Text style={styles.partValue} numberOfLines={1}>{`탄력 ${Math.round(p.elasticity)}`}</Text>
+                  )}
+                  {p.moisture == null && p.elasticity == null && p.note && (
+                    <Text style={styles.partValue} numberOfLines={1}>{p.note}</Text>
+                  )}
                 </View>
               );
             })}
           </View>
+        </View>
+      )}
+
+      {/* 여드름/질환 분석 — 베타 */}
+      {(d.diseaseClassification || d.acneReport) && (
+        <View style={styles.section}>
+          <View style={styles.reportBetaBadge}>
+            <Text style={styles.reportBetaBadgeText}>베타 · 검증 중인 분석</Text>
+          </View>
+          <Card style={styles.reportCard}>
+            {d.diseaseClassification && (
+              <View style={styles.reportSection}>
+                <Text style={styles.sectionTitle}>피부 질환 분류</Text>
+                <Text style={styles.partValue}>
+                  {d.diseaseClassification.label} (확신도{' '}
+                  {Math.round(d.diseaseClassification.confidence * 100)}%)
+                </Text>
+              </View>
+            )}
+            {d.acneReport && (
+              <View style={styles.reportSection}>
+                <Text style={styles.sectionTitle}>여드름 분석</Text>
+                <Text style={styles.partValue}>{d.acneReport}</Text>
+              </View>
+            )}
+          </Card>
         </View>
       )}
 
@@ -442,6 +486,20 @@ const styles = StyleSheet.create({
   partGradeBadge: { alignSelf: 'flex-start', paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.full, marginVertical: spacing.xs },
   partGradeText: { ...typography.bodySm, fontWeight: '700' },
   partValue: { ...typography.caption, color: colors.textSecondary },
+
+  reportBetaBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.sageLight,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+  },
+  reportBetaBadgeText: { ...typography.caption, color: colors.sage, fontWeight: '700' },
+  reportCard: { gap: spacing.md },
+  reportSection: { gap: spacing.xs },
+
+  noWeatherCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  noWeatherText: { ...typography.bodySm, color: colors.textTertiary, flex: 1 },
 
   weatherCard: { gap: spacing.xs },
   weatherHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

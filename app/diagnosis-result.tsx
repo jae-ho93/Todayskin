@@ -17,13 +17,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../src/api/client';
 import { EvidenceBadge } from '../src/components/EvidenceBadge';
 import { FACE_PART_PIN_POSITION, FaceIllustration } from '../src/components/FaceIllustration';
-import { currentMonthBounds, todayKst } from '../src/lib/kst-date';
+import { useAsyncJob, unwrapJobItems } from '../src/hooks/useAsyncJob';
+import { currentMonthBounds } from '../src/lib/kst-date';
 import { getSession } from '../src/lib/session';
 import { gradeToColor } from '../src/lib/skinGrade';
 import { colors, radius, shadow, spacing, typography } from '../src/theme';
 import type {
-  CalendarRecommendation,
   Gender,
+  Recommendation,
   ScoreSeries,
   SkinPartMetric,
   SkinScoreSnapshot,
@@ -48,10 +49,15 @@ export default function DiagnosisResultScreen() {
   const [loading, setLoading] = useState(true);
   const [selectedPart, setSelectedPart] = useState<SkinPartMetric | null>(null);
   const [series, setSeries] = useState<ScoreSeries | null>(null);
-  const [recommendations, setRecommendations] = useState<CalendarRecommendation[]>([]);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   // 얼굴 일러스트 ↔ 여드름/질환 분석 리포트 스와이프 페이지 상태.
   const [pageWidth, setPageWidth] = useState(0);
   const [activePage, setActivePage] = useState(0);
+
+  // 홈 대시보드가 "가장 최근 진단"에만 기회주의적으로 추천을 생성해서, 홈을 들르지
+  // 않고 바로 기록을 보면 "추천이 없어요"로 보이는 문제가 있었다. 이 화면(촬영 직후
+  // 결과)에서 직접 생성을 트리거해 모든 진단이 예외 없이 추천을 갖게 한다.
+  const { watch } = useAsyncJob<Recommendation>(unwrapJobItems('recommendations'));
 
   useEffect(() => {
     let cancelled = false;
@@ -59,15 +65,26 @@ export default function DiagnosisResultScreen() {
       api.getSkinScore(),
       getSession(),
       api.getScoreSeries(currentMonthBounds()),
-      api.getHistoryByDate(todayKst()),
-    ]).then(([result, session, scoreSeries, history]) => {
+    ]).then(async ([result, session, scoreSeries]) => {
       if (cancelled) return;
       if (result.status === 'ok') setSkinScore(result.data);
       setGender(session?.gender);
       setSeries(scoreSeries);
-      // 기록(히스토리)은 촬영 시각 최신순 — 첫 진단이 방금 촬영분의 추천을 담고 있다.
-      setRecommendations(history?.diagnoses?.[0]?.recommendations ?? []);
       setLoading(false);
+
+      if (result.status !== 'ok') return;
+      const [aGradeResult, fastResponse] = await Promise.all([
+        api.getRecommendations('A'),
+        api.generateRecommendationsFast(result.data.id),
+      ]);
+      if (cancelled) return;
+      const aGrade = aGradeResult.status === 'ok' ? aGradeResult.data : [];
+      const bGrade = fastResponse?.recommendations ?? [];
+      setRecommendations([...aGrade, ...bGrade]);
+      watch(fastResponse, (live) => {
+        if (cancelled) return;
+        setRecommendations([...aGrade, ...live]);
+      });
     }).catch(() => {
       if (!cancelled) setLoading(false);
     });

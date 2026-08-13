@@ -320,19 +320,36 @@ function DiagnosisCard({ diagnosis: d }: { diagnosis: CalendarDiagnosis }) {
                 </View>
                 <WeatherSummaryGrid weather={d.weather} />
               </>
-            ) : recs.length > 0 ? (
-              <>
-                {recs.slice(0, 3).map((r) => (
-                  <View key={r.id} style={styles.recSummaryRow}>
-                    <EvidenceBadge grade={r.grade} />
-                    <Text style={styles.recSummaryTitle} numberOfLines={1}>
-                      {r.title}
-                    </Text>
-                  </View>
-                ))}
-              </>
             ) : (
-              <Text style={styles.noRec}>이 기록에는 추천이 없어요</Text>
+              <>
+                {/* 날씨가 없을 때도(외출 안 함 / 수집 실패) 추천은 그대로 보여준다 —
+                    날씨 유무와 추천 표시는 서로 무관한 정보라 하나가 없다고 나머지까지
+                    가려버리면 카드가 텅 비어 보인다. */}
+                <View style={styles.weatherHeader}>
+                  <Ionicons
+                    name={d.wentOutside ? 'cloud-offline-outline' : 'home-outline'}
+                    size={14}
+                    color={colors.textTertiary}
+                  />
+                  <Text style={styles.weatherHeaderText} numberOfLines={1}>
+                    {d.wentOutside ? '날씨 정보 없음' : '외출하지 않음'}
+                  </Text>
+                </View>
+                {recs.length > 0 ? (
+                  <>
+                    {recs.slice(0, 3).map((r) => (
+                      <View key={r.id} style={styles.recSummaryRow}>
+                        <EvidenceBadge grade={r.grade} />
+                        <Text style={styles.recSummaryTitle} numberOfLines={1}>
+                          {r.title}
+                        </Text>
+                      </View>
+                    ))}
+                  </>
+                ) : (
+                  <Text style={styles.noRec}>이 기록에는 추천이 없어요</Text>
+                )}
+              </>
             )}
             <View style={styles.detailButton}>
               <Text style={styles.detailButtonText}>상세기록 보기</Text>

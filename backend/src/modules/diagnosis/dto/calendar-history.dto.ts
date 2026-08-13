@@ -6,6 +6,7 @@ import {
   Matches,
 } from 'class-validator';
 import { SkinPartMetricDto } from './skin-part-metric.dto';
+import { DiseaseClassificationDto } from './skin-score-snapshot.dto';
 
 /**
  * N8: 캘린더 날짜 파라미터 — Asia/Seoul 달력 기준 YYYY-MM-DD.
@@ -228,6 +229,13 @@ export class CalendarDiagnosisDto {
   @ApiPropertyOptional({ type: CalendarWeatherDto, nullable: true })
   weather!: CalendarWeatherDto | null;
 
+  /**
+   * 촬영 전 "외출하셨나요?" 응답. weather가 null일 때 이유를 구분하는 데 쓴다 —
+   * false면 애초에 날씨를 엮지 않은 것(정상), true인데 weather가 null이면 수집 실패.
+   */
+  @ApiProperty({ type: Boolean })
+  wentOutside!: boolean;
+
   @ApiProperty({ type: [CalendarRecommendationDto] })
   @Type(() => CalendarRecommendationDto)
   recommendations!: CalendarRecommendationDto[];
@@ -242,6 +250,14 @@ export class CalendarDiagnosisDto {
    */
   @ApiPropertyOptional({ type: LandmarksDto, nullable: true })
   landmarks!: LandmarksDto | null;
+
+  // 신규(검증 단계): YOLO 여드름 구역 리포트 텍스트 + 5클래스 질환 분류.
+  // SkinScoreSnapshotDto와 동일하게 랜드마크/이미지와 무관하게 항상 노출한다.
+  @ApiPropertyOptional({ type: String, nullable: true, example: '이마에 비염증성 여드름 1개가 있습니다.' })
+  acneReport?: string | null;
+
+  @ApiPropertyOptional({ type: DiseaseClassificationDto, nullable: true })
+  diseaseClassification?: DiseaseClassificationDto | null;
 }
 
 /**

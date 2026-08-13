@@ -1610,9 +1610,13 @@ export interface components {
             modelVersion?: string | null;
             parts: components["schemas"]["SkinPartMetricDto"][];
             weather?: components["schemas"]["CalendarWeatherDto"] | null;
+            wentOutside: boolean;
             recommendations: components["schemas"]["CalendarRecommendationDto"][];
             image?: components["schemas"]["CalendarImageDto"] | null;
             landmarks?: components["schemas"]["LandmarksDto"] | null;
+            /** @example 이마에 비염증성 여드름 1개가 있습니다. */
+            acneReport?: string | null;
+            diseaseClassification?: components["schemas"]["DiseaseClassificationDto"] | null;
         };
         CalendarDayHistoryDto: {
             /**

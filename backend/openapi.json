@@ -3483,6 +3483,9 @@
               }
             ]
           },
+          "wentOutside": {
+            "type": "boolean"
+          },
           "recommendations": {
             "type": "array",
             "items": {
@@ -3506,6 +3509,20 @@
                 "$ref": "#/components/schemas/LandmarksDto"
               }
             ]
+          },
+          "acneReport": {
+            "type": "string",
+            "nullable": true,
+            "example": "이마에 비염증성 여드름 1개가 있습니다."
+          },
+          "diseaseClassification": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DiseaseClassificationDto"
+              }
+            ]
           }
         },
         "required": [
@@ -3514,6 +3531,7 @@
           "overallScore",
           "status",
           "parts",
+          "wentOutside",
           "recommendations"
         ]
       },
