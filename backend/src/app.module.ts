@@ -30,6 +30,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { WeatherModule } from './modules/weather/weather.module';
 import { RecommendationModule } from './modules/recommendations/recommendation.module';
 import { ProductModule } from './modules/products/product.module';
+import { CareModule } from './modules/care/care.module';
 import { DiagnosisModule } from './modules/diagnosis/diagnosis.module';
 import { PatternModule } from './modules/pattern/pattern.module';
 import { NotificationModule } from './modules/notifications/notification.module';
@@ -103,6 +104,7 @@ import { JobsModule } from './modules/jobs/jobs.module';
     WeatherModule,
     RecommendationModule,
     ProductModule,
+    CareModule,
     DiagnosisModule,
     PatternModule,
     NotificationModule,

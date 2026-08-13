@@ -244,4 +244,220 @@ describe('OpenAiClient', () => {
       expect(items[0].sourceIds).toEqual([]);
     });
   });
+
+  /**
+   * 케어 루틴+제품 — Responses API + web_search 경로. Chat Completions와 응답 형태가
+   * 달라서(output[] 안의 message.content[].text) 별도로 검증한다.
+   */
+  describe('generateCarePlan (Responses API)', () => {
+    const originalFetch = global.fetch;
+
+    afterEach(() => {
+      global.fetch = originalFetch;
+    });
+
+    function responsesEnvelope(text: string, id = 'resp_1'): unknown {
+      return {
+        id,
+        output: [
+          {
+            type: 'message',
+            content: [{ type: 'output_text', text }],
+          },
+        ],
+      };
+    }
+
+    function stubFetchOnce(bodies: unknown[]): jest.Mock {
+      const queue = [...bodies];
+      const fn = jest.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(queue.shift()),
+        } as unknown as Response),
+      );
+      global.fetch = fn as unknown as typeof fetch;
+      return fn;
+    }
+
+    function makeClient(): OpenAiClient {
+      return new OpenAiClient(
+        makeConfig({ OPENAI_API_KEY: 'k', MOCK_OPENAI: 'false' }),
+        policy,
+      );
+    }
+
+    it('MOCK_OPENAI=true 시 careType별 mock 루틴+제품을 반환한다', async () => {
+      const client = new OpenAiClient(makeConfig({ MOCK_OPENAI: 'true' }), policy);
+      const plan = await client.generateCarePlan('weather', null, { uvIndex: 8 }, []);
+      expect(plan.routine.length).toBeGreaterThan(0);
+      expect(plan.products.length).toBeGreaterThan(0);
+    });
+
+    it('키 없음 시 OpenAiUnavailable', async () => {
+      const client = new OpenAiClient(makeConfig({ MOCK_OPENAI: 'false' }), policy);
+      await expect(
+        client.generateCarePlan('weather', null, { uvIndex: 5 }, []),
+      ).rejects.toThrow(OpenAiUnavailable);
+    });
+
+    it('정상 JSON 응답을 routine/products로 파싱한다', async () => {
+      const body = JSON.stringify({
+        routine: [
+          {
+            phase: '외출 전',
+            step: '자외선 차단제 도포',
+            ingredient: '징크옥사이드',
+            amount: '손가락 한 마디',
+            reason: '오늘 자외선지수가 높아 차단이 도움될 수 있어요.',
+            evidence: null,
+          },
+        ],
+        products: [
+          {
+            name: '실제 선크림',
+            url: 'https://example.com/sunscreen',
+            reason: '오늘 자외선지수에 적합해요.',
+            evidence: {
+              sourceName: 'WHO UV Index Guide',
+              sourceUrl: 'https://www.who.int/example',
+              sourceType: 'WHO',
+            },
+          },
+        ],
+        medicalDisclaimer: null,
+      });
+      stubFetchOnce([responsesEnvelope(body)]);
+
+      const plan = await makeClient().generateCarePlan('weather', null, { uvIndex: 8 }, []);
+      expect(plan.routine).toHaveLength(1);
+      expect(plan.products).toHaveLength(1);
+      expect(plan.products[0].name).toBe('실제 선크림');
+      expect(plan.products[0].evidence?.sourceType).toBe('WHO');
+    });
+
+    it('화이트리스트 밖 sourceType의 evidence는 null로 걸러진다', async () => {
+      const body = JSON.stringify({
+        routine: [],
+        products: [
+          {
+            name: '실제 선크림',
+            url: 'https://example.com/sunscreen',
+            reason: '오늘 자외선지수에 적합해요.',
+            evidence: {
+              sourceName: '어떤 블로그',
+              sourceUrl: 'https://blog.example.com/post',
+              sourceType: '블로그',
+            },
+          },
+        ],
+        medicalDisclaimer: null,
+      });
+      stubFetchOnce([responsesEnvelope(body)]);
+
+      const plan = await makeClient().generateCarePlan('weather', null, { uvIndex: 8 }, []);
+      expect(plan.products[0].evidence).toBeNull();
+    });
+
+    it('코드블록·설명 텍스트가 앞뒤에 섞여도 JSON 부분만 잘라 파싱한다', async () => {
+      const jsonPart = JSON.stringify({
+        routine: [
+          {
+            phase: '자기 전',
+            step: '보습',
+            ingredient: '히알루론산',
+            amount: '2방울',
+            reason: '건조함을 고려해 보습이 도움될 수 있어요.',
+            evidence: null,
+          },
+        ],
+        products: [],
+        medicalDisclaimer: null,
+      });
+      stubFetchOnce([responsesEnvelope(`\`\`\`json\n${jsonPart}\n\`\`\``)]);
+
+      const plan = await makeClient().generateCarePlan('weather', null, { uvIndex: 3 }, []);
+      expect(plan.routine).toHaveLength(1);
+      expect(plan.routine[0].ingredient).toBe('히알루론산');
+    });
+
+    it('첫 응답이 JSON 파싱 실패면 previous_response_id로 1회 보정 재요청한다', async () => {
+      const goodBody = JSON.stringify({
+        routine: [
+          {
+            phase: '아침',
+            step: '보습',
+            ingredient: null,
+            amount: null,
+            reason: '기본 보습은 대부분의 피부 상태에 도움될 수 있어요.',
+            evidence: null,
+          },
+        ],
+        products: [],
+        medicalDisclaimer: null,
+      });
+      const fetchMock = stubFetchOnce([
+        responsesEnvelope('이건 JSON이 아니라 그냥 설명 텍스트입니다.', 'resp_bad'),
+        responsesEnvelope(goodBody, 'resp_good'),
+      ]);
+
+      const plan = await makeClient().generateCarePlan('weather', null, { uvIndex: 3 }, []);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      const secondCallBody = JSON.parse(fetchMock.mock.calls[1][1].body as string);
+      expect(secondCallBody.previous_response_id).toBe('resp_bad');
+      expect(plan.routine).toHaveLength(1);
+    });
+
+    it('보정 재요청도 파싱 실패면 OpenAiUnavailable', async () => {
+      stubFetchOnce([
+        responsesEnvelope('텍스트1', 'resp_bad1'),
+        responsesEnvelope('텍스트2', 'resp_bad2'),
+      ]);
+      await expect(
+        makeClient().generateCarePlan('weather', null, { uvIndex: 3 }, []),
+      ).rejects.toThrow(OpenAiUnavailable);
+    });
+
+    it('routine·products가 모두 비어 있으면 OpenAiUnavailable', async () => {
+      const body = JSON.stringify({ routine: [], products: [], medicalDisclaimer: null });
+      stubFetchOnce([responsesEnvelope(body)]);
+      await expect(
+        makeClient().generateCarePlan('weather', null, { uvIndex: 3 }, []),
+      ).rejects.toThrow(OpenAiUnavailable);
+    });
+
+    it('reason에 의료적 확정 표현이 섞이면 OpenAiUnavailable (EvidencePolicy)', async () => {
+      const body = JSON.stringify({
+        routine: [
+          {
+            phase: '아침',
+            step: '보습',
+            ingredient: null,
+            amount: null,
+            reason: '이 진단 결과에 따른 치료가 필요합니다.',
+            evidence: null,
+          },
+        ],
+        products: [],
+        medicalDisclaimer: null,
+      });
+      stubFetchOnce([responsesEnvelope(body)]);
+      await expect(
+        makeClient().generateCarePlan('skin', { overallScore: 60 }, null, []),
+      ).rejects.toThrow(OpenAiUnavailable);
+    });
+
+    it('exclude 목록을 user content에 포함시킨다', async () => {
+      const body = JSON.stringify({ routine: [], products: [], medicalDisclaimer: null });
+      const fetchMock = stubFetchOnce([responsesEnvelope(body)]);
+      await expect(
+        makeClient().generateCarePlan('weather', null, { uvIndex: 3 }, ['이미 추천한 제품']),
+      ).rejects.toThrow(OpenAiUnavailable); // routine/products 둘 다 비어 예외지만 요청 내용은 검증 가능
+
+      const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+      const userMessage = requestBody.input.find((m: { role: string }) => m.role === 'user');
+      expect(userMessage.content).toContain('이미 추천한 제품');
+    });
+  });
 });

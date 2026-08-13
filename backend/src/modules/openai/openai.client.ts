@@ -2,6 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EvidencePolicy } from './evidence.policy';
 import { EVIDENCE_SOURCES } from '../recommendations/content/evidence-sources';
+import {
+  CARE_EVIDENCE_SOURCE_TYPES,
+  CareEvidenceSourceType,
+  CareType,
+} from '../care/dto/care-plan.dto';
 
 /**
  * OpenAiClient — OpenAI Chat Completions API 호출을 캡슐화.
@@ -81,7 +86,39 @@ export interface GeneratedWeatherProduct {
   explanation: string;
 }
 
-interface WeatherInput {
+/**
+ * 케어 루틴+제품 — Responses API + web_search 도구로 생성한다(Chat Completions +
+ * strict json_schema 경로와 별개). 근거는 web_search로 실제 확인된 것만 허용한다.
+ */
+export interface GeneratedCareEvidence {
+  sourceName: string | null;
+  sourceUrl: string | null;
+  sourceType: CareEvidenceSourceType;
+}
+
+export interface GeneratedCareRoutineStep {
+  phase: string;
+  step: string;
+  ingredient: string | null;
+  amount: string | null;
+  reason: string;
+  evidence: GeneratedCareEvidence | null;
+}
+
+export interface GeneratedCareProduct {
+  name: string;
+  url: string;
+  reason: string;
+  evidence: GeneratedCareEvidence | null;
+}
+
+export interface GeneratedCarePlan {
+  routine: GeneratedCareRoutineStep[];
+  products: GeneratedCareProduct[];
+  medicalDisclaimer: string | null;
+}
+
+export interface WeatherInput {
   observedAt?: string | null;
   regionName?: string | null;
   uvIndex?: number | null;
@@ -203,6 +240,197 @@ const PRODUCT_SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 근거 �
 5. 톤은 매일 쓰는 날씨 앱처럼 친근하고 부담스럽지 않게 작성하세요.
 6. 출력은 지정된 JSON 스키마를 그대로 따르고, timing은 3개 각각 정확히 한 번씩만 사용하세요.`;
 
+// ── 케어 루틴+제품 (Responses API + web_search) ──
+// strict json_schema를 쓸 수 없는 도구(web_search)를 사용하므로 프롬프트로 JSON 형식을 강제한다.
+
+const CARE_JSON_FORMAT_SPEC = `반드시 아래 형식의 JSON **객체 하나만** 출력하세요. 코드블록(\`\`\`)이나 다른 설명 문장을
+앞뒤에 절대 붙이지 마세요 — 응답 전체가 그대로 JSON.parse 가능해야 합니다.
+
+{
+  "routine": [
+    {
+      "phase": "단계 이름 (예: 외출 전, 외출 중, 자기 전 등 상황에 맞게)",
+      "step": "무엇을 하는 단계인지",
+      "ingredient": "핵심 성분 (없으면 null)",
+      "amount": "바르는 양, 예: 500원 동전 크기 (없으면 null)",
+      "reason": "오늘 수치/피부상태를 근거로 한 이유",
+      "evidence": { "sourceName": "출처명", "sourceUrl": "실제 URL", "sourceType": "WHO|FDA|식약처|AAD|PubMed" } 또는 null
+    }
+  ],
+  "products": [
+    {
+      "name": "실제 제품명",
+      "url": "web_search로 확인한 실제 구매 페이지 URL",
+      "reason": "이 제품을 고른 이유",
+      "evidence": { "sourceName": "...", "sourceUrl": "...", "sourceType": "WHO|FDA|식약처|AAD|PubMed" } 또는 null
+    }
+  ],
+  "medicalDisclaimer": "의료 면책 문구 (없으면 null)"
+}`;
+
+const CARE_EVIDENCE_RULE = `근거(evidence)는 web_search로 실제로 확인한 것만 사용하세요. 다음 기관/데이터베이스의
+공식 자료만 근거로 인정합니다: WHO, FDA, 식약처(MFDS), AAD(American Academy of Dermatology), PubMed.
+이 목록에 없는 출처(블로그, 쇼핑몰 상세페이지, 개인 웹사이트, 뉴스 기사 등)는 evidence로 쓰지 마세요.
+web_search로 위 기관의 자료를 확인하지 못했다면 evidence는 null로 두세요 — sourceUrl을 지어내지 마세요.`;
+
+const CARE_TONE_RULE = `"진단", "치료", "질환", "처방" 등 의료적 확정 표현을 쓰지 마세요. "~에 도움될 수 있음",
+"~하는 경향이 있어요" 같은 완곡한 표현만 사용하세요. 톤은 병원이 아니라 매일 쓰는 날씨 앱처럼 친근하게.`;
+
+const CARE_PRODUCT_RULE = `products의 name과 url은 반드시 web_search로 실제로 존재를 확인한 제품만 쓰세요.
+가상의 제품명이나 지어낸 URL은 절대 포함하지 마세요. url은 그 제품을 실제로 구매할 수 있는 페이지여야 합니다.`;
+
+function careExcludeRule(excludeProducts: string[]): string {
+  if (excludeProducts.length === 0) return '';
+  return `\n\n다음 제품은 최근에 이미 추천했으니 이번에는 다른 제품을 고르세요: ${excludeProducts.join(', ')}`;
+}
+
+const CARE_WEATHER_SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 날씨 기반 케어 가이드 작성자입니다.
+오늘의 날씨/대기질 데이터를 보고, 확립된 피부과학 지식(자외선-광노화, 오존/미세먼지로 인한 산화
+스트레스, 습도 저하와 피부장벽 손상 등)에 근거해 "외출 전 / 외출 중 / 귀가 후" 하루 흐름에 맞는
+케어 루틴(routine)과 실제 구매 가능한 제품(products)을 함께 제시하세요.
+
+routine에는 각 단계에서 어떤 성분(ingredient)을 얼마나(amount) 바르는지 구체적으로 담으세요.
+products는 web_search로 실제 존재를 확인한 제품 2~4개를 담고, 각 제품이 오늘 날씨의 어떤 수치
+때문에 도움이 될 수 있는지 reason에 쓰세요.
+
+반드시 지킬 규칙:
+1. ${CARE_TONE_RULE}
+2. ${CARE_EVIDENCE_RULE}
+3. ${CARE_PRODUCT_RULE}
+4. ${CARE_JSON_FORMAT_SPEC}`;
+
+const CARE_SKIN_SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 피부 상태 기반 케어 가이드 작성자입니다.
+사용자의 오늘 피부 측정값(부위별 상태·수분·탄력), 여드름 구역 리포트(있으면), 피부 상태 분류
+결과(있으면)를 보고, 확립된 피부과학 지식에 근거해 케어 루틴(routine)과 실제 구매 가능한
+제품(products)을 함께 제시하세요.
+
+routine에는 각 단계에서 어떤 성분(ingredient)을 얼마나(amount) 바르는지 구체적으로 담으세요.
+products는 web_search로 실제 존재를 확인한 제품 2~4개를 담고, 각 제품이 사용자의 오늘 피부
+상태에 왜 도움이 될 수 있는지 reason에 쓰세요.
+
+**피부 상태 분류 결과를 언급할 때는 반드시 완곡하게 표현하세요** — "건선"처럼 분류 결과를 그대로
+단정적으로 말하지 말고 "건선과 유사한 양상이 의심돼요", "~일 수 있어요"처럼 부드럽게 표현하고,
+분류 신뢰도가 낮거나 애매하면 이 결과를 아예 언급하지 않아도 됩니다. 이 서비스는 의료 진단을
+제공하지 않으므로 medicalDisclaimer에 "이 결과는 참고용이며 의료적 진단이 아닙니다" 같은 문구를
+반드시 포함하세요.
+
+반드시 지킬 규칙:
+1. ${CARE_TONE_RULE}
+2. ${CARE_EVIDENCE_RULE}
+3. ${CARE_PRODUCT_RULE}
+4. ${CARE_JSON_FORMAT_SPEC}`;
+
+const CARE_COMBINED_SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 날씨+피부 상태 복합 케어 가이드
+작성자입니다. 사용자의 오늘 피부 측정값과 오늘의 날씨/대기질 데이터를 함께 보고, 두 정보를 모두
+반영한 케어 루틴(routine)과 실제 구매 가능한 제품(products)을 함께 제시하세요. 예: 오늘 자외선이
+높고 피부 수분이 낮다면 그 조합에 맞는 케어를 제안하세요.
+
+routine에는 각 단계에서 어떤 성분(ingredient)을 얼마나(amount) 바르는지 구체적으로 담으세요.
+products는 web_search로 실제 존재를 확인한 제품 2~4개를 담고, 오늘 날씨와 피부 상태를 함께
+근거로 reason에 쓰세요.
+
+**피부 상태 분류 결과를 언급할 때는 반드시 완곡하게 표현하세요** ("~일 수 있어요" 등). 이 서비스는
+의료 진단을 제공하지 않으므로 medicalDisclaimer에 참고용 문구를 반드시 포함하세요.
+
+반드시 지킬 규칙:
+1. ${CARE_TONE_RULE}
+2. ${CARE_EVIDENCE_RULE}
+3. ${CARE_PRODUCT_RULE}
+4. ${CARE_JSON_FORMAT_SPEC}`;
+
+const CARE_SYSTEM_PROMPTS: Record<CareType, string> = {
+  weather: CARE_WEATHER_SYSTEM_PROMPT,
+  skin: CARE_SKIN_SYSTEM_PROMPT,
+  combined: CARE_COMBINED_SYSTEM_PROMPT,
+};
+
+function buildCareUserContent(
+  careType: CareType,
+  skin: SkinInput | null,
+  weather: WeatherInput | null,
+  excludeProducts: string[],
+): string {
+  const parts: string[] = [];
+  if (weather) parts.push(`[오늘 날씨/대기질]\n${JSON.stringify(weather)}`);
+  if (skin) parts.push(`[오늘 피부 측정값]\n${JSON.stringify(skin)}`);
+  return parts.join('\n\n') + careExcludeRule(excludeProducts);
+}
+
+function isCareEvidenceSourceType(value: unknown): value is CareEvidenceSourceType {
+  return (
+    typeof value === 'string' &&
+    (CARE_EVIDENCE_SOURCE_TYPES as readonly string[]).includes(value)
+  );
+}
+
+function normalizeGeneratedCareEvidence(value: unknown): GeneratedCareEvidence | null {
+  if (!value || typeof value !== 'object') return null;
+  const item = value as Record<string, unknown>;
+  if (!isCareEvidenceSourceType(item.sourceType) || item.sourceType === '없음') return null;
+  const sourceUrl = typeof item.sourceUrl === 'string' ? item.sourceUrl : null;
+  if (!sourceUrl) return null;
+  return {
+    sourceName: typeof item.sourceName === 'string' ? item.sourceName : null,
+    sourceUrl,
+    sourceType: item.sourceType,
+  };
+}
+
+function isGeneratedCareRoutineStep(value: unknown): value is GeneratedCareRoutineStep {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Record<string, unknown>;
+  return isNonEmptyString(item.phase) && isNonEmptyString(item.step) && isNonEmptyString(item.reason);
+}
+
+function isGeneratedCareProduct(value: unknown): value is GeneratedCareProduct {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Record<string, unknown>;
+  return isNonEmptyString(item.name) && isNonEmptyString(item.url) && isNonEmptyString(item.reason);
+}
+
+/**
+ * LLM 출력 raw 객체 → 검증·정규화된 GeneratedCarePlan.
+ * 개별 항목이 형식을 어기면(phase/step/reason 등 필수 필드 누락) 그 항목만 버린다 —
+ * routine 3개 중 1개가 깨졌다고 전체를 실패시키지 않는다. evidence는 화이트리스트 밖
+ * sourceType이거나 url이 없으면 조용히 null로 떨어뜨린다(근거 없음으로 표시).
+ */
+function normalizeGeneratedCarePlan(raw: unknown): GeneratedCarePlan {
+  const obj = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const rawRoutine = Array.isArray(obj.routine) ? obj.routine : [];
+  const rawProducts = Array.isArray(obj.products) ? obj.products : [];
+
+  const routine: GeneratedCareRoutineStep[] = rawRoutine
+    .filter(isGeneratedCareRoutineStep)
+    .map((item) => {
+      const raw = item as unknown as Record<string, unknown>;
+      return {
+        phase: item.phase,
+        step: item.step,
+        ingredient: typeof raw.ingredient === 'string' ? raw.ingredient : null,
+        amount: typeof raw.amount === 'string' ? raw.amount : null,
+        reason: item.reason,
+        evidence: normalizeGeneratedCareEvidence(raw.evidence),
+      };
+    });
+
+  const products: GeneratedCareProduct[] = rawProducts
+    .filter(isGeneratedCareProduct)
+    .map((item) => {
+      const raw = item as unknown as Record<string, unknown>;
+      return {
+        name: item.name,
+        url: item.url,
+        reason: item.reason,
+        evidence: normalizeGeneratedCareEvidence(raw.evidence),
+      };
+    });
+
+  const medicalDisclaimer =
+    typeof obj.medicalDisclaimer === 'string' ? obj.medicalDisclaimer : null;
+
+  return { routine, products, medicalDisclaimer };
+}
+
 /**
  * R30: 재시도·서킷브레이커 상수. (Gemini 때와 동일한 정책 — 대상만 OpenAI로 바뀜)
  *
@@ -215,6 +443,10 @@ const OPENAI_MAX_ATTEMPTS = 3; // 최초 1회 + 재시도 2회
 const OPENAI_BASE_BACKOFF_MS = 400;
 const OPENAI_TOTAL_BUDGET_MS = 30_000;
 const OPENAI_DEFAULT_TIMEOUT_MS = 15_000;
+
+/** 케어 루틴 생성(web_search 포함)은 단일 호출이 더 오래 걸려 예산을 별도로 둔다. */
+const CARE_DEFAULT_TIMEOUT_MS = 45_000;
+const CARE_TOTAL_BUDGET_MS = 100_000;
 
 /** 창(window) 안에 이만큼 연속 실패하면 회로를 연다. */
 const CIRCUIT_FAILURE_THRESHOLD = 10;
@@ -232,8 +464,10 @@ export class OpenAiClient {
   private readonly apiKey: string | undefined;
   private readonly model: string;
   private readonly endpoint = 'https://api.openai.com/v1/chat/completions';
+  private readonly responsesEndpoint = 'https://api.openai.com/v1/responses';
   private readonly mockEnabled: boolean;
   private readonly timeoutMs: number;
+  private readonly careTimeoutMs: number;
 
   /** R30 서킷브레이커 상태 — 카운터와 타임스탬프뿐이라 라이브러리가 필요 없다. */
   private failureCount = 0;
@@ -252,6 +486,14 @@ export class OpenAiClient {
     );
     this.timeoutMs =
       Number.isFinite(timeout) && timeout > 0 ? timeout : OPENAI_DEFAULT_TIMEOUT_MS;
+    const careTimeout = Number(
+      this.configService.get<string | number>('OPENAI_CARE_TIMEOUT_MS') ??
+        CARE_DEFAULT_TIMEOUT_MS,
+    );
+    this.careTimeoutMs =
+      Number.isFinite(careTimeout) && careTimeout > 0
+        ? careTimeout
+        : CARE_DEFAULT_TIMEOUT_MS;
     // 개발용 mock — 운영에서는 반드시 false여야 함.
     // ConfigService가 envFilePath 파일을 읽지 못한 경우를 대비해 process.env도 직접 확인한다.
     const mockFlag =
@@ -411,14 +653,109 @@ export class OpenAiClient {
     return results;
   }
 
+  /**
+   * 케어 루틴+제품 생성 — Responses API + web_search 도구.
+   * strict json_schema를 못 쓰므로 프롬프트로 JSON 형식을 강제하고, 파싱 실패 시
+   * 같은 대화(previous_response_id)에 "JSON만 출력하라" 보정 메시지로 1회만 재요청한다
+   * (도구 재호출 비용을 아끼려고 보정 요청엔 web_search를 다시 붙이지 않는다).
+   *
+   * 화이트리스트 밖 sourceType이나 실제 URL 없는 evidence는 normalizeGeneratedCarePlan이
+   * 이미 null로 걸러낸다. 나머지 후처리(exclude 필터·링크 HEAD 검증)는 CareService가 한다.
+   */
+  async generateCarePlan(
+    careType: CareType,
+    skin: SkinInput | null,
+    weather: WeatherInput | null,
+    excludeProducts: string[] = [],
+  ): Promise<GeneratedCarePlan> {
+    if (this.mockEnabled) {
+      return this.mockCarePlan(careType);
+    }
+    if (!this.apiKey) {
+      throw new OpenAiUnavailable('OPENAI_API_KEY not configured');
+    }
+
+    const payload = {
+      model: this.model,
+      input: [
+        { role: 'system', content: CARE_SYSTEM_PROMPTS[careType] },
+        { role: 'user', content: buildCareUserContent(careType, skin, weather, excludeProducts) },
+      ],
+      tools: [{ type: 'web_search' }],
+    };
+
+    const callOpts = {
+      endpoint: this.responsesEndpoint,
+      timeoutMs: this.careTimeoutMs,
+      totalBudgetMs: CARE_TOTAL_BUDGET_MS,
+      parse: (res: Response) => res.json() as Promise<unknown>,
+    };
+
+    let data = await this.callOpenAi<unknown>(payload, callOpts);
+    let raw: unknown;
+    try {
+      raw = this.extractCarePlanJson(data);
+    } catch (e) {
+      this.logger.warn(
+        `케어 플랜 JSON 파싱 실패, 보정 재요청 1회: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      const responseId = (data as { id?: string })?.id;
+      const correctivePayload = responseId
+        ? {
+            model: this.model,
+            previous_response_id: responseId,
+            input: [
+              {
+                role: 'user',
+                content: 'JSON 객체만 출력하세요. 코드블록이나 다른 텍스트 없이 순수 JSON만 응답하세요.',
+              },
+            ],
+          }
+        : payload;
+      data = await this.callOpenAi<unknown>(correctivePayload, callOpts);
+      raw = this.extractCarePlanJson(data);
+    }
+
+    const plan = normalizeGeneratedCarePlan(raw);
+    if (plan.routine.length === 0 && plan.products.length === 0) {
+      throw new OpenAiUnavailable('OpenAI returned an empty care plan');
+    }
+
+    // 의료적 확정 표현 사후 검증 — routine/product의 reason만 텍스트 필드라 여기만 본다.
+    const policyResult = this.evidencePolicy.validateWeatherProducts([
+      ...plan.routine.map((r) => ({ explanation: r.reason })),
+      ...plan.products.map((p) => ({ explanation: p.reason })),
+    ]);
+    if (!policyResult.ok) {
+      this.logger.warn(
+        `OpenAI evidence policy violation (care plan): ${JSON.stringify(policyResult.violations)}`,
+      );
+      throw new OpenAiUnavailable('OpenAI output violated evidence policy');
+    }
+
+    return plan;
+  }
+
   // ── 내부 헬퍼 ──────────────────────────────────
 
   /**
    * R30: 429/5xx는 지수 백오프 + 지터로 재시도하고, 연속 실패가 잦으면 회로를 열어
    * 호출 자체를 건너뛴다. 그 밖의 4xx(키 오류·잘못된 요청)는 재시도해도 같은 결과라
    * 즉시 실패한다.
+   *
+   * opts로 endpoint/timeout/parse를 바꿀 수 있다 — 케어 루틴 생성(Responses API)이
+   * Chat Completions와 다른 엔드포인트·응답 형태·타임아웃 예산을 쓰기 때문이다.
+   * 재시도·서킷브레이커 정책 자체는 두 경로가 공유한다.
    */
-  private async callOpenAi<T>(payload: unknown): Promise<T> {
+  private async callOpenAi<T>(
+    payload: unknown,
+    opts?: {
+      endpoint?: string;
+      timeoutMs?: number;
+      totalBudgetMs?: number;
+      parse?: (res: Response) => Promise<T>;
+    },
+  ): Promise<T> {
     if (!this.apiKey) {
       throw new OpenAiUnavailable('OPENAI_API_KEY not configured');
     }
@@ -427,16 +764,21 @@ export class OpenAiClient {
       throw new OpenAiUnavailable('OpenAI circuit open — skipping call');
     }
 
+    const endpoint = opts?.endpoint ?? this.endpoint;
+    const timeoutMs = opts?.timeoutMs ?? this.timeoutMs;
+    const totalBudgetMs = opts?.totalBudgetMs ?? OPENAI_TOTAL_BUDGET_MS;
+    const parse = opts?.parse ?? ((res: Response) => this.parseResponse<T>(res));
+
     const startedAt = Date.now();
     let lastError = 'unknown';
 
     for (let attempt = 1; attempt <= OPENAI_MAX_ATTEMPTS; attempt++) {
-      const outcome = await this.requestOnce(payload);
+      const outcome = await this.requestOnce(payload, endpoint, timeoutMs);
       if (outcome.kind === 'ok') {
         // 200이라도 본문이 깨졌으면 실패로 센다 — 그 상태가 이어지면 회로를 열어야 한다.
         let parsed: T;
         try {
-          parsed = await this.parseResponse<T>(outcome.res);
+          parsed = await parse(outcome.res);
         } catch (e) {
           this.recordFailure();
           throw e;
@@ -450,8 +792,7 @@ export class OpenAiClient {
 
       const backoff = this.backoffMs(attempt);
       const circuitJustOpened = Date.now() < this.circuitOpenUntil;
-      const withinBudget =
-        Date.now() - startedAt + backoff + this.timeoutMs <= OPENAI_TOTAL_BUDGET_MS;
+      const withinBudget = Date.now() - startedAt + backoff + timeoutMs <= totalBudgetMs;
       if (
         !outcome.retryable ||
         attempt === OPENAI_MAX_ATTEMPTS ||
@@ -473,6 +814,8 @@ export class OpenAiClient {
   /** 한 번의 호출. 예외를 던지지 않고 재시도 가능 여부를 함께 돌려준다. */
   private async requestOnce(
     payload: unknown,
+    endpoint: string = this.endpoint,
+    timeoutMs: number = this.timeoutMs,
   ): Promise<
     { kind: 'ok'; res: Response } | { kind: 'fail'; reason: string; retryable: boolean }
   > {
@@ -480,14 +823,14 @@ export class OpenAiClient {
     try {
       // R2: API key를 쿼리스트링이 아니라 헤더로 보낸다. URL은 액세스 로그·프록시
       // 로그·APM 트레이스·예외의 request URL에 그대로 남기 때문이다.
-      res = await fetch(this.endpoint, {
+      res = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${this.apiKey as string}`,
         },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(this.timeoutMs),
+        signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (e) {
       // 타임아웃·네트워크 오류는 재시도하지 않는다(위 상수 주석 참고).
@@ -572,6 +915,48 @@ export class OpenAiClient {
     return items as T;
   }
 
+  /**
+   * Responses API envelope → 케어 플랜 JSON.
+   * `output_text`가 있으면 우선 쓰고, 없으면 `output[]`에서 type:'message' 항목의
+   * content[].text를 이어붙인다(web_search 호출이 섞여 output에 여러 아이템이 온다).
+   * 텍스트 안에서 첫 `{` ~ 마지막 `}` 구간만 잘라 JSON.parse한다 — 모델이 코드블록이나
+   * 설명을 앞뒤에 붙여도 견딘다.
+   */
+  private extractCarePlanJson(data: unknown): unknown {
+    const text = this.extractOutputText(data);
+    if (!text) {
+      throw new OpenAiUnavailable('Unexpected OpenAI Responses payload: no output text');
+    }
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start === -1 || end === -1 || end < start) {
+      throw new OpenAiUnavailable('OpenAI care plan output has no JSON object');
+    }
+    try {
+      return JSON.parse(text.slice(start, end + 1));
+    } catch (e) {
+      throw new OpenAiUnavailable(
+        `OpenAI care plan JSON decode failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+
+  private extractOutputText(data: unknown): string {
+    const envelope = data as {
+      output_text?: unknown;
+      output?: Array<{ type?: string; content?: Array<{ type?: string; text?: unknown }> }>;
+    };
+    if (typeof envelope?.output_text === 'string' && envelope.output_text.length > 0) {
+      return envelope.output_text;
+    }
+    const messages = envelope?.output?.filter((o) => o.type === 'message') ?? [];
+    return messages
+      .flatMap((m) => m.content ?? [])
+      .filter((c) => typeof c.text === 'string')
+      .map((c) => c.text as string)
+      .join('\n');
+  }
+
   // ── 개발용 mock 응답 (MOCK_OPENAI=true일 때만) ──
 
   private mockRecommendations(): GeneratedRecommendation[] {
@@ -628,6 +1013,43 @@ export class OpenAiClient {
     ].filter((x): x is GeneratedWeatherProduct => x !== null);
 
     return results;
+  }
+
+  /** 개발용 mock — web_search 호출 없이 careType별 고정 루틴+제품을 돌려준다. */
+  private mockCarePlan(careType: CareType): GeneratedCarePlan {
+    return {
+      routine: [
+        {
+          phase: careType === 'weather' ? '외출 전' : '아침',
+          step: '보습 + 자외선 차단',
+          ingredient: '나이아신아마이드',
+          amount: '500원 동전 크기',
+          reason:
+            careType === 'weather'
+              ? '오늘 자외선지수를 고려해 외출 전 차단이 도움될 수 있어요.'
+              : '오늘 측정된 피부 수분 지표를 고려해 보습이 도움될 수 있어요.',
+          evidence: null,
+        },
+        {
+          phase: '자기 전',
+          step: '진정 + 보습 마무리',
+          ingredient: '센텔라',
+          amount: '앰플 2~3방울',
+          reason: '하루 동안의 환경 노출 이후 피부 진정에 도움될 수 있어요.',
+          evidence: null,
+        },
+      ],
+      products: [
+        {
+          name: '(mock) 데일리 수분 로션',
+          url: 'https://example.com/mock-product',
+          reason: 'mock 응답 — 실제 web_search 결과가 아닙니다.',
+          evidence: null,
+        },
+      ],
+      medicalDisclaimer:
+        careType === 'weather' ? null : '이 결과는 참고용이며 의료적 진단이 아닙니다.',
+    };
   }
 }
 

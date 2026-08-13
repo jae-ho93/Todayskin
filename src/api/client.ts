@@ -13,6 +13,7 @@ import type {
   Recommendation,
   RecommendationsFastResponse,
   WeatherProductsFastResponse,
+  CarePlanFastResponse,
   ScoreSeries,
   SignupRequest,
   SocialLoginResponse,
@@ -268,6 +269,17 @@ async function safePostJson<T>(path: string, body: unknown, timeoutMs = 20000): 
   }
 }
 
+// 읽기 성격의 GET(케어 루틴 fast-path 등). 실패 시 목업으로 대체하지 않고 null을 반환한다.
+async function safeGetJson<T>(path: string, timeoutMs = 20000): Promise<T | null> {
+  try {
+    const res = await fetchWithAuth(path, { timeoutMs });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
 // 인증이 필요한 쓰기 요청(동의 등록 등). 실패를 숨기면 안 되므로 에러를 그대로 던진다.
 async function authPostJson<T>(path: string, body: unknown): Promise<T> {
   const res = await fetchWithAuth(path, {
@@ -432,6 +444,26 @@ export const api = {
       { lat: coords?.latitude, lon: coords?.longitude },
       20000,
     ),
+
+  // 케어 루틴+제품 빠른 경로 — 날씨/피부/복합 세 careType 모두 CACHED|FALLBACK|LIVE 패턴.
+  // web_search 포함 호출이라 LIVE 생성이 오래 걸릴 수 있어 fast-path로 즉시 응답한다.
+  getCareWeatherFast: (opts?: {
+    coords?: { latitude: number; longitude: number };
+    refresh?: boolean;
+  }) => {
+    const params = new URLSearchParams();
+    if (opts?.coords) {
+      params.set('lat', String(opts.coords.latitude));
+      params.set('lon', String(opts.coords.longitude));
+    }
+    if (opts?.refresh) params.set('refresh', 'true');
+    const qs = params.toString();
+    return safeGetJson<CarePlanFastResponse>(`/care/weather${qs ? `?${qs}` : ''}`, 20000);
+  },
+  getCareSkinFast: (diagnosisId: string, refresh?: boolean) =>
+    safePostJson<CarePlanFastResponse>('/care/skin', { diagnosisId, refresh }, 20000),
+  getCareCombinedFast: (diagnosisId: string, refresh?: boolean) =>
+    safePostJson<CarePlanFastResponse>('/care/combined', { diagnosisId, refresh }, 20000),
 
   // F0: job polling 유틸 — jobId로 상태 조회 (PENDING → COMPLETED/FAILED)
   // 호출부가 interval을 제어하므로 이 함수는 1회만 호출 후 결과 확인

@@ -41,6 +41,13 @@ export const JOB_POLICIES: Record<
     attempts: 3,
     backoffDelayMs: 2_000,
   },
+  // 케어 루틴+제품 LIVE 생성 — web_search 포함이라 호출이 오래 걸릴 수 있어 재시도는 2회로 낮춘다.
+  [JobType.CARE_GENERATE]: {
+    queueName: QUEUE_RECOMMENDATION,
+    priority: 1,
+    attempts: 2,
+    backoffDelayMs: 3_000,
+  },
   [JobType.PATTERN_ANALYZE]: {
     queueName: QUEUE_PATTERN,
     priority: 5,

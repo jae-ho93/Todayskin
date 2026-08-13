@@ -608,6 +608,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/care/weather": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 날씨 기반 케어 루틴+제품 빠른 경로
+         * @description 좌표만 받아 서버가 오늘 날씨를 직접 조회하고 케어 루틴+실제 제품을 즉시 반환한다 (source: CACHED | FALLBACK | LIVE). CACHED/FALLBACK이면 jobId로 GET /jobs/:id polling해 LIVE로 교체한다.
+         */
+        get: operations["CareController_weather"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/care/skin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 피부 상태 기반 케어 루틴+제품 빠른 경로
+         * @description 지정한 진단의 피부 측정값을 기준으로 케어 루틴+실제 제품을 생성한다.
+         */
+        post: operations["CareController_skin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/care/combined": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 날씨+피부 상태 복합 케어 루틴+제품 빠른 경로
+         * @description 지정한 진단의 피부 측정값과 그 진단에 연결된 날씨(diagnosis.weatherSnapshotId)를 함께 반영한다.
+         */
+        post: operations["CareController_combined"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/diagnosis/latest": {
         parameters: {
             query?: never;
@@ -1380,7 +1440,7 @@ export interface components {
         JobResponseDto: {
             id: string;
             /** @enum {string} */
-            type: "RECOMMENDATION_GENERATE" | "WEATHER_PRODUCTS_GENERATE" | "PATTERN_ANALYZE" | "NOTIFICATION_SEND";
+            type: "RECOMMENDATION_GENERATE" | "WEATHER_PRODUCTS_GENERATE" | "CARE_GENERATE" | "PATTERN_ANALYZE" | "NOTIFICATION_SEND";
             /** @enum {string} */
             status: "PENDING" | "COMPLETED" | "FAILED";
             /** @description 낮을수록 높은 우선순위 */
@@ -1471,6 +1531,65 @@ export interface components {
             generatedAt?: string;
             /** @description 실제 카탈로그 제품 3개 (세안 후/외출 전/외출 후) */
             items: components["schemas"]["ProductDto"][];
+        };
+        CareEvidenceDto: {
+            /** @description 출처 기관/문서명 */
+            sourceName?: Record<string, never> | null;
+            /** @description web_search로 확인된 실제 URL */
+            sourceUrl?: Record<string, never> | null;
+            /**
+             * @example WHO
+             * @enum {string}
+             */
+            sourceType: "WHO" | "FDA" | "식약처" | "AAD" | "PubMed" | "없음";
+        };
+        CareRoutineStepDto: {
+            /** @description 단계 구분 (예: 세안 후, 외출 전, 자기 전) */
+            phase: string;
+            /** @description 무엇을 하는 단계인지 */
+            step: string;
+            /** @description 핵심 성분 */
+            ingredient?: Record<string, never> | null;
+            /** @description 바르는 양 (예: 500원 동전 크기) */
+            amount?: Record<string, never> | null;
+            /** @description 오늘 수치/피부상태 기반 이유 */
+            reason: string;
+            evidence?: components["schemas"]["CareEvidenceDto"] | null;
+        };
+        CareProductDto: {
+            /** @description 실제 제품명 */
+            name: string;
+            /** @description web_search로 확인된 구매 페이지 URL */
+            url: string;
+            /** @description 이 제품을 고른 이유 */
+            reason: string;
+            evidence?: components["schemas"]["CareEvidenceDto"] | null;
+        };
+        CarePlanDto: {
+            /** @enum {string} */
+            careType: "weather" | "skin" | "combined";
+            routine: components["schemas"]["CareRoutineStepDto"][];
+            products: components["schemas"]["CareProductDto"][];
+            /** @description 의료 면책 문구 */
+            medicalDisclaimer?: Record<string, never> | null;
+        };
+        CarePlanFastResponseDto: {
+            /**
+             * @example FALLBACK
+             * @enum {string}
+             */
+            source: "CACHED" | "FALLBACK" | "LIVE";
+            /** @description LIVE 교체용 job id */
+            jobId?: string;
+            /** @description 이 결과가 만들어진 시각 */
+            generatedAt?: string;
+            plan: components["schemas"]["CarePlanDto"];
+        };
+        CareDiagnosisRequestDto: {
+            /** @description 이 진단 기준으로 생성 */
+            diagnosisId?: string;
+            /** @description 직전 결과를 무시하고 새로 생성 */
+            refresh?: boolean;
         };
         SkinPartMetricDto: {
             /**
@@ -2511,6 +2630,78 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WeatherProductsResponseDto"];
+                };
+            };
+        };
+    };
+    CareController_weather: {
+        parameters: {
+            query?: {
+                /** @description 위도 (-90 ~ 90) */
+                lat?: number;
+                /** @description 경도 (-180 ~ 180) */
+                lon?: number;
+                /** @description 직전 결과를 무시하고 새로 생성 */
+                refresh?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CarePlanFastResponseDto"];
+                };
+            };
+        };
+    };
+    CareController_skin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CareDiagnosisRequestDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CarePlanFastResponseDto"];
+                };
+            };
+        };
+    };
+    CareController_combined: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CareDiagnosisRequestDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CarePlanFastResponseDto"];
                 };
             };
         };

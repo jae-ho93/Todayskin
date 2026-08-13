@@ -457,6 +457,15 @@ export const ENV_REGISTRY: EnvVarDefinition[] = [
     // default를 두면 process.env 값을 덮어쓰는 경우가 있어 기본값을 생략한다.
     schema: booleanFlag,
   },
+  {
+    key: 'OPENAI_CARE_TIMEOUT_MS',
+    owner: 'ai',
+    description: '케어 루틴+제품 생성(web_search 포함) 호출 타임아웃(ms) — 기존 OPENAI_TIMEOUT_MS보다 여유를 둔다',
+    requiredIn: 'never',
+    safeDefault: 45_000,
+    secret: false,
+    schema: Joi.number().integer().min(1_000).max(120_000).default(45_000),
+  },
 
   // N33: 소셜 로그인 — 제공자 검증용 설정. 미설정 시 해당 제공자 요청만 401(명시적 실패).
   {

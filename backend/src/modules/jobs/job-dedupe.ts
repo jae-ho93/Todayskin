@@ -14,6 +14,7 @@ import { JobType } from './enums/job-type.enum';
 const DEDUPE_PAYLOAD_KEY: Partial<Record<JobType, string>> = {
   [JobType.RECOMMENDATION_GENERATE]: 'diagnosisId',
   [JobType.WEATHER_PRODUCTS_GENERATE]: 'regionKey',
+  [JobType.CARE_GENERATE]: 'careKey',
 };
 
 /**

@@ -392,3 +392,47 @@ export interface WeatherProductsFastResponse {
   generatedAt?: string;
   items: Product[];
 }
+
+// ── 케어 루틴+제품 (OpenAI Responses API + web_search) ──────────────
+
+export type CareType = 'weather' | 'skin' | 'combined';
+
+/**
+ * 근거 출처 — 기존 추천의 EvidenceSource(사람이 검증한 정적 레지스트리)와 달리
+ * web_search로 실시간 확인된 것. sourceType이 '없음'이면(=null) 근거 없음.
+ */
+export interface CareEvidence {
+  sourceName: string | null;
+  sourceUrl: string | null;
+  sourceType: 'WHO' | 'FDA' | '식약처' | 'AAD' | 'PubMed' | '없음';
+}
+
+export interface CareRoutineStep {
+  phase: string;
+  step: string;
+  ingredient: string | null;
+  amount: string | null;
+  reason: string;
+  evidence?: CareEvidence | null;
+}
+
+export interface CareProduct {
+  name: string;
+  url: string;
+  reason: string;
+  evidence?: CareEvidence | null;
+}
+
+export interface CarePlan {
+  careType: CareType;
+  routine: CareRoutineStep[];
+  products: CareProduct[];
+  medicalDisclaimer?: string | null;
+}
+
+export interface CarePlanFastResponse {
+  source: 'CACHED' | 'FALLBACK' | 'LIVE';
+  jobId?: string;
+  generatedAt?: string;
+  plan: CarePlan;
+}
