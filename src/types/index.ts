@@ -311,6 +311,7 @@ export interface CalendarDiagnosis {
   /** 저장 동의 + 랜드마크 존재 시에만 채워짐. 미동의면 null. */
   landmarks: Landmarks | null;
   // 신규(검증 단계): YOLO 여드름 구역 리포트(텍스트) + 5클래스 질환 분류.
+  // 둘 다 없을 수 있다 -- 없으면 UI에서 해당 섹션을 숨긴다.
   acneReport?: string | null;
   diseaseClassification?: DiseaseClassification | null;
 }
