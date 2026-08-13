@@ -78,7 +78,7 @@ Todayskin은 **날씨·대기질과 얼굴 이미지 AI 분석을 결합해 피�
 
 1. 리포지토리 전체 탐색 — `app/`(24개 라우트), `src/`(50개 파일), `backend/src`(246개 TS 파일), `backend/inference-service/`(15개 Python 파일), `backend/prisma/`(스키마·23개 마이그레이션·시드), `docs/`, `.github/`, Docker/ECS 설정 전수 확인.
 2. 품질 게이트 실제 실행 — 2026-08-13 로컬에서 프론트 `typecheck`/`lint`/`jest`(10 suites, 105 tests 전부 통과), 백엔드 `typecheck`/`lint`/`jest`(52 suites 통과, 2 skipped; 541 tests 통과, 25 skipped) 실행 결과를 근거로 사용.
-3. 문서 검토 — `README.md`, `docs/ARCHITECTURE.md`, `docs/SETUP.md`, `docs/DEPLOYMENT.md`, `docs/BACKEND_TASKS.md`, `docs/BACKEND_ARCHIVE.md`, `docs/FRONTEND_TASKS.md`, `docs/REFACTORING_BACKLOG.md`, `ml/SKIN_MODEL_TRAINING_PLAN.md`.
+3. 문서 검토 — `README.md`, `docs/architecture/ARCHITECTURE.md`, `docs/guides/SETUP.md`, `docs/guides/DEPLOYMENT.md`, `docs/tasks/BACKEND_TASKS.md`, `docs/tasks/BACKEND_ARCHIVE.md`, `docs/tasks/FRONTEND_TASKS.md`, `docs/tasks/REFACTORING_BACKLOG.md`, `ml/SKIN_MODEL_TRAINING_PLAN.md`.
 4. 경쟁 서비스 웹 리서치(2026-08) — 화해, Perfect Corp(YouCam), Neutrogena Skin360, TroveSkin, 룰루랩 LUMINI, Radien/AISkincare/skncoach 등 신생 AI 스킨케어 앱, 그리고 식약처 웰니스/의료기기 판단 기준.
 
 **한계 (정직하게 명시):**
@@ -102,7 +102,7 @@ Todayskin은 **날씨·대기질과 얼굴 이미지 AI 분석을 결합해 피�
 | Redis | **구현(선택적)** — 날씨 캐시·스로틀·BullMQ·SWR, 없으면 인라인 폴백 | `[FACT]` `backend/src/redis/` |
 | BullMQ | **구현** — recommendation/pattern/notification/dlq 큐 + 인라인 디스패처 폴백 | `[FACT]` `backend/src/modules/jobs/` |
 | S3 | **구현** — SSE-S3/KMS 암호화, presign 15분, 동의 게이트. 단 실제 버킷 프로비저닝은 미완 | `[FACT]` `backend/src/modules/storage/` |
-| AWS 배포 | **미구현(코드만 완성)** — deploy-ecs.yml·ECS task 정의는 실물이지만 계정/OIDC/RDS/S3 미생성 (N16 open) | `[FACT]` `docs/BACKEND_TASKS.md` |
+| AWS 배포 | **미구현(코드만 완성)** — deploy-ecs.yml·ECS task 정의는 실물이지만 계정/OIDC/RDS/S3 미생성 (N16 open) | `[FACT]` `docs/tasks/BACKEND_TASKS.md` |
 | Access + Refresh Token | **구현** — 해시 저장, 회전, familyId 재사용 감지 | `[FACT]` `backend/src/modules/auth/auth.service.ts` |
 | 동의 기반 원본 저장 | **구현** — `diagnosis_image_storage` 동의 시에만 S3 저장, 미동의 시 추론 후 폐기 | `[FACT]` `backend/src/modules/diagnosis/diagnosis.service.ts` |
 | 피부 분석 | **구현(검증 미완)** — 실제 학습 모델 서빙, 단 평가 지표 부재 | `[FACT]` `backend/inference-service/assets/` |
@@ -112,9 +112,9 @@ Todayskin은 **날씨·대기질과 얼굴 이미지 AI 분석을 결합해 피�
 | 개인화 | **부분 구현** — 패턴(피부↔날씨 상관) 화면은 있으나 추천 생성에 사용자 선호가 1급 신호로 반영되지 않음 | `[FACT]` `app/trend.tsx`, `recommendation.service.ts` |
 | 푸시 알림 | **미구현** — 선호 설정 API만 존재, 발송 채널 없음 (`pushDeliveryAvailable=false`로 UI 비활성) | `[FACT]` `app/(tabs)/settings.tsx` |
 | 스토어 릴리스 | **미구현** — eas.json 없음, bundleIdentifier/package 없음, 앱명 "Weatherskin" | `[FACT]` `app.json` |
-| 결제/구독 | **미구현(보류)** — F11 명시적 보류, 가짜 가격 카드는 제거됨 | `[FACT]` `docs/FRONTEND_TASKS.md` |
+| 결제/구독 | **미구현(보류)** — F11 명시적 보류, 가짜 가격 카드는 제거됨 | `[FACT]` `docs/tasks/FRONTEND_TASKS.md` |
 
-**주목할 정체성 사실** `[FACT]`: `docs/ARCHITECTURE.md` 7절은 이 프로젝트의 목표를 "실제 서비스 수준의 백엔드 **포트폴리오**"로 명시한다. 반면 README와 본 리뷰의 목적은 "실사용자 출시"다. 이 두 정체성은 요구 수준이 다르므로(운영 온콜, CS, 규제 대응, 스토어 운영) **어느 쪽인지 팀이 먼저 합의해야 한다** (Decision D-01).
+**주목할 정체성 사실** `[FACT]`: `docs/architecture/ARCHITECTURE.md` 7절은 이 프로젝트의 목표를 "실제 서비스 수준의 백엔드 **포트폴리오**"로 명시한다. 반면 README와 본 리뷰의 목적은 "실사용자 출시"다. 이 두 정체성은 요구 수준이 다르므로(운영 온콜, CS, 규제 대응, 스토어 운영) **어느 쪽인지 팀이 먼저 합의해야 한다** (Decision D-01).
 
 ---
 
@@ -299,7 +299,7 @@ Todayskin은 **날씨·대기질과 얼굴 이미지 AI 분석을 결합해 피�
 | Icons | `@expo/vector-icons`(Ionicons) 직접 사용 | 아이콘 시맨틱 래퍼 없음 — 소규모라 허용 |
 | States | `StatusBadge`(공기질/UV), `EvidenceBadge`(A/B/C) | 상태 시각화 일관 |
 
-**중복/화면별 상이 UI**: 과거 대기질 라벨·색 5중 중복(R25), KST 날짜 유틸 중복(R26), 날씨 매핑 4중 중복(R22)은 **모두 리팩토링으로 해소됨** `[FACT]` `docs/REFACTORING_BACKLOG.md`. 남은 것: 화면 파일 내 대형 StyleSheet 분리(F63 보류), 공용 Button/Typography 컴포넌트 부재.
+**중복/화면별 상이 UI**: 과거 대기질 라벨·색 5중 중복(R25), KST 날짜 유틸 중복(R26), 날씨 매핑 4중 중복(R22)은 **모두 리팩토링으로 해소됨** `[FACT]` `docs/tasks/REFACTORING_BACKLOG.md`. 남은 것: 화면 파일 내 대형 StyleSheet 분리(F63 보류), 공용 Button/Typography 컴포넌트 부재.
 
 `[RECOMMENDATION]` 출시 전: Pretendard 로딩 + 공용 Button. 출시 후: 다크모드 토큰, 스타일 분리(F63).
 
@@ -719,7 +719,7 @@ auth/otp/admin/consent/storage/diagnosis/weather/recommendations/products/patter
 
 ### 책임 분리 평가
 
-**적절하며 실제로 지켜지고 있다.** `docs/ARCHITECTURE.md`의 금지 규칙(FastAPI에 비즈니스 로직 금지, NestJS에 모델 로드 금지)이 코드와 일치함을 확인했다. Gemini 호출을 NestJS에 둔 것도 "추천은 비즈니스 로직"이라는 원칙과 정합적이다 `[FACT]`.
+**적절하며 실제로 지켜지고 있다.** `docs/architecture/ARCHITECTURE.md`의 금지 규칙(FastAPI에 비즈니스 로직 금지, NestJS에 모델 로드 금지)이 코드와 일치함을 확인했다. Gemini 호출을 NestJS에 둔 것도 "추천은 비즈니스 로직"이라는 원칙과 정합적이다 `[FACT]`.
 
 `[RECOMMENDATION]` 유일한 원칙 보완 제안: 이미지 품질 검증(blur/조도)을 FastAPI 전처리 단계에 추가하는 것은 "추론 결과만 반환" 원칙의 확장(전처리 검증)으로 문서 갱신과 함께 진행.
 
@@ -1088,7 +1088,7 @@ ECS Fargate 상시 3태스크(backend 0.5vCPU/1GB, worker 0.5/1, inference 1/2) 
 
 | # | Problem | Evidence `[FACT]` | Impact | Why It Blocks Release | Required Fix | Priority |
 |---|---------|-------------------|--------|----------------------|--------------|----------|
-| B-1 | AWS 프로덕션 부재 | N16 open, OIDC 실패 (`docs/BACKEND_TASKS.md`) | 서비스 자체가 없음 | 배포 불가 | 계정·OIDC·리소스 프로비저닝 + 첫 배포 + 스모크 + OCTOMO 프로덕션 키 | P0 |
+| B-1 | AWS 프로덕션 부재 | N16 open, OIDC 실패 (`docs/tasks/BACKEND_TASKS.md`) | 서비스 자체가 없음 | 배포 불가 | 계정·OIDC·리소스 프로비저닝 + 첫 배포 + 스모크 + OCTOMO 프로덕션 키 | P0 |
 | B-2 | 스토어 릴리스 체인 부재 | eas.json 없음, bundleIdentifier/package/versionCode 없음, splash 미연결, 앱명 Weatherskin | 심사 제출 불가 | 사용자에게 도달 불가 | EAS 프로필 + 식별자 + 버저닝 + 스플래시 + 브랜드 통일(D-04) + 소셜 콘솔 재설정 | P0 |
 | B-3 | 질환 분류 노출 | `diagnosis-result` 베타 페이지 5클래스+confidence | 의료기기 오인 → 규제·스토어 리젝 리스크 | 심사·법적 리스크 | D-02 결정 → 기본 제외 | P0 |
 | B-4 | 모바일 크래시 리포팅 부재 | `src/`에 Sentry 없음 | 출시 후 장애 원인 파악 불가 | 운영 최소선 미달 | `@sentry/react-native` + 소스맵 업로드 | P0 |
@@ -1208,9 +1208,9 @@ ECS Fargate 상시 3태스크(backend 0.5vCPU/1GB, worker 0.5/1, inference 1/2) 
 | 10 | CloudWatch 알람+런북+sweep 가동 | Ops | 무인 운영 방지 | 안정성 | 알람 4종+N37 | 1~2일 | P1 |
 
 > **작업 보드 반영 (2026-08-13)**: 위 항목 중 즉시 착수 가능한 개선은 각 보드 규칙에 따라 등록했다 —
-> 프론트 [`FRONTEND_TASKS.md`](FRONTEND_TASKS.md) **F71~F77**
+> 프론트 [`FRONTEND_TASKS.md`](../tasks/FRONTEND_TASKS.md) **F71~F77**
 > (Sentry, 이미지 리사이즈, 로컬 리마인더, 워딩 정리, 재시도 일관화, 폰트 스케일링, 브랜드 통일),
-> 백엔드 [`BACKEND_TASKS.md`](BACKEND_TASKS.md) **N46~N51** (소셜 토큰 검증, 인증 fail-closed,
+> 백엔드 [`BACKEND_TASKS.md`](../tasks/BACKEND_TASKS.md) **N46~N51** (소셜 토큰 검증, 인증 fail-closed,
 > 감사 로그 마스킹, 품질 게이트, 알람·런북, JWT 키 보관) + 보류 **N52~N53** (/v1 버저닝, 기온·습도 확장).
 > 팀 결정(D-01~D-12)과 인프라 작업(N16·N35~N37)은 기존 보드 항목·본 문서로 관리한다.
 

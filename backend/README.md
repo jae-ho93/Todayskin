@@ -1,7 +1,7 @@
 # Backend 구조
 
 NestJS Modular Monolith(BFF·비즈니스) + `inference-service/` FastAPI(추론만).  
-원칙: [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) · 실행: [docs/SETUP.md](../docs/SETUP.md) · 배포: [docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md)
+원칙: [docs/architecture/ARCHITECTURE.md](../docs/architecture/ARCHITECTURE.md) · 실행: [docs/guides/SETUP.md](../docs/guides/SETUP.md) · 배포: [docs/guides/DEPLOYMENT.md](../docs/guides/DEPLOYMENT.md)
 
 ```text
 요청 → Controller → Service → Prisma / Redis / 외부 Client
@@ -59,7 +59,7 @@ backend/
 | env 목록·필수 | `.env.example`, `src/config/env.registry.ts` |
 | API 계약 | 개발 Swagger `/api/docs`, `test/*e2e*` |
 | 스키마·시드 | `prisma/` |
-| 활성 작업 보드 | [docs/BACKEND_TASKS.md](../docs/BACKEND_TASKS.md) |
-| 완료 이력 | [docs/BACKEND_ARCHIVE.md](../docs/BACKEND_ARCHIVE.md) |
-| 리팩토링 R1~R35 판단 근거 (완료 기록) | [docs/REFACTORING_BACKLOG.md](../docs/REFACTORING_BACKLOG.md) |
+| 활성 작업 보드 | [docs/tasks/BACKEND_TASKS.md](../docs/tasks/BACKEND_TASKS.md) |
+| 완료 이력 | [docs/tasks/BACKEND_ARCHIVE.md](../docs/tasks/BACKEND_ARCHIVE.md) |
+| 리팩토링 R1~R35 판단 근거 (완료 기록) | [docs/tasks/REFACTORING_BACKLOG.md](../docs/tasks/REFACTORING_BACKLOG.md) |
 | 추론 서버 | `inference-service/README.md` |

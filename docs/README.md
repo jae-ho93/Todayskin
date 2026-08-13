@@ -1,19 +1,39 @@
 # Documentation
 
-Todayskin 문서 허브. 코드 옆에 두지 않고 **역할별로 여기(`docs/`)에 모은다.**
+Todayskin 문서 허브. 문서는 **역할별 폴더**로 분류한다 —
+설계는 `architecture/`, 실행 방법은 `guides/`, 할 일과 이력은 `tasks/`, 외부 리뷰는 `reviews/`.
 
-**지금 할 일을 찾는다면 작업 보드**(`*_TASKS.md`)를, **왜 그렇게 했는지를 찾는다면 기록 문서**
-(`*_ARCHIVE.md`, `REFACTORING_BACKLOG.md`)를 본다. 기록 문서에 새 작업을 적지 않는다.
+**지금 할 일을 찾는다면 작업 보드**(`tasks/*_TASKS.md`)를, **왜 그렇게 했는지를 찾는다면
+기록 문서**(`tasks/BACKEND_ARCHIVE.md`, `tasks/REFACTORING_BACKLOG.md`)를 본다.
+기록 문서에 새 작업을 적지 않는다.
+
+## architecture/ — 설계 원칙
 
 | 문서 | 용도 |
 |------|------|
-| [SETUP.md](SETUP.md) | 로컬 개발 (앱 + API + DB) |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | 백엔드 아키텍처 원칙 (NestJS ↔ FastAPI) |
-| [DEPLOYMENT.md](DEPLOYMENT.md) | AWS ECS 실배포 · CI/CD · 롤백 |
-| [BACKEND_TASKS.md](BACKEND_TASKS.md) | **백엔드·배포 작업 보드** — Open: N39~N42(실기기 버그), N43(기록 삭제), N44(탈퇴 시 진단 삭제), N45(근거·출처 체계), N16(첫 배포·OIDC), N35~N37(배포 후속), OCTOMO 키 |
-| [FRONTEND_TASKS.md](FRONTEND_TASKS.md) | **프론트 작업 보드** — Open: F64(등급 라벨), F65(랜드마크 렌더링), F66(날짜 표기), F67(기록 삭제 UI), F69(출처 표기), F70(수집 실패 표시). 작업 절차·계약 포함 |
-| [BACKEND_ARCHIVE.md](BACKEND_ARCHIVE.md) | 백엔드 완료 기록 (T/N/P 체크리스트) |
-| [REFACTORING_BACKLOG.md](REFACTORING_BACKLOG.md) | 리팩토링 R1~R35 실행 기록 — **완료.** 문제 진단·해법·하지 않기로 한 것의 근거 |
+| [ARCHITECTURE.md](architecture/ARCHITECTURE.md) | 시스템 아키텍처 원칙 (NestJS ↔ FastAPI 경계, 금지 규칙) |
+
+## guides/ — 실행 가이드
+
+| 문서 | 용도 |
+|------|------|
+| [SETUP.md](guides/SETUP.md) | 로컬 개발 환경 (앱 + API + DB) — 처음 온 사람은 여기부터 |
+| [DEPLOYMENT.md](guides/DEPLOYMENT.md) | AWS ECS 실배포 · CI/CD · 롤백 · 배포 체크리스트 · 장애 런북 |
+
+## tasks/ — 작업 보드와 이력
+
+| 문서 | 용도 |
+|------|------|
+| [FRONTEND_TASKS.md](tasks/FRONTEND_TASKS.md) | **프론트 작업 보드** (Open + 완료, 작업 절차·계약 포함) |
+| [BACKEND_TASKS.md](tasks/BACKEND_TASKS.md) | **백엔드·배포 작업 보드** (Open: AWS 배포 계열 N16·N35~N37·N50·N51) |
+| [BACKEND_ARCHIVE.md](tasks/BACKEND_ARCHIVE.md) | 백엔드 완료 기록 (T/N/P 체크리스트 + 판단 근거) |
+| [REFACTORING_BACKLOG.md](tasks/REFACTORING_BACKLOG.md) | 리팩토링 R1~R35 실행 기록 — **완료.** 문제 진단·해법·하지 않기로 한 것의 근거 |
+
+## reviews/ — 리뷰와 감사
+
+| 문서 | 용도 |
+|------|------|
+| [Fable5_ProjectReview.md](reviews/Fable5_ProjectReview.md) | 2026-08-13 종합 프로젝트 리뷰 (52장) — 후속 태스크의 출처 |
 
 ## 저장소 루트 (GitHub 관례)
 
@@ -28,7 +48,7 @@ Todayskin 문서 허브. 코드 옆에 두지 않고 **역할별로 여기(`docs
 |------|------|
 | [`backend/README.md`](../backend/README.md) | NestJS 모듈·디렉터리 구조 지도 |
 | [`backend/inference-service/README.md`](../backend/inference-service/README.md) | FastAPI 추론 서버 |
-| [`backend/docker/DEPLOYMENT.md`](../backend/docker/DEPLOYMENT.md) | → `docs/DEPLOYMENT.md` 안내 |
+| [`backend/docker/DEPLOYMENT.md`](../backend/docker/DEPLOYMENT.md) | → `docs/guides/DEPLOYMENT.md` 안내 |
 
 ## ML
 

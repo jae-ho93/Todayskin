@@ -3,7 +3,7 @@
 이 문서는 Todayskin 백엔드·배포의 **활성 작업 보드**다. 지금 할 일은 전부 여기 있다.
 완료 이력·계약 기록은 [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md), 리팩토링 R1~R35의 실행 기록과
 판단 근거는 [`REFACTORING_BACKLOG.md`](REFACTORING_BACKLOG.md)에 있다.
-협업 규칙은 [`CONTRIBUTING.md`](../CONTRIBUTING.md), 아키텍처 원칙은 [`ARCHITECTURE.md`](ARCHITECTURE.md)가 기준이다.
+협업 규칙은 [`CONTRIBUTING.md`](../../CONTRIBUTING.md), 아키텍처 원칙은 [`ARCHITECTURE.md`](../architecture/ARCHITECTURE.md)가 기준이다.
 
 ## 목표
 
@@ -29,15 +29,32 @@ RDS·S3·CloudWatch 연동, Pino·Helmet·JWT·Swagger·Jest를 적용한다.
 > 목표는 제출일까지 데모 품질 최상화 — 코드 태스크(N46~N49, N53)를 우선한다.
 
 실기기 테스트에서 나온 버그·정책 변경(N39~N45)과 프로젝트 리뷰
-([`Fable5_ProjectReview.md`](Fable5_ProjectReview.md))에서 나온 **코드 태스크 N46~N49·N53은
+([`Fable5_ProjectReview.md`](../reviews/Fable5_ProjectReview.md))에서 나온 **코드 태스크 N46~N49·N53은
 2026-08-13에 모두 반영했다** (PR #158~#162, 기록은 [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md)).
-남은 Open은 전부 AWS 배포 계열이다 — **N16 → N35 → N36 → N37** 순서를 지키고
-(N35~N37은 배포 파이프라인이 살아 있어야 검증 가능), 리뷰에서 나온 N50·N51도 N16 이후에만
-가능하다. **해커톤 데모에 AWS 배포가 꼭 필요한지 먼저 판단**하고 착수한다(로컬/터널 데모로
-충분하면 보류).
+
+**배포 준비 웨이브 (2026-08-13 오후)**: 목표를 "배포 버튼만 누르면 되는(deploy-ready) 상태"로
+올렸다. AWS 계정 자격 증명이 필요한 실 프로비저닝(N16)과 그 후속(N35~N37·N50 알람·N51)은
+사람이 계정을 준비해야 착수 가능하므로 Open으로 유지하고, **자격 증명 없이 지금 끝낼 수 있는
+배포 준비는 N54로 등록**해 처리한다. 순서는 **N54 → N16 → N35 → N36 → N37 → N50 → N51**.
 
 각 Task는 브랜치 하나 = PR 하나이며, 코드 변경이 없는 인프라 설정 작업은
 설정 근거와 확인 결과를 PR 본문 또는 이 문서에 남긴다.
+
+### N54. 배포 준비 마감 — 자격 증명 없이 끝낼 수 있는 전부 (Fable5 리뷰 후속)
+
+브랜치: `chore/n54-deploy-readiness`
+
+> **목표**: AWS 계정이 준비되는 순간 N16을 바로 실행할 수 있도록, 로컬에서 검증
+> 가능한 배포 준비를 전부 끝낸다. "코드는 완성"이라는 주장을 실측으로 바꾼다.
+
+- [ ] backend·inference **프로덕션 Docker 이미지 로컬 빌드 성공** 검증 (`linux/amd64`, 결과·이미지 크기 기록)
+- [ ] **프로덕션 모드 부팅 스모크**: `NODE_ENV=production` + 필수 env로 backend 컨테이너 기동 →
+      `/health/live`·`/health/ready` 200 확인 (mock 거부·env 검증이 실제로 작동하는지 실측)
+- [ ] `docs/guides/DEPLOYMENT.md`에 **배포 당일 체크리스트**(순서·확인 항목·예상 소요) 추가
+- [ ] `docs/guides/DEPLOYMENT.md`에 **장애 런북 1페이지** 추가 (N50의 문서 파트 선반영 — 증상 → 확인 순서 → 롤백 판단)
+- [ ] `.github/dependabot.yml` 추가 (npm 루트·backend, pip inference-service, github-actions — weekly)
+
+완료 기준: 이미지 2종이 로컬에서 빌드·기동되고, 문서만 보고 배포 당일 작업을 수행할 수 있다.
 
 ### N16. AWS 운영 리소스 프로비저닝·첫 배포 (미완료)
 
@@ -51,7 +68,7 @@ RDS·S3·CloudWatch 연동, Pino·Helmet·JWT·Swagger·Jest를 적용한다.
 > 네트워킹 확정(2026-08-12): **backend는 public subnet + ALB 유지 + NAT 미사용**
 > (아웃바운드는 IGW 경유). **`assignPublicIp=ENABLED`**로 ECS 프로비저닝 + migrate task 실행
 > (`deploy-ecs.yml`, `ECS_ASSIGN_PUBLIC_IP` 변수). inference는 내부망 전용(N13).
-> 상세는 `docs/DEPLOYMENT.md` 네트워크 구성.
+> 상세는 `docs/guides/DEPLOYMENT.md` 네트워크 구성.
 
 - [ ] ECR, ECS cluster/service, RDS, Redis, S3, CloudWatch 생성
 - [ ] GitHub OIDC role과 최소 권한 task/execution role 구성
@@ -116,7 +133,7 @@ R11에서 append-only 테이블에 보존 정책을 넣었다. 기본값이 `off
 
 - [ ] 알람 4종: ALB 5xx율, ECS 태스크 비정상(health fail), AsyncJob FAILED 급증(DLQ 적체), inference 429율
 - [ ] 알람 수신 채널 연결 (이메일 또는 Slack webhook)
-- [ ] 장애 런북 1페이지 (`docs/DEPLOYMENT.md`에 추가): 증상 → 확인 순서 → 롤백 판단 기준
+- [ ] 장애 런북 1페이지 (`docs/guides/DEPLOYMENT.md`에 추가): 증상 → 확인 순서 → 롤백 판단 기준
 
 완료 기준: 알람을 인위적으로 트리거해 수신을 확인하고, 런북이 문서에 있다.
 
@@ -153,7 +170,7 @@ R6 1단계로 전역 락을 풀고 슬롯 수를 `INFERENCE_CONCURRENCY`(기본 
 
 > N52(API `/v1` 버저닝)는 2026-08-13 해커톤 결정(스토어 배포 없음)으로 **제외**했다.
 > 실서비스 전환이 결정되면 첫 심사 제출 전에 재등록한다 — 근거는
-> [`Fable5_ProjectReview.md`](Fable5_ProjectReview.md) 30장.
+> [`Fable5_ProjectReview.md`](../reviews/Fable5_ProjectReview.md) 30장.
 
 ## 완료 (Done)
 

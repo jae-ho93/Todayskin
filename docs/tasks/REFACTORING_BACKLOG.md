@@ -491,7 +491,7 @@ migration 필요   예
 - [x] OtpCode / OtpSendLog 30d — 각각 인덱스가 있는 `expiresAt` / `sentAt`으로 자른다(`createdAt`은 인덱스가 없고, OTP는 생성-만료 간격이 수 분이라 기간 의미가 같다)
 - [x] WeatherSnapshot      collectedAt < now - 400d                        → DELETE
 - [x] 보존 기간은 `RETENTION_*` 환경변수로 노출했다. 인덱스는 R33에서 함께 추가했다.
-- [x] **`RETENTION_SWEEP_MODE` 기본값은 `off`다.** 되돌릴 수 없는 DELETE이므로 코드 배포만으로는 아무것도 지우지 않는다. 운영 활성화는 `dry-run`으로 규모 확인 → 스냅샷 → `delete` 순서로 별도 진행한다(docs/DEPLOYMENT.md).
+- [x] **`RETENTION_SWEEP_MODE` 기본값은 `off`다.** 되돌릴 수 없는 DELETE이므로 코드 배포만으로는 아무것도 지우지 않는다. 운영 활성화는 `dry-run`으로 규모 확인 → 스냅샷 → `delete` 순서로 별도 진행한다(docs/guides/DEPLOYMENT.md).
 - [x] 삭제는 id를 먼저 뽑고 그 목록만 지운다. `deleteMany`에는 LIMIT이 없어 조건에 맞는 전체 행을 한 트랜잭션에서 지우려 하고, 최초 실행처럼 대상이 많을 때 테이블 잠금이 길어진다. 테이블당 20배치를 넘기면 남은 몫을 다음 tick으로 넘긴다.
 - [x] 한 테이블의 실패가 나머지 정리를 막지 않도록 정책별로 예외를 잡는다.
 
@@ -1128,7 +1128,7 @@ text
 - [x] OtpCode                @@index([expiresAt])
 - [x] R11의 스윕이 쓰는 인덱스를 함께 넣었다: `OtpSendLog @@index([sentAt])`, `AiCallReservation @@index([status, updatedAt])`. 인덱스 없이 스윕을 돌리면 정리 작업이 매 tick 풀스캔한다.
 - [x] R10, R11, R21과 한 마이그레이션(`20260817000000_b4_indexes_retention_token_family`)으로 묶었다.
-- [x] `CREATE INDEX CONCURRENTLY`는 넣지 않았다 — Prisma는 마이그레이션을 트랜잭션 안에서 실행하고 `CONCURRENTLY`는 트랜잭션에서 못 쓴다. 대신 모든 `CREATE INDEX`에 `IF NOT EXISTS`를 붙였으므로, 큰 테이블은 배포 전에 psql로 `CONCURRENTLY` 생성해두면 마이그레이션이 그 인덱스를 건너뛴다(docs/DEPLOYMENT.md).
+- [x] `CREATE INDEX CONCURRENTLY`는 넣지 않았다 — Prisma는 마이그레이션을 트랜잭션 안에서 실행하고 `CONCURRENTLY`는 트랜잭션에서 못 쓴다. 대신 모든 `CREATE INDEX`에 `IF NOT EXISTS`를 붙였으므로, 큰 테이블은 배포 전에 psql로 `CONCURRENTLY` 생성해두면 마이그레이션이 그 인덱스를 건너뛴다(docs/guides/DEPLOYMENT.md).
 
 변경 범위:
 

@@ -65,7 +65,7 @@
 | 인증 | JWT access/refresh · OTP(SMS/MO) · 소셜 토큰 검증 |
 | 전송 | REST · **SSE** (job 상태 실시간 — `GET /jobs/:id/events`) |
 | 저장소 | **S3** (동의 이미지) · 감사·동의 게이트 |
-| 관측 | Pino · Sentry · Helmet · Throttler |
+| 관측 | Pino(구조화 로그) · Helmet · Throttler · correlationId |
 
 경로: `backend/src/` — 구조 지도는 [`backend/README.md`](backend/README.md)
 
@@ -77,7 +77,7 @@
 | 모델 | MobileNetV3 + MediaPipe landmarks |
 | 경계 | 점수·등급·랜드마크만 반환 · **DB/인증/비즈니스 로직 없음** |
 
-NestJS가 호출하고 결과를 영속화합니다. 원칙: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+NestJS가 호출하고 결과를 영속화합니다. 원칙: [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md)
 
 ### 테스트 (로컬)
 
@@ -86,7 +86,7 @@ NestJS가 호출하고 결과를 영속화합니다. 원칙: [`docs/ARCHITECTURE
 | 실행 | Expo + NestJS + Docker Compose |
 | DB · 캐시 | 로컬 PostgreSQL · Redis |
 | 추론 | `MOCK_INFERENCE` 또는 Compose `inference` profile |
-| 가이드 | [`docs/SETUP.md`](docs/SETUP.md) |
+| 가이드 | [`docs/guides/SETUP.md`](docs/guides/SETUP.md) |
 
 ### 실배포 (AWS)
 
@@ -95,7 +95,7 @@ NestJS가 호출하고 결과를 영속화합니다. 원칙: [`docs/ARCHITECTURE
 | 컴퓨팅 | **ECS Fargate** (NestJS · FastAPI 각각) |
 | 데이터 · 스토리지 | RDS · ElastiCache(Redis) · S3 |
 | CI/CD · 시크릿 | GitHub Actions → ECR · Secrets Manager · CloudWatch |
-| 가이드 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) |
+| 가이드 | [`docs/guides/DEPLOYMENT.md`](docs/guides/DEPLOYMENT.md) |
 
 ---
 
@@ -131,9 +131,11 @@ flowchart TB
 |---|---|
 | 백엔드 MVP · 운영 기반 (T0~T14, N0~N22) | 완료 |
 | 실제품 · 추천 빠른 경로 · 소셜 · 설정 계약 (N24~N34) | 완료 · **API freeze** |
-| 프론트 제품 웨이브 (F0~F62) | **완료** (OTP MO, 키패드, 캘린더, SSE 등 — Task 보드 기준) |
-| AWS 첫 배포 (N16) | 계정·시크릿 준비 후 별도 |
-| EAS 스토어 · 구독 결제 | 보류 |
+| 프론트 제품 웨이브 (F0~F70) | **완료** (OTP MO, 캘린더, SSE, 실기기 대응 — Task 보드 기준) |
+| 리팩토링 R1~R35 (배치 B1~B6) | **완료** (2026-08-12) |
+| Fable5 리뷰 대응 — 보안·품질 게이트·기온/습도 (F72~F78 · N46~N49 · N53) | **완료** (2026-08-13) |
+| AWS 첫 배포 (N16) | 계정·시크릿 준비 후 별도 — 코드·파이프라인은 배포 준비 완료 |
+| EAS 스토어 · 구독 결제 · Sentry | 보류 (해커톤 범위 밖) |
 
 ---
 
@@ -144,7 +146,7 @@ git clone https://github.com/jae-ho93/Todayskin.git
 cd Todayskin
 ```
 
-전체 로컬 실행(앱 + API + DB)은 **[`docs/SETUP.md`](docs/SETUP.md)** 한 문서를 따릅니다.
+전체 로컬 실행(앱 + API + DB)은 **[`docs/guides/SETUP.md`](docs/guides/SETUP.md)** 한 문서를 따릅니다.
 
 ```bash
 # 프론트 (루트)
@@ -169,14 +171,15 @@ Todayskin/
 ├─ README.md · CONTRIBUTING.md     # GitHub 대문 · 협업 규칙
 ├─ app/ · src/                     # Expo 앱
 ├─ docs/                           # 문서 허브 → docs/README.md
-│  ├─ SETUP.md · ARCHITECTURE.md · DEPLOYMENT.md
-│  ├─ BACKEND_TASKS.md · BACKEND_ARCHIVE.md · REFACTORING_BACKLOG.md
-│  ├─ FRONTEND_TASKS.md
+│  ├─ architecture/                # ARCHITECTURE.md (시스템 원칙)
+│  ├─ guides/                      # SETUP.md · DEPLOYMENT.md
+│  ├─ tasks/                       # FRONTEND_TASKS · BACKEND_TASKS · BACKEND_ARCHIVE · REFACTORING_BACKLOG
+│  └─ reviews/                     # Fable5_ProjectReview.md
 ├─ backend/                        # NestJS + inference-service
 │  ├─ README.md                    # 모듈·디렉터리 구조 지도
 │  ├─ src/ · prisma/ · test/
 │  ├─ inference-service/
-│  └─ docker/                      # Compose · ECS task JSON (배포 본문은 docs/DEPLOYMENT.md)
+│  └─ docker/                      # Compose · ECS task JSON (배포 본문은 docs/guides/DEPLOYMENT.md)
 └─ ml/                             # 모델 학습 계획
 ```
 
@@ -186,11 +189,11 @@ Todayskin/
 
 | 역할 | 먼저 읽을 것 |
 |------|----------------|
-| 누구나 / 새로 합류 | 이 README → [SETUP](docs/SETUP.md) → [CONTRIBUTING](CONTRIBUTING.md) |
-| 프론트 | [FRONTEND_TASKS](docs/FRONTEND_TASKS.md) · `app/`, `src/` |
-| 백엔드 | [ARCHITECTURE](docs/ARCHITECTURE.md) · [backend/README](backend/README.md) · [BACKEND_TASKS](docs/BACKEND_TASKS.md) · [BACKEND_ARCHIVE](docs/BACKEND_ARCHIVE.md) · [REFACTORING_BACKLOG](docs/REFACTORING_BACKLOG.md) |
+| 누구나 / 새로 합류 | 이 README → [SETUP](docs/guides/SETUP.md) → [CONTRIBUTING](CONTRIBUTING.md) |
+| 프론트 | [FRONTEND_TASKS](docs/tasks/FRONTEND_TASKS.md) · `app/`, `src/` |
+| 백엔드 | [ARCHITECTURE](docs/architecture/ARCHITECTURE.md) · [backend/README](backend/README.md) · [BACKEND_TASKS](docs/tasks/BACKEND_TASKS.md) · [BACKEND_ARCHIVE](docs/tasks/BACKEND_ARCHIVE.md) · [REFACTORING_BACKLOG](docs/tasks/REFACTORING_BACKLOG.md) |
 | 프로젝트 매니저 (PM) | FE/BE Task 보드 · CONTRIBUTING |
-| 인프라 | [DEPLOYMENT](docs/DEPLOYMENT.md) |
+| 인프라 | [DEPLOYMENT](docs/guides/DEPLOYMENT.md) |
 
 ---
 
