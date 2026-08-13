@@ -1,10 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from '../../redis/redis.service';
 import { errorName } from '../../common/errors/error-name.util';
 import {
   assignWeatherMetrics,
   metricsFromCollected,
+  toWeatherSnapshotDto,
 } from './mappers/weather-snapshot.mapper';
 import { weatherCacheKey } from './weather-cache';
 import {
@@ -25,7 +26,7 @@ import {
 import { WeatherSnapshotDto } from './dto/weather-snapshot.dto';
 import { WeatherSource } from '../../common/enums/weather-source.enum';
 import { PrismaService } from '../../prisma/prisma.service';
-import { WeatherSnapshot } from '@prisma/client';
+import { Prisma, WeatherSnapshot } from '@prisma/client';
 
 // 지표가 하나라도 null인 degraded 결과의 캐시 TTL(초). 기본 TTL(5분)보다 훨씬 짧게 둬서
 // 일시적인 외부 API 실패(예: 에어코리아 504)가 "측정 불가"를 오래 재생시키지 않게 한다.
@@ -148,6 +149,58 @@ export class WeatherService {
     // 외부 API 연쇄 실패 시 동일 응답을 반환한다(외부 API 보호).
     await this.saveCache(cacheKey, dto, collected.stationLookupFailed);
     return dto;
+  }
+
+  /**
+   * N12: 서버가 오늘 날씨를 직접 구성한다 — 클라이언트가 보낸 날씨를 신뢰하지 않는
+   * 모든 좌표 기반 생성 경로(날씨 기반 제품·케어 루틴)가 공유한다.
+   * 1. getCurrentWeather — LIVE/CACHED면 그대로 사용.
+   * 2. UNAVAILABLE이면 최근 WeatherSnapshot(7일)으로 fallback, source는 CACHED로 표기.
+   * 3. 스냅샷도 없으면 503 — 측정 불가 상태를 가짜 데이터로 대체하지 않는다.
+   */
+  async resolveServerWeather(lat?: number, lon?: number): Promise<WeatherSnapshotDto> {
+    const live = await this.getCurrentWeather(lat, lon);
+    if (live.source !== WeatherSource.UNAVAILABLE) {
+      return live;
+    }
+
+    this.logger.warn(
+      'resolveServerWeather: live weather unavailable, falling back to recent snapshot',
+    );
+    // 저장 시 사용된 regionName을 그대로 조회 키로 쓴다. getCurrentWeather가
+    // UNAVAILABLE이어도 regionName(측정소 lookup 결과)은 채워져 있으므로,
+    // 정적 레지스트리를 재계산하는 것보다 저장 row와 정확히 같은 지역을 찾는다.
+    const snapshot = await this.findRecentSnapshot(live.regionName);
+    if (!snapshot) {
+      throw new ServiceUnavailableException(
+        '오늘 날씨 정보를 가져올 수 없어요. 잠시 후 다시 시도해주세요.',
+      );
+    }
+    return toWeatherSnapshotDto(snapshot, WeatherSource.CACHED);
+  }
+
+  /** 최근 스냅샷 fallback 허용 기간. 이 기간 안에 수집된 스냅샷만 오늘 날씨 대용으로 쓴다. */
+  private static readonly SNAPSHOT_FALLBACK_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+  /**
+   * 최근 스냅샷 조회 — 같은 지역을 우선, 없으면 아무 지역 최신.
+   * 정부 API가 전부 실패(UNAVAILABLE)해도 이번 좌표의 regionName은 알아낼 수 있으므로
+   * 좌표 대신 regionName으로 같은 지역 스냅샷을 찾는다.
+   */
+  private async findRecentSnapshot(regionName: string): Promise<WeatherSnapshot | null> {
+    const since = new Date(Date.now() - WeatherService.SNAPSHOT_FALLBACK_WINDOW_MS);
+    const base: Prisma.WeatherSnapshotWhereInput = { collectedAt: { gte: since } };
+
+    const regionMatch = await this.prisma.weatherSnapshot.findFirst({
+      where: { ...base, regionName },
+      orderBy: { collectedAt: 'desc' },
+    });
+    if (regionMatch) return regionMatch;
+
+    return this.prisma.weatherSnapshot.findFirst({
+      where: base,
+      orderBy: { collectedAt: 'desc' },
+    });
   }
 
   /**

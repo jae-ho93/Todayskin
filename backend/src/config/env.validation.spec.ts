@@ -70,13 +70,13 @@ describe('envValidationSchema', () => {
     expect(error).toBeUndefined();
   });
 
-  it('applies defaults for ACCESS_TOKEN_EXPIRES_IN and GEMINI_MODEL', () => {
+  it('applies defaults for ACCESS_TOKEN_EXPIRES_IN and OPENAI_MODEL', () => {
     const { value } = envValidationSchema.validate(validBase, {
       abortEarly: false,
       allowUnknown: true,
     });
     expect(value.ACCESS_TOKEN_EXPIRES_IN).toBe('15m');
-    expect(value.GEMINI_MODEL).toBe('gemini-flash-latest');
+    expect(value.OPENAI_MODEL).toBe('gpt-4o-mini');
   });
 
   // R18: registry에만 있고 Joi 규칙이 없던 키들에 규칙이 생기면서 실제 운영 값이

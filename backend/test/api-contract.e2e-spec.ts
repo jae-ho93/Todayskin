@@ -18,7 +18,7 @@ import { waitForJob } from './helpers/job-polling';
  *
  * 검증 대상:
  * 1. 날씨 지표가 정부 API 실패 시 null(측정 불가)이고 source=UNAVAILABLE.
- * 2. 추천 생성 API가 Gemini 실패 시 503 (가짜 데이터 폴백 금지).
+ * 2. 추천 생성 API가 OpenAI 실패 시 503 (가짜 데이터 폴백 금지).
  * 3. 핵심 API 응답 스키마가 프론트 계약(camelCase, detail 필드)을 유지.
  * 4. 인증 필요 API가 토큰 없이 401.
  *
@@ -41,9 +41,9 @@ describe('API Response Contract (e2e)', () => {
     process.env.ALLOWED_ORIGINS = '';
     // 다른 e2e suite가 같은 Jest worker에서 먼저 실행될 수 있으므로
     // 환경변수를 명시적으로 초기화한다. 테스트 순서에 의존하면
-    // recommendation-product의 MOCK_GEMINI=true가 이 suite로 누수된다.
-    process.env.MOCK_GEMINI = 'false';
-    delete process.env.GEMINI_API_KEY;
+    // recommendation-product의 MOCK_OPENAI=true가 이 suite로 누수된다.
+    process.env.MOCK_OPENAI = 'false';
+    delete process.env.OPENAI_API_KEY;
     // N2: OTP allowlist로 고정 OTP(123456) 사용.
     process.env.OTP_ALLOWLIST_PHONES = '01044444444,01000000001';
 
@@ -99,8 +99,8 @@ describe('API Response Contract (e2e)', () => {
     });
     await prisma.user.deleteMany({ where: { phoneNumber: testPhone } });
     await app.close();
-    delete process.env.MOCK_GEMINI;
-    delete process.env.GEMINI_API_KEY;
+    delete process.env.MOCK_OPENAI;
+    delete process.env.OPENAI_API_KEY;
   });
 
   describe('날씨 지표 undefined (측정 불가) 계약', () => {
@@ -173,7 +173,7 @@ describe('API Response Contract (e2e)', () => {
     });
   });
 
-  describe('추천 생성 503 계약 (Gemini 실패)', () => {
+  describe('추천 생성 503 계약 (OpenAI 실패)', () => {
     let accessToken: string;
 
     // N32: weather-based 빠른 경로는 규칙 FALLBACK이 실제 카탈로그 제품을 골라야 하므로
@@ -225,7 +225,7 @@ describe('API Response Contract (e2e)', () => {
       });
       expect(signupRes.status).toBe(201);
       accessToken = signupRes.body.accessToken;
-      // N3: Gemini 호출 전 transfer 동의 게이트를 통과해야 503(Gemini 실패)까지 도달한다.
+      // N3: OpenAI 호출 전 transfer 동의 게이트를 통과해야 503(OpenAI 실패)까지 도달한다.
       await grantRecommendationTransfer(app, accessToken);
       for (const p of localProducts) {
         await prisma.product.upsert({
@@ -244,11 +244,11 @@ describe('API Response Contract (e2e)', () => {
 
     // N4/Inline dispatcher job polling 헬퍼 — test/helpers/job-polling.ts 공용.
 
-    it('MOCK_GEMINI=false + 키 없음 시 /recommendations/generate → 503', async () => {
-      // AppModule 인스턴스는 MOCK_GEMINI 환경변수를 beforeAll에서 읽었으므로
-      // 여기서는 별도 app 인스턴스 없이 환경변수 기반 GeminiClient 상태를 검증한다.
-      // 이미 이 app은 MOCK_GEMINI 미설정(=false) + 키 없음 상태이므로 503이어야 한다.
-      // 단, beforeAll에서 MOCK_GEMINI를 true로 설정하지 않았으므로 기본 false.
+    it('MOCK_OPENAI=false + 키 없음 시 /recommendations/generate → 503', async () => {
+      // AppModule 인스턴스는 MOCK_OPENAI 환경변수를 beforeAll에서 읽었으므로
+      // 여기서는 별도 app 인스턴스 없이 환경변수 기반 OpenAiClient 상태를 검증한다.
+      // 이미 이 app은 MOCK_OPENAI 미설정(=false) + 키 없음 상태이므로 503이어야 한다.
+      // 단, beforeAll에서 MOCK_OPENAI를 true로 설정하지 않았으므로 기본 false.
       await request(app.getHttpServer())
         .post('/recommendations/generate')
         .set('Authorization', `Bearer ${accessToken}`)
@@ -260,7 +260,7 @@ describe('API Response Contract (e2e)', () => {
         });
     });
 
-    it('POST /products/weather-based — 키 없어도 FALLBACK 실제품 즉시, Gemini 실패는 job FAILED (N32)', async () => {
+    it('POST /products/weather-based — 키 없어도 FALLBACK 실제품 즉시, OpenAI 실패는 job FAILED (N32)', async () => {
       // N12: 서버 소유 날씨 — 날씨 조회가 LIVE로 성공해야 규칙 FALLBACK까지 도달한다.
       kmaClient.fetchUvIndex.mockResolvedValue({
         current: 5,
@@ -279,7 +279,7 @@ describe('API Response Contract (e2e)', () => {
         observedAt: new Date('2026-08-04T06:00:00Z'),
       });
 
-      // MOCK_GEMINI=false + 키 없음이어도 빈 화면 대신 규칙 기반 실제품이 즉시 온다.
+      // MOCK_OPENAI=false + 키 없음이어도 빈 화면 대신 규칙 기반 실제품이 즉시 온다.
       const res = await request(app.getHttpServer())
         .post('/products/weather-based')
         .set('Authorization', `Bearer ${accessToken}`)
@@ -290,13 +290,13 @@ describe('API Response Contract (e2e)', () => {
       expect(res.body.jobId).toBeDefined();
       expect(res.body.items).toHaveLength(3);
       for (const p of res.body.items) {
-        // N31: FALLBACK도 실제품 + purchaseUrl, 가상 gemini-product-* 없음.
-        expect(String(p.id)).not.toMatch(/^gemini-product-/);
+        // N31: FALLBACK도 실제품 + purchaseUrl, 가상 openai-product-* 없음.
+        expect(String(p.id)).not.toMatch(/^openai-product-/);
         expect(p.purchaseUrl).toBeDefined();
         expect(p.purchaseUrl).toMatch(/^https?:\/\//);
       }
 
-      // LIVE 교체 job은 Gemini 키가 없어 명시적으로 FAILED가 된다 (503로 위장하지 않음).
+      // LIVE 교체 job은 OpenAI 키가 없어 명시적으로 FAILED가 된다 (503로 위장하지 않음).
       const final = await waitForJob(app, accessToken, res.body.jobId);
       expect(final.status).toBe('FAILED');
       expect(final.error).toBeDefined();

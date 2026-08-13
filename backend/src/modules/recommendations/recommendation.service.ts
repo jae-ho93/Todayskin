@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, Product, Recommendation as RecommendationModel } from '@prisma/client';
 import { createHash } from 'node:crypto';
-import { GeminiClient, GeminiUnavailable } from '../gemini/gemini.client';
+import { OpenAiClient, OpenAiUnavailable } from '../openai/openai.client';
 import { ConsentService } from '../consent/consent.service';
 import { ConsentPurpose } from '../consent/enums/consent-purpose.enum';
 import { IdempotencyService } from '../idempotency/idempotency.service';
@@ -50,7 +50,7 @@ import { ProductCatalogService } from '../products/product-catalog.service';
  *   skinScore+weather 직접 전송도 호환한다(contract migration 전까지).
  * - 동일 진단에 대한 중복 생성을 방지한다.
  * - 추천 상세 조회 시 사용자 소유권을 검사한다.
- * - Gemini 실패 시 503을 반환하고 가짜 추천으로 대체하지 않는다 (동기 경로).
+ * - OpenAI 실패 시 503을 반환하고 가짜 추천으로 대체하지 않는다 (동기 경로).
  * - **N32/N29**: `generateFast`는 DB LIVE → job dedup → Redis SWR(CACHED) →
  *   규칙 기반 실제품(FALLBACK) + LIVE job enqueue 순서로 첫 응답을 즉시 반환한다.
  *   FALLBACK/CACHED 응답에는 항상 jobId가 붙어 FE가 GET /jobs/:id로 LIVE로 교체한다.
@@ -65,7 +65,7 @@ export class RecommendationService {
 
   constructor(
     private readonly repo: RecommendationRepository,
-    private readonly geminiClient: GeminiClient,
+    private readonly openAiClient: OpenAiClient,
     private readonly consentService: ConsentService,
     private readonly idempotency: IdempotencyService,
     private readonly jobService: JobService,
@@ -112,7 +112,7 @@ export class RecommendationService {
   }
 
   /**
-   * B등급 추천 생성 — 피부 측정값 + 날씨를 Gemini에 전달.
+   * B등급 추천 생성 — 피부 측정값 + 날씨를 OpenAI에 전달.
    *
    * 최종 계약: diagnosisId만 받아 서버가 소유권 확인 후 DB에서 측정값/날씨를 조회한다.
    * 호환: diagnosisId 없이 skinScore+weather를 직접 받는 기존 프론트도 지원한다.
@@ -129,7 +129,7 @@ export class RecommendationService {
       weather?: object;
     },
   ): Promise<RecommendationDto[]> {
-    // N3: Gemini 등 외부 AI로 피부/날씨 데이터를 보내려면 전송 동의 필수.
+    // N3: OpenAI 등 외부 AI로 피부/날씨 데이터를 보내려면 전송 동의 필수.
     await this.consentService.requireActive(
       userId,
       ConsentPurpose.AI_RECOMMENDATION_DATA_TRANSFER,
@@ -154,14 +154,14 @@ export class RecommendationService {
     if (reservationScope?.existing) return reservationScope.existing;
 
     try {
-      const items = await this.callGemini(skinInput, weatherInput);
+      const items = await this.callOpenAi(skinInput, weatherInput);
 
       // 서버가 grade=B, sourceLabel을 고정한다. 모든 row를 먼저 구성한 뒤 하나의
       // 트랜잭션에서 일괄 저장한다 — item별 순차 create는 중간 DB 오류 때 추천이
       // 일부만 남는다.
       const createdAt = new Date();
       const rows: GeneratedRecommendationRow[] = items.map((item) => ({
-        id: `gemini-${shortId()}`,
+        id: `openai-${shortId()}`,
         userId,
         diagnosisId: diagnosisId ?? null,
         title: item.title,
@@ -171,6 +171,7 @@ export class RecommendationService {
         observationalNote: null,
         ingredientTags: item.ingredientTags,
         timing: (item.timing as RecommendationTiming | null) ?? null,
+        sourceIds: item.sourceIds ?? [],
       }));
 
       // N20: 추천의 성분 태그와 제품의 matchedIngredients 교집합으로 연결한다.
@@ -223,8 +224,8 @@ export class RecommendationService {
    * 3. Redis SWR hit → `source: CACHED` (오래됐으면 재검증 job enqueue, jobId 포함).
    * 4. miss → 규칙 기반 실제품 `source: FALLBACK` 즉시 반환 + LIVE job enqueue.
    *
-   * Gemini 실패는 이 경로에서 503을 만들지 않는다 — job이 비동기로 FAILED가 되고
-   * FE는 FALLBACK을 유지한다 (빈 화면·긴 동기 Gemini 대기 금지, N32).
+   * OpenAI 실패는 이 경로에서 503을 만들지 않는다 — job이 비동기로 FAILED가 되고
+   * FE는 FALLBACK을 유지한다 (빈 화면·긴 동기 OpenAI 대기 금지, N32).
    */
   async generateFast(
     userId: number,
@@ -234,7 +235,7 @@ export class RecommendationService {
       weather?: object;
     },
   ): Promise<RecommendationFastResponseDto> {
-    // N3: Gemini 전송 동의 — LIVE job이 Gemini를 호출하므로 동일하게 게이트한다.
+    // N3: OpenAI 전송 동의 — LIVE job이 OpenAI를 호출하므로 동일하게 게이트한다.
     await this.consentService.requireActive(
       userId,
       ConsentPurpose.AI_RECOMMENDATION_DATA_TRANSFER,
@@ -304,8 +305,8 @@ export class RecommendationService {
   // ── 생성 경로 헬퍼 ──────────────────────────────
 
   /**
-   * N14: Gemini 호출 전에 동시 요청을 in-flight 예약으로 가른다.
-   * 같은 진단의 동시 재시도가 Gemini를 중복 호출하지 않게 하는 핵심 경계다.
+   * N14: OpenAI 호출 전에 동시 요청을 in-flight 예약으로 가른다.
+   * 같은 진단의 동시 재시도가 OpenAI를 중복 호출하지 않게 하는 핵심 경계다.
    * (진단이 없으면 호환 모드 — 멱등 키가 없으므로 트랜잭션 락에 맡긴다)
    *
    * 이미 완료된 예약이면 동일 결과를 `existing`으로 돌려주고 생성을 건너뛴다.
@@ -327,7 +328,7 @@ export class RecommendationService {
         return { scope, existing: await this.attachProductIds(existing) };
       }
       // 예약만 남고 결과가 정리된 경우 → 재시도 진행.
-      // 다른 요청이 먼저 retake했다면(false) in-flight로 보고 409 (이중 Gemini 방지).
+      // 다른 요청이 먼저 retake했다면(false) in-flight로 보고 409 (이중 OpenAI 방지).
       const retaken = await this.idempotency.retake(scope);
       if (!retaken) {
         throw new ConflictException('이미 추천이 생성 중입니다');
@@ -336,15 +337,15 @@ export class RecommendationService {
     return { scope };
   }
 
-  /** Gemini 호출 — 실패 시 503 (가짜 추천으로 대체하지 않는다). */
-  private async callGemini(
+  /** OpenAI 호출 — 실패 시 503 (가짜 추천으로 대체하지 않는다). */
+  private async callOpenAi(
     skinInput: Record<string, unknown>,
     weatherInput: Record<string, unknown>,
   ) {
     try {
-      return await this.geminiClient.generateRecommendations(skinInput, weatherInput);
+      return await this.openAiClient.generateRecommendations(skinInput, weatherInput);
     } catch (e) {
-      if (e instanceof GeminiUnavailable) {
+      if (e instanceof OpenAiUnavailable) {
         throw new ServiceUnavailableException(
           'AI 추천을 생성할 수 없어요. 잠시 후 다시 시도해주세요.',
         );

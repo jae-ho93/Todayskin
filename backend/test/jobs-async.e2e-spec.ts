@@ -4,7 +4,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
-import { GeminiClient } from '../src/modules/gemini/gemini.client';
+import { OpenAiClient } from '../src/modules/openai/openai.client';
 import { signupWithOtp } from './helpers/auth-flow';
 import { grantRecommendationTransfer } from './helpers/consent-flow';
 import { JobStatus } from '../src/modules/jobs/enums/job-status.enum';
@@ -36,7 +36,7 @@ describe('Jobs async (e2e)', () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
-      .overrideProvider(GeminiClient)
+      .overrideProvider(OpenAiClient)
       .useValue({
         generateRecommendations: jest.fn().mockResolvedValue([
           {

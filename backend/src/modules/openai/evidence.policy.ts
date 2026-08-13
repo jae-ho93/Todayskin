@@ -1,13 +1,16 @@
 import { Injectable } from '@nestjs/common';
  
 /**
- * EvidencePolicy — Gemini가 생성한 텍스트가 근거 정책을 위반하지 않는지 사후 검증.
+ * EvidencePolicy — LLM(OpenAI)이 생성한 텍스트가 근거 정책을 위반하지 않는지 사후 검증.
  *
- * BACKEND_TASKS.md T8 기준:
+ * BACKEND_TASKS.md T8 기준 (Gemini→OpenAI 교체 후에도 정책은 그대로 유지):
  * - 의료적 확정 표현("진단", "치료", "질환" 등)을 LLM이 몰래 섞지 않았는지 확인.
  * - 시스템 프롬프트로 금지하더라도 LLM이 어기는 경우가 있어 서버에서 한 번 더 걸러낸다.
- * - 위반 시 가짜 데이터로 대체하지 않고 GeminiUnavailable(→ 503)을 던진다.
+ * - 위반 시 가짜 데이터로 대체하지 않고 OpenAiUnavailable(→ 503)을 던진다.
  * - grade/sourceLabel은 서비스(Service)가 고정하고 이 정책은 텍스트 품질만 검사한다.
+ * - 구조화된 근거 인용(sourceIds)은 evidence-sources.ts 레지스트리에서만 고르게
+ *   하므로 여기서 검사하지 않는다 — 이 정책은 explanation 자유 텍스트 안에 LLM이
+ *   직접 지어낸 인용("연구에 따르면" 등)이 섞이지 않았는지만 본다.
  */
  
 // 의료적 확정 표현 — LLM이 출력하면 안 되는 단어/어미.

@@ -51,7 +51,7 @@ describe('Diagnosis Delete (e2e)', () => {
     process.env.JWT_REFRESH_SECRET = 'e2e_refresh_secret_at_least_32_characters_long';
     process.env.ALLOWED_ORIGINS = '';
     process.env.MOCK_INFERENCE = 'true';
-    process.env.MOCK_GEMINI = 'true';
+    process.env.MOCK_OPENAI = 'true';
     process.env.OTP_ALLOWLIST_PHONES = testPhone;
     process.env.S3_BUCKET = '';
 

@@ -6,11 +6,11 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   CatalogProduct,
-  GeminiClient,
-  GeminiUnavailable,
+  OpenAiClient,
+  OpenAiUnavailable,
   GeneratedWeatherProduct,
   PRODUCT_TIMINGS,
-} from '../gemini/gemini.client';
+} from '../openai/openai.client';
 import { ProductCategory } from './enums/product-category.enum';
 import { EvidenceGrade } from '../recommendations/enums/evidence-grade.enum';
 import { ProductDto, ProductTiming } from './dto/product.dto';
@@ -45,8 +45,8 @@ import {
  * - POST /products/weather-based 이식 — 피부 측정값 없이 날씨만으로 제품 생성
  * - 날씨 기반 제품의 reason, timing 응답 계약 유지
  * - **N24**: 모든 노출 제품은 DB 실제품이며 `purchaseUrl`을 포함한다.
- * - **N27**: Gemini는 카탈로그에서 productId를 선택한다. 가상 `gemini-product-*`를
- *   만들지 않는다. Gemini 선택이 유효하지 않거나 누락된 timing은 규칙 기반 실제품
+ * - **N27**: OpenAI는 카탈로그에서 productId를 선택한다. 가상 `openai-product-*`를
+ *   만들지 않는다. OpenAI 선택이 유효하지 않거나 누락된 timing은 규칙 기반 실제품
  *   fallback으로 채운다. 카탈로그/날씨 조회가 불가능하면 503(가짜 데이터 금지).
  */
 @Injectable()
@@ -58,7 +58,7 @@ export class ProductService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly geminiClient: GeminiClient,
+    private readonly openAiClient: OpenAiClient,
     private readonly weatherService: WeatherService,
     private readonly jobService: JobService,
     private readonly jobState: JobStateService,
@@ -110,7 +110,7 @@ export class ProductService {
    * 오늘 날씨를 조회하고, 외부 API가 전부 실패(UNAVAILABLE)하면 최근 WeatherSnapshot을
    * fallback으로 사용한다. 조회 가능한 날씨가 전혀 없으면 가짜 데이터 대신 503을 반환한다.
    *
-   * N27: 응답은 항상 DB 실제품(+purchaseUrl)이다. Gemini가 카탈로그에서 productId를
+   * N27: 응답은 항상 DB 실제품(+purchaseUrl)이다. OpenAI가 카탈로그에서 productId를
    * 고르고, 유효하지 않은 선택은 규칙 기반 실제품 fallback으로 대체한다.
    * 유저 비종속이므로 DB에 저장하지 않고 요청 시 생성한다(인증은 남용 방지 목적).
    */
@@ -127,10 +127,10 @@ export class ProductService {
       );
     }
 
-    // Gemini가 카탈로그에서 productId를 고른다.
+    // OpenAI가 카탈로그에서 productId를 고른다.
     let selections: GeneratedWeatherProduct[];
     try {
-      selections = await this.geminiClient.generateWeatherProducts(
+      selections = await this.openAiClient.generateWeatherProducts(
         { ...weather },
         catalog.map((p): CatalogProduct => ({
           id: p.id,
@@ -141,7 +141,7 @@ export class ProductService {
         })),
       );
     } catch (e) {
-      if (e instanceof GeminiUnavailable) {
+      if (e instanceof OpenAiUnavailable) {
         throw new ServiceUnavailableException(
           'AI 추천을 생성할 수 없어요. 잠시 후 다시 시도해주세요.',
         );
@@ -149,8 +149,8 @@ export class ProductService {
       throw e;
     }
 
-    // 세 timing 슬롯을 채운다 — Gemini 선택이 유효한 실제품이면 그대로,
-    // 아니면 규칙 기반 실제품 fallback (가상 gemini-product-* 생성 금지).
+    // 세 timing 슬롯을 채운다 — OpenAI 선택이 유효한 실제품이면 그대로,
+    // 아니면 규칙 기반 실제품 fallback (가상 openai-product-* 생성 금지).
     const items = this.buildWeatherProducts(catalog, weather, selections);
 
     // N32: LIVE 생성 결과를 Redis SWR에 캐시한다 — 다음 빠른 경로가 source: CACHED.
@@ -169,7 +169,7 @@ export class ProductService {
    * 3. miss → 규칙 기반 실제품 `source: FALLBACK` 즉시 반환 + LIVE job enqueue.
    *
    * 날씨 조회 불가(UNAVAILABLE + 스냅샷 없음)는 기존대로 503 — 날씨 없이 가짜
-   * 추천을 만들지 않는다(N12). Gemini 실패는 job이 비동기 FAILED가 된다(빈 화면 금지).
+   * 추천을 만들지 않는다(N12). OpenAI 실패는 job이 비동기 FAILED가 된다(빈 화면 금지).
    */
   async generateWeatherBasedFast(
     userId: number,
@@ -217,7 +217,7 @@ export class ProductService {
   /**
    * N31/N29: LIVE 교체 job을 enqueue한다.
    * 동일 사용자의 동시 요청이 같은 지역 job을 중복 enqueue하지 않도록 N14 reservation으로
-   * 가드한다 — in-flight면 방금 생성된 job row를 찾아 재사용(Gemini 중복 호출 방지).
+   * 가드한다 — in-flight면 방금 생성된 job row를 찾아 재사용(OpenAI 중복 호출 방지).
    * 실패해도 FALLBACK은 반환한다. scope는 (userId, 지역, KST 날짜) 단위다.
    */
   private async enqueueWeatherProductsJob(
@@ -340,9 +340,9 @@ export class ProductService {
   // ── N27 실제품 매핑·규칙 fallback ──────────────────────────
 
   /**
-   * Gemini 선택 결과를 실제 카탈로그 제품으로 매핑한다.
+   * OpenAI 선택 결과를 실제 카탈로그 제품으로 매핑한다.
    * 세 timing(세안 후/외출 전/외출 후)을 순서대로 채우며,
-   * Gemini 선택이 (a) 카탈로그에 없거나 (b) 이미 사용된 제품이면 규칙 기반 실제품으로 대체한다.
+   * OpenAI 선택이 (a) 카탈로그에 없거나 (b) 이미 사용된 제품이면 규칙 기반 실제품으로 대체한다.
    */
   private buildWeatherProducts(
     catalog: Product[],

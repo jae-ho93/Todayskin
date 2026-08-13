@@ -28,7 +28,7 @@
         { "name": "PORT", "value": "3000" },
         { "name": "AWS_REGION", "value": "ap-northeast-2" },
         { "name": "RUN_MIGRATIONS_ON_START", "value": "false" },
-        { "name": "MOCK_GEMINI", "value": "false" },
+        { "name": "MOCK_OPENAI", "value": "false" },
         { "name": "MOCK_INFERENCE", "value": "false" },
         { "name": "JOB_DISPATCHER", "value": "bullmq" },
         { "name": "JOB_ROLE", "value": "worker" },
@@ -63,8 +63,8 @@
           "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:ACCOUNT_ID:secret:todayskin/prod/AIRKOREA_API_KEY"
         },
         {
-          "name": "GEMINI_API_KEY",
-          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:ACCOUNT_ID:secret:todayskin/prod/GEMINI_API_KEY"
+          "name": "OPENAI_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:ACCOUNT_ID:secret:todayskin/prod/OPENAI_API_KEY"
         },
         {
           "name": "OCTOMO_API_KEY",

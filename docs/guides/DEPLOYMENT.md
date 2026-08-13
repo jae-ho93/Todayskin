@@ -145,7 +145,7 @@ Task definition 템플릿:
 
 - `DATABASE_URL`, `REDIS_URL`
 - `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`
-- `KMA_API_KEY`, `AIRKOREA_API_KEY`, `GEMINI_API_KEY`
+- `KMA_API_KEY`, `AIRKOREA_API_KEY`, `OPENAI_API_KEY`
 - `ALLOWED_ORIGINS`, `S3_BUCKET`, `INFERENCE_SERVICE_URL`, `INFERENCE_SHARED_SECRET`, `SENTRY_DSN`
 - `OCTOMO_API_KEY` (R17 — 누락 시 `/health/ready`가 항상 not-ready이고 신규 가입·신규 디바이스
   로그인이 막힌다. 비밀이 아닌 `OCTOMO_ENDPOINT`·`OCTOMO_RECIPIENT_NUMBER`는 task definition의
@@ -165,7 +165,7 @@ IAM:
 
 - **backend (ECS Fargate)**: **public subnet** 배치 · **NAT gateway 미사용** · **ALB 유지**.
   - 인그레스는 ALB(`:3000` → `/health` 등)가 담당.
-  - 아웃바운드(정부 API · Gemini · Redis 등)는 퍼블릭 IP + 인터넷 게이트웨이(IGW) 경유 — NAT 불필요.
+  - 아웃바운드(정부 API · OpenAI · Redis 등)는 퍼블릭 IP + 인터넷 게이트웨이(IGW) 경유 — NAT 불필요.
   - **ECS 프로비저닝 시** 서비스를 public subnet에 만들고 **`assignPublicIp=ENABLED`** 로 설정
     (NAT가 없으므로 태스크에 퍼블릭 IP가 있어야 ECR pull·아웃바운드가 동작).
   - migrate task는 워크플로가 `assignPublicIp=ENABLED`로 실행 (GitHub Variable `ECS_ASSIGN_PUBLIC_IP`로 오버라이드 가능).
@@ -244,7 +244,7 @@ psql "$DATABASE_URL" -c \
 
 운영에서 반드시 false:
 
-- `MOCK_GEMINI=false`
+- `MOCK_OPENAI=false`
 - `MOCK_INFERENCE=false`
 - `RUN_MIGRATIONS_ON_START=false`
 
@@ -363,7 +363,7 @@ curl -X POST https://<api-host>/admin/products/cache/invalidate \
 |---|------|-----------|-----------|
 | 1 | 인프라 프로비저닝 — VPC/subnet·SG(inference는 backend SG reference), ECR 2개, RDS(퍼블릭 접근 OFF), S3(SSE), CloudWatch 로그 그룹, Secrets Manager `todayskin/prod/*`, OIDC IAM role | 콘솔에서 리소스 생성 완료 | 2~3시간 |
 | 2 | GitHub 설정 — Secret `AWS_ROLE_ARN`, Variables(`AWS_REGION`·`ECR_*`·`ECS_*` 전부), `production` environment + required reviewer | Settings에서 값 확인 | 20분 |
-| 3 | Secrets Manager 값 입력 — `DATABASE_URL`·`REDIS_URL`·JWT 2종·`KMA/AIRKOREA/GEMINI` 키·`OCTOMO_API_KEY`·`S3_BUCKET`·`INFERENCE_SERVICE_URL`·`INFERENCE_SHARED_SECRET`·`ALLOWED_ORIGINS` | task definition의 `secrets[]` ARN과 일치 | 30분 |
+| 3 | Secrets Manager 값 입력 — `DATABASE_URL`·`REDIS_URL`·JWT 2종·`KMA/AIRKOREA/OPENAI` 키·`OCTOMO_API_KEY`·`S3_BUCKET`·`INFERENCE_SERVICE_URL`·`INFERENCE_SHARED_SECRET`·`ALLOWED_ORIGINS` | task definition의 `secrets[]` ARN과 일치 | 30분 |
 | 4 | task definition 4종의 `ACCOUNT_ID`/role ARN/secret ARN 치환 확인 | `backend/docker/ecs/*.json` | 15분 |
 | 5 | ECS cluster + service 생성 (backend는 public subnet + `assignPublicIp=ENABLED` + ALB, inference는 내부 전용) | 서비스 RUNNING | 1시간 |
 | 6 | `main`에 push → CI 통과 → Deploy ECS 워크플로 승인 | Actions에서 migrate → backend → inference 순 성공 | 20분 + 승인 |

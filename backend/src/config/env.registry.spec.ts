@@ -22,9 +22,9 @@ describe('env.registry', () => {
   it('rejects truthy mock flags in production', () => {
     const errors = validateProductionEnv({
       NODE_ENV: 'production',
-      MOCK_GEMINI: 'true',
+      MOCK_OPENAI: 'true',
     });
-    expect(errors.some((e) => e.includes('MOCK_GEMINI'))).toBe(true);
+    expect(errors.some((e) => e.includes('MOCK_OPENAI'))).toBe(true);
   });
 
   it('rejects unknown keys when APP_ENV_KEYS declared', () => {

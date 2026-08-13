@@ -447,6 +447,10 @@ model Recommendation {
   title            String
   grade            EvidenceGrade
   sourceLabel      String   @map("source_label")
+  // OpenAI 마이그레이션: content/evidence-sources.ts 레지스트리의 id.
+  // RecommendationTemplate.sourceIds와 동일한 개념 — LLM은 이 레지스트리에서
+  // id만 고르고, 새 출처를 만들어내지 못한다. 근거가 안 맞으면 빈 배열.
+  sourceIds        String[] @default([]) @map("source_ids")
   explanation      String
   observationalNote String? @map("observational_note")
   ingredientTags   String[] @default([]) @map("ingredient_tags")
@@ -559,6 +563,8 @@ enum AsyncJobType {
   RECOMMENDATION_GENERATE
   // N31/N29: 날씨 기반 제품 LIVE 생성 — rec-fast-path 에픽에서 추가.
   WEATHER_PRODUCTS_GENERATE
+  // 케어 루틴+제품 LIVE 생성 (OpenAI Responses API + web_search).
+  CARE_GENERATE
   PATTERN_ANALYZE
   NOTIFICATION_SEND
 }

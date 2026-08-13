@@ -419,26 +419,26 @@ export const ENV_REGISTRY: EnvVarDefinition[] = [
   },
 
   {
-    key: 'GEMINI_API_KEY',
+    key: 'OPENAI_API_KEY',
     owner: 'ai',
-    description: 'Gemini API key',
+    description: 'OpenAI API key',
     requiredIn: 'never',
     secret: true,
     schema: Joi.string().allow('').optional(),
   },
   {
-    key: 'GEMINI_MODEL',
+    key: 'OPENAI_MODEL',
     owner: 'ai',
-    description: 'Gemini model id',
+    description: 'OpenAI model id',
     requiredIn: 'never',
-    safeDefault: 'gemini-flash-latest',
+    safeDefault: 'gpt-4o-mini',
     secret: false,
-    schema: Joi.string().default('gemini-flash-latest'),
+    schema: Joi.string().default('gpt-4o-mini'),
   },
   {
-    key: 'GEMINI_TIMEOUT_MS',
+    key: 'OPENAI_TIMEOUT_MS',
     owner: 'ai',
-    description: 'R30 Gemini 단일 호출 타임아웃(ms)',
+    description: 'R30 OpenAI 단일 호출 타임아웃(ms)',
     requiredIn: 'never',
     safeDefault: 15_000,
     secret: false,
@@ -446,9 +446,9 @@ export const ENV_REGISTRY: EnvVarDefinition[] = [
     schema: Joi.number().integer().min(1_000).max(60_000).default(15_000),
   },
   {
-    key: 'MOCK_GEMINI',
+    key: 'MOCK_OPENAI',
     owner: 'ai',
-    description: 'Use Gemini mock responses (dev/test only)',
+    description: 'Use OpenAI mock responses (dev/test only)',
     requiredIn: 'never',
     safeDefault: 'false',
     secret: false,
@@ -456,6 +456,15 @@ export const ENV_REGISTRY: EnvVarDefinition[] = [
     expiry: '2027-01-01',
     // default를 두면 process.env 값을 덮어쓰는 경우가 있어 기본값을 생략한다.
     schema: booleanFlag,
+  },
+  {
+    key: 'OPENAI_CARE_TIMEOUT_MS',
+    owner: 'ai',
+    description: '케어 루틴+제품 생성(web_search 포함) 호출 타임아웃(ms) — 기존 OPENAI_TIMEOUT_MS보다 여유를 둔다',
+    requiredIn: 'never',
+    safeDefault: 45_000,
+    secret: false,
+    schema: Joi.number().integer().min(1_000).max(120_000).default(45_000),
   },
 
   // N33: 소셜 로그인 — 제공자 검증용 설정. 미설정 시 해당 제공자 요청만 401(명시적 실패).
