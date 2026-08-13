@@ -15,7 +15,7 @@ import { ConfigService } from '@nestjs/config';
  *
  * **전환 순서가 중요하다**: `api`로 먼저 바꾸면 워커 서비스가 생기기 전까지
  * 잡이 큐에 쌓인 채 처리되지 않고 스케줄러도 멈춘다. worker 서비스를 먼저
- * 띄우고 그 다음 API를 `api`로 내린다 (docs/DEPLOYMENT.md).
+ * 띄우고 그 다음 API를 `api`로 내린다 (docs/guides/DEPLOYMENT.md).
  */
 export type JobRole = 'api' | 'worker' | 'both';
 

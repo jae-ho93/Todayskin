@@ -1,9 +1,9 @@
 # Todayskin Backend Tasks — 완료 이력 (Archive)
 
 > **보관 문서.** 완료된 작업을 기록으로 보존한다. 계획·진행 중 작업은
-> [`docs/BACKEND_TASKS.md`](BACKEND_TASKS.md), 리팩토링 제안은
-> [`docs/REFACTORING_BACKLOG.md`](REFACTORING_BACKLOG.md)에 있다.
-> 아키텍처 원칙은 [`docs/ARCHITECTURE.md`](ARCHITECTURE.md), 협업 규칙은 `CONTRIBUTING.md`가 기준이다.
+> [`docs/tasks/BACKEND_TASKS.md`](BACKEND_TASKS.md), 리팩토링 제안은
+> [`docs/tasks/REFACTORING_BACKLOG.md`](REFACTORING_BACKLOG.md)에 있다.
+> 아키텍처 원칙은 [`docs/architecture/ARCHITECTURE.md`](../architecture/ARCHITECTURE.md), 협업 규칙은 `CONTRIBUTING.md`가 기준이다.
 >
 > 공통 완료 정의: 기능이 모듈 경계 안에 구현, migration·seed 재현 가능, 인증·권한·소유권 검사,
 > 성공/실패 테스트, 기존 프론트 계약 검증, secret 미포함, PR 리뷰 후 `main` 병합.
@@ -210,7 +210,7 @@
 - [x] `/otp/send` 응답 변경: `{ code, recipientNumber, message }` — MO는 코드를 화면에 표시해야 하므로 **프론트 계약 변경**
 - [x] env: `SMS_*` 제거 → `OCTOMO_API_KEY`(production required)·`OCTOMO_ENDPOINT`·`OCTOMO_RECIPIENT_NUMBER`(기본 1666-3538)·`OCTOMO_TIMEOUT_MS`·`OCTOMO_MAX_RETRIES`
 - [x] health ready 의존성 `sms` → `octomo` / provider 단위 테스트 교체 / OTP·auth e2e 유지 확인
-- [x] 프론트: OTP 화면 "코드 입력" → "수신 번호로 코드 발송 안내" 전환 (`docs/FRONTEND_TASKS.md` F17, PR #94 완료)
+- [x] 프론트: OTP 화면 "코드 입력" → "수신 번호로 코드 발송 안내" 전환 (`docs/tasks/FRONTEND_TASKS.md` F17, PR #94 완료)
 
 ### BE-2026-08-12. OTP 개발 모드 정리 — OCTOMO 연동/목업 표시 — 완료 (2026-08-12)
 
@@ -776,7 +776,7 @@ purge 경로에도 진단 삭제를 남겨 뒀다. 정상 흐름에서는 0건�
 
 ### Fable5 리뷰 대응 (2026-08-13, PR #158~#162)
 
-프로젝트 리뷰([`Fable5_ProjectReview.md`](Fable5_ProjectReview.md))에서 등록한 코드 태스크
+프로젝트 리뷰([`Fable5_ProjectReview.md`](../reviews/Fable5_ProjectReview.md))에서 등록한 코드 태스크
 5건을 하루에 반영했다. 해커톤 재조정(같은 날)으로 N52(API 버저닝)는 제외, N50·N51은
 N16(AWS) 이후로 미뤘다.
 
@@ -851,5 +851,5 @@ aud·서명은 검증했지만 nonce가 없어 id_token 리플레이 여지가 �
 완료 기준: 새 진단의 날씨 스냅샷에 기온·습도가 저장되고, 상세 화면에서 값 또는 "측정 불가"로 표시된다. → 충족
 
 
-> **N16 (AWS 첫 배포)는 Open** — [`docs/BACKEND_TASKS.md`](BACKEND_TASKS.md) 참고.
-> 프론트 범위 완료 기록(N15/N18/N19)은 [`docs/FRONTEND_TASKS.md`](FRONTEND_TASKS.md)에 있다.
+> **N16 (AWS 첫 배포)는 Open** — [`docs/tasks/BACKEND_TASKS.md`](BACKEND_TASKS.md) 참고.
+> 프론트 범위 완료 기록(N15/N18/N19)은 [`docs/tasks/FRONTEND_TASKS.md`](FRONTEND_TASKS.md)에 있다.

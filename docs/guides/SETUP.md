@@ -248,6 +248,6 @@ cd backend && npm test && npm run lint
 ## 참고 문서
 
 - 전체 문서 지도: [docs/README.md](README.md)
-- 백엔드 구조·원칙: [docs/ARCHITECTURE.md](ARCHITECTURE.md)
-- 실제 배포(운영): [docs/DEPLOYMENT.md](DEPLOYMENT.md)
-- 협업 규칙: [CONTRIBUTING.md](../CONTRIBUTING.md)
+- 백엔드 구조·원칙: [docs/architecture/ARCHITECTURE.md](../architecture/ARCHITECTURE.md)
+- 실제 배포(운영): [docs/guides/DEPLOYMENT.md](DEPLOYMENT.md)
+- 협업 규칙: [CONTRIBUTING.md](../../CONTRIBUTING.md)

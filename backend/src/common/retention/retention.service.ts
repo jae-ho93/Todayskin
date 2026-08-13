@@ -12,7 +12,7 @@ import { PrismaService } from '../../prisma/prisma.service';
  *
  * **되돌릴 수 없는 DELETE이므로 기본값은 `off`다.** 운영에서 `RETENTION_SWEEP_MODE`를
  * `dry-run`으로 켜서 삭제 대상 규모를 로그로 확인하고, RDS 스냅샷을 확보한 뒤
- * `delete`로 올린다(docs/DEPLOYMENT.md).
+ * `delete`로 올린다(docs/guides/DEPLOYMENT.md).
  */
 export type RetentionMode = 'off' | 'dry-run' | 'delete';
 
