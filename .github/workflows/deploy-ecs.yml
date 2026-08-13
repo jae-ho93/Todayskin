@@ -62,7 +62,7 @@ jobs:
           fi
           echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ steps.resolve.outputs.sha }}
           fetch-depth: 2
@@ -99,7 +99,7 @@ jobs:
       backend_image: ${{ steps.meta.outputs.backend_image }}
       inference_image: ${{ steps.meta.outputs.inference_image }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.guard.outputs.sha }}
 
@@ -169,7 +169,7 @@ jobs:
       # 항상 ENABLED로 고정이었고 오버라이드가 동작하지 않았다.
       ECS_ASSIGN_PUBLIC_IP: ${{ vars.ECS_ASSIGN_PUBLIC_IP }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.guard.outputs.sha }}
 
