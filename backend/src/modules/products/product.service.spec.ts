@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { ServiceUnavailableException } from '@nestjs/common';
 import { ProductService } from './product.service';
-import { GeminiClient, GeminiUnavailable } from '../gemini/gemini.client';
+import { OpenAiClient, OpenAiUnavailable } from '../openai/openai.client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisService } from '../../redis/redis.service';
 import { JobService } from '../jobs/job.service';
@@ -23,7 +23,7 @@ import { ProductDto } from './dto/product.dto';
  */
 describe('ProductService', () => {
   let service: ProductService;
-  let geminiClient: { generateWeatherProducts: jest.Mock };
+  let openAiClient: { generateWeatherProducts: jest.Mock };
   let weatherService: { getCurrentWeather: jest.Mock };
   let redis: { getJson: jest.Mock; setJson: jest.Mock };
   let jobService: { enqueue: jest.Mock };
@@ -40,7 +40,7 @@ describe('ProductService', () => {
   let productCatalog: { load: jest.Mock; invalidate: jest.Mock };
 
   beforeEach(async () => {
-    geminiClient = {
+    openAiClient = {
       generateWeatherProducts: jest.fn(),
     };
     weatherService = { getCurrentWeather: jest.fn() };
@@ -79,7 +79,7 @@ describe('ProductService', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         ProductService,
-        { provide: GeminiClient, useValue: geminiClient },
+        { provide: OpenAiClient, useValue: openAiClient },
         { provide: WeatherService, useValue: weatherService },
         { provide: PrismaService, useValue: prisma },
         { provide: RedisService, useValue: redis },
@@ -168,7 +168,7 @@ describe('ProductService', () => {
     }),
   ];
 
-  /** Gemini가 실제 카탈로그 id로 세 슬롯을 선택한 응답. */
+  /** OpenAI가 실제 카탈로그 id로 세 슬롯을 선택한 응답. */
   const validSelections = () => [
     { timing: '세안 후', productId: 'prod-11', explanation: '세안 후 피부결 정돈에 도움될 수 있어요.' },
     { timing: '외출 전', productId: 'prod-2', explanation: '외출 전 자외선 관리에 도움될 수 있어요.' },
@@ -201,15 +201,15 @@ describe('ProductService', () => {
   });
 
   describe('generateWeatherBased (N12 서버 소유 날씨 + N27 실제품)', () => {
-    it('LIVE 날씨 + Gemini 유효 선택 → 실제품 3개 (grade=A, reason, timing, purchaseUrl)', async () => {
+    it('LIVE 날씨 + OpenAI 유효 선택 → 실제품 3개 (grade=A, reason, timing, purchaseUrl)', async () => {
       weatherService.getCurrentWeather.mockResolvedValue(liveWeather());
       prisma.product.findMany.mockResolvedValue(catalogRows());
-      geminiClient.generateWeatherProducts.mockResolvedValue(validSelections());
+      openAiClient.generateWeatherProducts.mockResolvedValue(validSelections());
 
       const result = await service.generateWeatherBased({ lat: 37.5, lon: 126.9 });
       expect(weatherService.getCurrentWeather).toHaveBeenCalledWith(37.5, 126.9);
-      // 실제 카탈로그를 Gemini에 전달한다 (가상 제품 생성 아님).
-      expect(geminiClient.generateWeatherProducts).toHaveBeenCalledWith(
+      // 실제 카탈로그를 OpenAI에 전달한다 (가상 제품 생성 아님).
+      expect(openAiClient.generateWeatherProducts).toHaveBeenCalledWith(
         expect.objectContaining({ source: WeatherSource.LIVE }),
         expect.arrayContaining([expect.objectContaining({ id: 'prod-11' })]),
       );
@@ -221,18 +221,18 @@ describe('ProductService', () => {
         expect(['세안 후', '외출 전', '외출 후']).toContain(p.timing);
         // N24: 노출 제품은 실제품 + purchaseUrl.
         expect(p.purchaseUrl).toBeDefined();
-        expect(p.id).not.toMatch(/^gemini-product-/);
+        expect(p.id).not.toMatch(/^openai-product-/);
       }
       const timings = result.map((p) => p.timing).sort();
       expect(timings).toEqual(['세안 후', '외출 전', '외출 후']);
       expect(result[0].reason).toBe('세안 후 피부결 정돈에 도움될 수 있어요.');
     });
 
-    it('Gemini 선택이 중복되면 규칙 기반 실제품으로 대체 (가상 제품 금지, N27)', async () => {
+    it('OpenAI 선택이 중복되면 규칙 기반 실제품으로 대체 (가상 제품 금지, N27)', async () => {
       weatherService.getCurrentWeather.mockResolvedValue(liveWeather());
       prisma.product.findMany.mockResolvedValue(catalogRows());
-      // Gemini가 외출 전에도 prod-11(세안 후와 중복)을 잘못 선택했다.
-      geminiClient.generateWeatherProducts.mockResolvedValue([
+      // OpenAI가 외출 전에도 prod-11(세안 후와 중복)을 잘못 선택했다.
+      openAiClient.generateWeatherProducts.mockResolvedValue([
         { timing: '세안 후', productId: 'prod-11', explanation: 'E1' },
         { timing: '외출 전', productId: 'prod-11', explanation: 'E2' },
         { timing: '외출 후', productId: 'prod-13', explanation: 'E3' },
@@ -245,18 +245,18 @@ describe('ProductService', () => {
       expect(new Set(ids).size).toBe(3);
       for (const p of result) {
         expect(p.purchaseUrl).toBeDefined();
-        expect(p.id).not.toMatch(/^gemini-product-/);
+        expect(p.id).not.toMatch(/^openai-product-/);
       }
       // 외출 전 슬롯은 규칙 fallback(징크옥사이드 barrier)으로 대체된다.
       const outbound = result.find((p) => p.timing === '외출 전');
       expect(outbound!.id).toBe('prod-2');
     });
 
-    it('Gemini가 카탈로그에 없는 id를 고르면 규칙 기반 실제품으로 대체 (N27)', async () => {
+    it('OpenAI가 카탈로그에 없는 id를 고르면 규칙 기반 실제품으로 대체 (N27)', async () => {
       weatherService.getCurrentWeather.mockResolvedValue(liveWeather());
       prisma.product.findMany.mockResolvedValue(catalogRows());
-      // Gemini가 'not-a-product' 같은 가상/잘못된 id를 선택했다 — 503이 아니라 규칙 fallback.
-      geminiClient.generateWeatherProducts.mockResolvedValue([
+      // OpenAI가 'not-a-product' 같은 가상/잘못된 id를 선택했다 — 503이 아니라 규칙 fallback.
+      openAiClient.generateWeatherProducts.mockResolvedValue([
         { timing: '세안 후', productId: 'prod-11', explanation: 'E1' },
         { timing: '외출 전', productId: 'not-a-product', explanation: 'E2' },
         { timing: '외출 후', productId: 'prod-13', explanation: 'E3' },
@@ -266,7 +266,7 @@ describe('ProductService', () => {
       expect(result).toHaveLength(3);
       for (const p of result) {
         expect(p.purchaseUrl).toBeDefined();
-        expect(p.id).not.toMatch(/^gemini-product-/);
+        expect(p.id).not.toMatch(/^openai-product-/);
       }
       // 무효 선택 슬롯(외출 전)은 규칙 fallback(징크옥사이드 barrier)으로 대체된다.
       const outbound = result.find((p) => p.timing === '외출 전');
@@ -317,12 +317,12 @@ describe('ProductService', () => {
         coValue: null,
       });
       prisma.product.findMany.mockResolvedValue(catalogRows());
-      geminiClient.generateWeatherProducts.mockResolvedValue(validSelections());
+      openAiClient.generateWeatherProducts.mockResolvedValue(validSelections());
 
       const result = await service.generateWeatherBased({ lat: 37.5, lon: 126.9 });
       expect(result).toHaveLength(3);
-      // fallback으로 구성된 날씨가 Gemini에 전달됐다 (uvIndex 3 = 스냅샷 값)
-      expect(geminiClient.generateWeatherProducts).toHaveBeenCalledWith(
+      // fallback으로 구성된 날씨가 OpenAI에 전달됐다 (uvIndex 3 = 스냅샷 값)
+      expect(openAiClient.generateWeatherProducts).toHaveBeenCalledWith(
         expect.objectContaining({ uvIndex: 3, source: WeatherSource.CACHED }),
         expect.any(Array),
       );
@@ -349,7 +349,7 @@ describe('ProductService', () => {
       );
       // 지역 우선 + 아무 지역 최신까지 모두 빈 결과
       expect(prisma.weatherSnapshot.findFirst).toHaveBeenCalledTimes(2);
-      expect(geminiClient.generateWeatherProducts).not.toHaveBeenCalled();
+      expect(openAiClient.generateWeatherProducts).not.toHaveBeenCalled();
     });
 
     it('카탈로그가 비어 있으면 503 (가상 제품 생성 금지, N27)', async () => {
@@ -358,14 +358,14 @@ describe('ProductService', () => {
       await expect(service.generateWeatherBased({})).rejects.toThrow(
         ServiceUnavailableException,
       );
-      expect(geminiClient.generateWeatherProducts).not.toHaveBeenCalled();
+      expect(openAiClient.generateWeatherProducts).not.toHaveBeenCalled();
     });
 
-    it('Gemini 실패 시 503 ServiceUnavailable', async () => {
+    it('OpenAI 실패 시 503 ServiceUnavailable', async () => {
       weatherService.getCurrentWeather.mockResolvedValue(liveWeather());
       prisma.product.findMany.mockResolvedValue(catalogRows());
-      geminiClient.generateWeatherProducts.mockRejectedValue(
-        new GeminiUnavailable('GEMINI_API_KEY not configured'),
+      openAiClient.generateWeatherProducts.mockRejectedValue(
+        new OpenAiUnavailable('OPENAI_API_KEY not configured'),
       );
       await expect(service.generateWeatherBased({})).rejects.toThrow(
         ServiceUnavailableException,
@@ -390,11 +390,11 @@ describe('ProductService', () => {
       expect(result.source).toBe('FALLBACK');
       expect(result.jobId).toBe('job-weather-1');
       expect(result.items).toHaveLength(3);
-      // Gemini를 동기 호출하지 않는다 (첫 응답 지연 금지).
-      expect(geminiClient.generateWeatherProducts).not.toHaveBeenCalled();
+      // OpenAI를 동기 호출하지 않는다 (첫 응답 지연 금지).
+      expect(openAiClient.generateWeatherProducts).not.toHaveBeenCalled();
       // N31: FALLBACK도 실제 카탈로그 제품만, purchaseUrl 포함, 가상 id 없음.
       for (const p of result.items) {
-        expect(p.id).not.toMatch(/^gemini-product-/);
+        expect(p.id).not.toMatch(/^openai-product-/);
         expect(p.purchaseUrl).toBeDefined();
         expect(p.timing).toBeDefined();
       }
@@ -525,7 +525,7 @@ describe('ProductService', () => {
         ServiceUnavailableException,
       );
       expect(jobService.enqueue).not.toHaveBeenCalled();
-      expect(geminiClient.generateWeatherProducts).not.toHaveBeenCalled();
+      expect(openAiClient.generateWeatherProducts).not.toHaveBeenCalled();
     });
   });
 });

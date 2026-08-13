@@ -30,6 +30,8 @@ export interface GeneratedRecommendationRow {
   observationalNote: string | null;
   ingredientTags: string[];
   timing: RecommendationTiming | null;
+  /** evidence-sources.ts 레지스트리 id. LLM이 골라준 근거, 없으면 빈 배열. */
+  sourceIds: string[];
 }
 
 export interface RecommendationProductLink {

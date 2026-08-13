@@ -1,18 +1,24 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EvidencePolicy } from './evidence.policy';
+import { EVIDENCE_SOURCES } from '../recommendations/content/evidence-sources';
 
 /**
- * GeminiClient — Google Generative Language API 호출을 캡슐화.
+ * OpenAiClient — OpenAI Chat Completions API 호출을 캡슐화.
  *
- * 기존 FastAPI gemini_client.py의 generate_recommendations / generate_weather_products 이식.
+ * GeminiClient(구현체)를 그대로 대체한다 — 공개 메서드 시그니처, grade/sourceLabel
+ * 서버 고정, ingredientTags 화이트리스트, EvidencePolicy 사후 검증, 재시도·서킷브레이커
+ * 정책은 전부 동일하게 유지한다. 바뀐 건 호출 대상(OpenAI)과 그에 맞는 payload/응답
+ * 파싱뿐이다.
  *
- * 설계 원칙 (BACKEND_TASKS.md T8 기준):
+ * 설계 원칙 (BACKEND_TASKS.md T8 기준, Gemini 때와 동일):
  * - 의료적 확정 표현 방지: system prompt로 강제 + EvidencePolicy 사후 검증
  * - grade/sourceLabel은 서버가 고정 (LLM이 결정하지 않음)
  * - ingredientTags는 화이트리스트 강제 필터링
- * - GEMINI_API_KEY가 없거나 호출 실패 시 가짜 데이터로 대체하지 않고 GeminiUnavailable 예외
- * - 개발용 mock 응답과 운영 응답을 분리 (MOCK_GEMINI 환경변수)
+ * - 근거 인용(sourceIds)은 evidence-sources.ts 레지스트리에서만 고르게 하고,
+ *   레지스트리에 없는 id는 서버가 걸러낸다 — LLM이 새 출처를 지어내지 못한다.
+ * - OPENAI_API_KEY가 없거나 호출 실패 시 가짜 데이터로 대체하지 않고 OpenAiUnavailable 예외
+ * - 개발용 mock 응답과 운영 응답을 분리 (MOCK_OPENAI 환경변수)
  */
 
 // 7.2 성분 추천 필터링 원칙: 임상 근거가 확립된 성분으로만 한정
@@ -36,13 +42,13 @@ export const RECOMMENDATION_TIMINGS = ['외출 후', '자기 전', '언제든'] 
 export const PRODUCT_TIMINGS = ['세안 후', '외출 전', '외출 후'] as const;
 
 /**
- * Gemini 호출 실패(키 없음, timeout, 응답 파싱 실패 등).
+ * OpenAI 호출 실패(키 없음, timeout, 응답 파싱 실패 등).
  * 호출부에서 목업으로 폴백하지 않고 503을 반환해야 함을 의미.
  */
-export class GeminiUnavailable extends Error {
+export class OpenAiUnavailable extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'GeminiUnavailable';
+    this.name = 'OpenAiUnavailable';
   }
 }
 
@@ -51,6 +57,8 @@ export interface GeneratedRecommendation {
   explanation: string;
   ingredientTags: string[];
   timing: string | null;
+  /** evidence-sources.ts 레지스트리 id. 근거가 안 맞으면 빈 배열. */
+  sourceIds: string[];
 }
 
 /** Gemini에 전달하는 실제 카탈로그 제품 요약 — id 선택용. */
@@ -63,7 +71,7 @@ export interface CatalogProduct {
 }
 
 /**
- * N27: 날씨 기반 제품은 Gemini가 실제 카탈로그에서 productId를 선택한다.
+ * N27: 날씨 기반 제품은 LLM이 실제 카탈로그에서 productId를 선택한다.
  * 가상의 name/brand를 만들지 않는다 — productId로 DB 실제품에 매핑하고
  * purchaseUrl까지 응답에 포함한다.
  */
@@ -118,6 +126,7 @@ function isGeneratedRecommendation(value: unknown): value is GeneratedRecommenda
     isNonEmptyString(item.title) &&
     isNonEmptyString(item.explanation) &&
     isStringArray(item.ingredientTags) &&
+    (item.sourceIds === undefined || isStringArray(item.sourceIds)) &&
     (item.timing === null ||
       (typeof item.timing === 'string' &&
         (RECOMMENDATION_TIMINGS as readonly string[]).includes(item.timing)))
@@ -132,6 +141,11 @@ function isGeneratedWeatherProduct(value: unknown): value is GeneratedWeatherPro
     isNonEmptyString(item.productId) &&
     isNonEmptyString(item.explanation)
   );
+}
+
+/** 프롬프트에 넣을 근거 출처 목록 — id와 claim만 준다(원문 확인 없이 url을 베끼지 못하게). */
+function evidenceSourcesForPrompt(): string {
+  return EVIDENCE_SOURCES.map((s) => `- id: "${s.id}" — ${s.claim}`).join('\n');
 }
 
 const SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 근거 기반 추천 작성자입니다.
@@ -150,11 +164,18 @@ const SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 근거 기반 추
 반드시 지킬 규칙:
 1. "진단", "치료", "질환" 등 의료적 확정 표현을 쓰지 마세요. "측정값", "추정", "~에 도움될 수 있음",
    "~하는 경향이 있어요" 같은 완곡한 표현만 사용하세요.
-2. 특정 논문·연구·기관명을 인용하거나 지어내지 마세요. 존재를 확인할 수 없는 출처를 만들어내면 안
-   됩니다. 근거는 일반적으로 확립된 피부과학 지식이라는 선에서만 설명하세요.
+2. explanation 안에 특정 논문·연구·기관명을 직접 인용하거나 지어내지 마세요("연구에 따르면" 같은
+   표현 금지). 근거는 아래 [근거 출처 목록]에서 id로만 선택하세요 — 본문에 풀어쓰지 않습니다.
 3. ingredientTags는 반드시 다음 목록에서만 골라 사용하세요 (목록 밖 성분 언급 금지): ${ALLOWED_INGREDIENTS.join(', ')}
 4. 톤은 병원 대기실이 아니라 매일 쓰는 날씨 앱처럼 친근하고 부담스럽지 않게 작성하세요.
-5. 출력은 지정된 JSON 스키마를 그대로 따르세요.`;
+5. 각 추천의 sourceIds에는 아래 [근거 출처 목록]에서 이 추천을 실제로 뒷받침하는 항목의 id를
+   최대 2개까지 넣으세요. 목록에 있는 항목이라도 이 추천 내용과 직접 관련 없으면 넣지 마세요.
+   뒷받침하는 항목이 하나도 없으면 sourceIds는 빈 배열로 두세요. **목록에 없는 id를 절대
+   지어내지 마세요** — 목록에 없으면 그냥 빈 배열입니다.
+6. 출력은 지정된 JSON 스키마를 그대로 따르세요.
+
+[근거 출처 목록]
+${evidenceSourcesForPrompt()}`;
 
 const PRODUCT_SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 근거 기반 제품 추천 작성자입니다.
 오늘의 날씨/대기질 데이터만 보고(사용자의 피부 측정값은 아직 없음), 확립된 피부과학 지식
@@ -183,17 +204,17 @@ const PRODUCT_SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 근거 �
 6. 출력은 지정된 JSON 스키마를 그대로 따르고, timing은 3개 각각 정확히 한 번씩만 사용하세요.`;
 
 /**
- * R30: 재시도·서킷브레이커 상수.
+ * R30: 재시도·서킷브레이커 상수. (Gemini 때와 동일한 정책 — 대상만 OpenAI로 바뀜)
  *
  * 재시도는 **429/5xx에만** 건다. 타임아웃·네트워크 오류를 재시도하면 최악 지연이
  * 타임아웃의 배수가 되는데, `POST /recommendations`는 동기 경로라 그 지연이 그대로
  * 사용자 대기가 된다. 429/5xx는 대개 즉시 돌아오므로 예산을 거의 쓰지 않는다.
  * 그래도 느린 5xx가 겹칠 수 있으니 전체 예산(TOTAL_BUDGET_MS)으로 한 번 더 막는다.
  */
-const GEMINI_MAX_ATTEMPTS = 3; // 최초 1회 + 재시도 2회
-const GEMINI_BASE_BACKOFF_MS = 400;
-const GEMINI_TOTAL_BUDGET_MS = 30_000;
-const GEMINI_DEFAULT_TIMEOUT_MS = 15_000;
+const OPENAI_MAX_ATTEMPTS = 3; // 최초 1회 + 재시도 2회
+const OPENAI_BASE_BACKOFF_MS = 400;
+const OPENAI_TOTAL_BUDGET_MS = 30_000;
+const OPENAI_DEFAULT_TIMEOUT_MS = 15_000;
 
 /** 창(window) 안에 이만큼 연속 실패하면 회로를 연다. */
 const CIRCUIT_FAILURE_THRESHOLD = 10;
@@ -206,11 +227,11 @@ function sleep(ms: number): Promise<void> {
 }
 
 @Injectable()
-export class GeminiClient {
-  private readonly logger = new Logger(GeminiClient.name);
+export class OpenAiClient {
+  private readonly logger = new Logger(OpenAiClient.name);
   private readonly apiKey: string | undefined;
   private readonly model: string;
-  private readonly endpoint: string;
+  private readonly endpoint = 'https://api.openai.com/v1/chat/completions';
   private readonly mockEnabled: boolean;
   private readonly timeoutMs: number;
 
@@ -223,27 +244,26 @@ export class GeminiClient {
     private readonly configService: ConfigService,
     private readonly evidencePolicy: EvidencePolicy,
   ) {
-    this.apiKey = this.configService.get<string>('GEMINI_API_KEY');
-    this.model = this.configService.get<string>('GEMINI_MODEL', 'gemini-flash-latest');
+    this.apiKey = this.configService.get<string>('OPENAI_API_KEY');
+    this.model = this.configService.get<string>('OPENAI_MODEL', 'gpt-4o-mini');
     const timeout = Number(
-      this.configService.get<string | number>('GEMINI_TIMEOUT_MS') ??
-        GEMINI_DEFAULT_TIMEOUT_MS,
+      this.configService.get<string | number>('OPENAI_TIMEOUT_MS') ??
+        OPENAI_DEFAULT_TIMEOUT_MS,
     );
     this.timeoutMs =
-      Number.isFinite(timeout) && timeout > 0 ? timeout : GEMINI_DEFAULT_TIMEOUT_MS;
-    this.endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent`;
+      Number.isFinite(timeout) && timeout > 0 ? timeout : OPENAI_DEFAULT_TIMEOUT_MS;
     // 개발용 mock — 운영에서는 반드시 false여야 함.
     // ConfigService가 envFilePath 파일을 읽지 못한 경우를 대비해 process.env도 직접 확인한다.
     const mockFlag =
-      this.configService.get<string>('MOCK_GEMINI') ??
-      process.env.MOCK_GEMINI ??
+      this.configService.get<string>('MOCK_OPENAI') ??
+      process.env.MOCK_OPENAI ??
       'false';
     const nodeEnv =
       this.configService.get<string>('NODE_ENV') ?? process.env.NODE_ENV;
     this.mockEnabled = mockFlag === 'true' && nodeEnv !== 'production';
     if (mockFlag === 'true' && nodeEnv === 'production') {
       this.logger.error(
-        'production 환경에서는 MOCK_GEMINI를 사용할 수 없습니다. 실제 Gemini 호출 또는 503 응답만 허용합니다.',
+        'production 환경에서는 MOCK_OPENAI를 사용할 수 없습니다. 실제 OpenAI 호출 또는 503 응답만 허용합니다.',
       );
     }
   }
@@ -257,7 +277,7 @@ export class GeminiClient {
   }
 
   /**
-   * B등급 추천 생성 — 피부 측정값 + 날씨를 Gemini에 전달.
+   * B등급 추천 생성 — 피부 측정값 + 날씨를 OpenAI에 전달.
    * 서버가 grade=B, sourceLabel을 고정한다 (LLM이 결정하지 않음).
    */
   async generateRecommendations(
@@ -268,52 +288,49 @@ export class GeminiClient {
       return this.mockRecommendations();
     }
     if (!this.apiKey) {
-      throw new GeminiUnavailable('GEMINI_API_KEY not configured');
+      throw new OpenAiUnavailable('OPENAI_API_KEY not configured');
     }
 
     const payload = {
-      system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-      contents: [
+      model: this.model,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
         {
           role: 'user',
-          parts: [
-            {
-              text: `[오늘 피부 측정값]\n${JSON.stringify(skin)}\n\n[오늘 날씨/대기질]\n${JSON.stringify(weather)}`,
-            },
-          ],
+          content: `[오늘 피부 측정값]\n${JSON.stringify(skin)}\n\n[오늘 날씨/대기질]\n${JSON.stringify(weather)}`,
         },
       ],
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema: RECOMMENDATION_RESPONSE_SCHEMA,
-        temperature: 0.4,
-      },
+      response_format: { type: 'json_schema', json_schema: RECOMMENDATION_RESPONSE_SCHEMA },
+      temperature: 0.4,
     };
 
-    const rawItems = await this.callGemini<unknown>(payload);
+    const rawItems = await this.callOpenAi<unknown[]>(payload);
     if (!Array.isArray(rawItems) || rawItems.length === 0) {
-      throw new GeminiUnavailable('Gemini returned no recommendation items');
+      throw new OpenAiUnavailable('OpenAI returned no recommendation items');
     }
     const items = rawItems.filter(isGeneratedRecommendation);
     if (items.length !== rawItems.length || items.length === 0) {
-      throw new GeminiUnavailable('Gemini returned an invalid recommendation shape');
+      throw new OpenAiUnavailable('OpenAI returned an invalid recommendation shape');
     }
 
     // 화이트리스트 강제 필터링
+    const knownSourceIds = new Set(EVIDENCE_SOURCES.map((s) => s.id));
     for (const item of items) {
       item.ingredientTags = (item.ingredientTags ?? []).filter((t) =>
         (ALLOWED_INGREDIENTS as readonly string[]).includes(t),
       );
+      // 레지스트리에 없는 id는 조용히 버린다 — LLM이 만들어낸 id를 화면에 내보내지 않는다.
+      item.sourceIds = (item.sourceIds ?? []).filter((id) => knownSourceIds.has(id));
     }
 
     // 의료적 확정 표현 사후 검증 — 위반 시 가짜 데이터로 대체하지 않고 503.
     const policyResult = this.evidencePolicy.validateRecommendations(items);
     if (!policyResult.ok) {
       this.logger.warn(
-        `Gemini evidence policy violation: ${JSON.stringify(policyResult.violations)}`,
+        `OpenAI evidence policy violation: ${JSON.stringify(policyResult.violations)}`,
       );
-      throw new GeminiUnavailable(
-        'Gemini output violated evidence policy',
+      throw new OpenAiUnavailable(
+        'OpenAI output violated evidence policy',
       );
     }
 
@@ -322,7 +339,7 @@ export class GeminiClient {
 
   /**
    * 날씨 기반(A등급) 제품 생성 — 날씨만으로 세 상황별 **실제 카탈로그 제품**을 선택.
-   * N27: Gemini는 카탈로그에서 productId를 고르고, 가상 제품명/브랜드는 만들지 않는다.
+   * N27: LLM은 카탈로그에서 productId를 고르고, 가상 제품명/브랜드는 만들지 않는다.
    * 실제 제품 매핑·구매 URL 포함은 ProductService가 담당한다.
    */
   async generateWeatherProducts(
@@ -333,35 +350,29 @@ export class GeminiClient {
       return this.mockWeatherProducts(catalog);
     }
     if (!this.apiKey) {
-      throw new GeminiUnavailable('GEMINI_API_KEY not configured');
+      throw new OpenAiUnavailable('OPENAI_API_KEY not configured');
     }
 
     const payload = {
-      system_instruction: { parts: [{ text: PRODUCT_SYSTEM_PROMPT }] },
-      contents: [
+      model: this.model,
+      messages: [
+        { role: 'system', content: PRODUCT_SYSTEM_PROMPT },
         {
           role: 'user',
-          parts: [
-            {
-              text: `[오늘 날씨/대기질]\n${JSON.stringify(weather)}\n\n[제품 카탈로그]\n${JSON.stringify(catalog)}`,
-            },
-          ],
+          content: `[오늘 날씨/대기질]\n${JSON.stringify(weather)}\n\n[제품 카탈로그]\n${JSON.stringify(catalog)}`,
         },
       ],
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema: PRODUCT_RESPONSE_SCHEMA,
-        temperature: 0.5,
-      },
+      response_format: { type: 'json_schema', json_schema: PRODUCT_RESPONSE_SCHEMA },
+      temperature: 0.5,
     };
 
-    const rawItems = await this.callGemini<unknown>(payload);
+    const rawItems = await this.callOpenAi<unknown[]>(payload);
     if (!Array.isArray(rawItems)) {
-      throw new GeminiUnavailable('Gemini returned an invalid product list');
+      throw new OpenAiUnavailable('OpenAI returned an invalid product list');
     }
     const items = rawItems.filter(isGeneratedWeatherProduct);
     if (items.length !== rawItems.length) {
-      throw new GeminiUnavailable('Gemini returned an invalid product shape');
+      throw new OpenAiUnavailable('OpenAI returned an invalid product shape');
     }
 
     // timing별 정확히 1개만 남긴다. productId의 카탈로그 존재 여부는 서비스가 판정하고,
@@ -381,8 +392,8 @@ export class GeminiClient {
     }
 
     if (results.length !== PRODUCT_TIMINGS.length) {
-      throw new GeminiUnavailable(
-        'Gemini returned an incomplete product recommendation set',
+      throw new OpenAiUnavailable(
+        'OpenAI returned an incomplete product recommendation set',
       );
     }
 
@@ -390,10 +401,10 @@ export class GeminiClient {
     const policyResult = this.evidencePolicy.validateWeatherProducts(results);
     if (!policyResult.ok) {
       this.logger.warn(
-        `Gemini evidence policy violation (products): ${JSON.stringify(policyResult.violations)}`,
+        `OpenAI evidence policy violation (products): ${JSON.stringify(policyResult.violations)}`,
       );
-      throw new GeminiUnavailable(
-        'Gemini output violated evidence policy',
+      throw new OpenAiUnavailable(
+        'OpenAI output violated evidence policy',
       );
     }
 
@@ -407,19 +418,19 @@ export class GeminiClient {
    * 호출 자체를 건너뛴다. 그 밖의 4xx(키 오류·잘못된 요청)는 재시도해도 같은 결과라
    * 즉시 실패한다.
    */
-  private async callGemini<T>(payload: unknown): Promise<T> {
+  private async callOpenAi<T>(payload: unknown): Promise<T> {
     if (!this.apiKey) {
-      throw new GeminiUnavailable('GEMINI_API_KEY not configured');
+      throw new OpenAiUnavailable('OPENAI_API_KEY not configured');
     }
     if (Date.now() < this.circuitOpenUntil) {
       // 회로가 열린 동안은 기다리지 않고 즉시 실패한다 — 호출부는 fallback을 쓴다.
-      throw new GeminiUnavailable('Gemini circuit open — skipping call');
+      throw new OpenAiUnavailable('OpenAI circuit open — skipping call');
     }
 
     const startedAt = Date.now();
     let lastError = 'unknown';
 
-    for (let attempt = 1; attempt <= GEMINI_MAX_ATTEMPTS; attempt++) {
+    for (let attempt = 1; attempt <= OPENAI_MAX_ATTEMPTS; attempt++) {
       const outcome = await this.requestOnce(payload);
       if (outcome.kind === 'ok') {
         // 200이라도 본문이 깨졌으면 실패로 센다 — 그 상태가 이어지면 회로를 열어야 한다.
@@ -440,10 +451,10 @@ export class GeminiClient {
       const backoff = this.backoffMs(attempt);
       const circuitJustOpened = Date.now() < this.circuitOpenUntil;
       const withinBudget =
-        Date.now() - startedAt + backoff + this.timeoutMs <= GEMINI_TOTAL_BUDGET_MS;
+        Date.now() - startedAt + backoff + this.timeoutMs <= OPENAI_TOTAL_BUDGET_MS;
       if (
         !outcome.retryable ||
-        attempt === GEMINI_MAX_ATTEMPTS ||
+        attempt === OPENAI_MAX_ATTEMPTS ||
         circuitJustOpened ||
         !withinBudget
       ) {
@@ -451,12 +462,12 @@ export class GeminiClient {
       }
 
       this.logger.warn(
-        `Gemini 재시도 ${attempt}/${GEMINI_MAX_ATTEMPTS - 1} (${outcome.reason}) — ${backoff}ms 후`,
+        `OpenAI 재시도 ${attempt}/${OPENAI_MAX_ATTEMPTS - 1} (${outcome.reason}) — ${backoff}ms 후`,
       );
       await sleep(backoff);
     }
 
-    throw new GeminiUnavailable(`Gemini request failed: ${lastError}`);
+    throw new OpenAiUnavailable(`OpenAI request failed: ${lastError}`);
   }
 
   /** 한 번의 호출. 예외를 던지지 않고 재시도 가능 여부를 함께 돌려준다. */
@@ -473,7 +484,7 @@ export class GeminiClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-goog-api-key': this.apiKey as string,
+          Authorization: `Bearer ${this.apiKey as string}`,
         },
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(this.timeoutMs),
@@ -499,7 +510,7 @@ export class GeminiClient {
 
   /** 지수 백오프 + 지터(0~50%) — 동시에 실패한 잡들이 같은 순간에 몰리지 않게. */
   private backoffMs(attempt: number): number {
-    const base = GEMINI_BASE_BACKOFF_MS * 2 ** (attempt - 1);
+    const base = OPENAI_BASE_BACKOFF_MS * 2 ** (attempt - 1);
     return Math.round(base * (1 + Math.random() * 0.5));
   }
 
@@ -519,37 +530,49 @@ export class GeminiClient {
       this.circuitOpenUntil = now + CIRCUIT_OPEN_MS;
       this.failureCount = 0;
       this.logger.error(
-        `Gemini 연속 실패 ${CIRCUIT_FAILURE_THRESHOLD}회 — ${CIRCUIT_OPEN_MS}ms 동안 호출을 건너뛴다`,
+        `OpenAI 연속 실패 ${CIRCUIT_FAILURE_THRESHOLD}회 — ${CIRCUIT_OPEN_MS}ms 동안 호출을 건너뛴다`,
       );
     }
   }
 
+  /**
+   * Chat Completions 응답에서 message.content(JSON 문자열)를 꺼내 파싱한다.
+   * json_schema로 { items: [...] } 형태를 강제했으므로 items를 꺼내 배열로 돌려준다.
+   */
   private async parseResponse<T>(res: Response): Promise<T> {
     let data: unknown;
     try {
       data = await res.json();
     } catch (e) {
-      throw new GeminiUnavailable(
-        `Gemini response parse failed: ${e instanceof Error ? e.message : String(e)}`,
+      throw new OpenAiUnavailable(
+        `OpenAI response parse failed: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
 
-    const candidates = (data as { candidates?: unknown })?.candidates;
-    const text = (candidates as Array<{ content?: { parts?: Array<{ text?: string }> } }> | undefined)?.[0]?.content?.parts?.[0]?.text;
-    if (!text) {
-      throw new GeminiUnavailable('Unexpected Gemini response shape: no text');
+    const choices = (data as { choices?: unknown })?.choices;
+    const content = (choices as Array<{ message?: { content?: string } }> | undefined)?.[0]
+      ?.message?.content;
+    if (!content) {
+      throw new OpenAiUnavailable('Unexpected OpenAI response shape: no content');
     }
 
+    let parsed: unknown;
     try {
-      return JSON.parse(text) as T;
+      parsed = JSON.parse(content);
     } catch (e) {
-      throw new GeminiUnavailable(
-        `Gemini JSON decode failed: ${e instanceof Error ? e.message : String(e)}`,
+      throw new OpenAiUnavailable(
+        `OpenAI JSON decode failed: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
+
+    const items = (parsed as { items?: unknown })?.items;
+    if (!Array.isArray(items)) {
+      throw new OpenAiUnavailable('OpenAI response missing items array');
+    }
+    return items as T;
   }
 
-  // ── 개발용 mock 응답 (MOCK_GEMINI=true일 때만) ──
+  // ── 개발용 mock 응답 (MOCK_OPENAI=true일 때만) ──
 
   private mockRecommendations(): GeneratedRecommendation[] {
     return [
@@ -559,6 +582,7 @@ export class GeminiClient {
           '초미세먼지(PM2.5) 노출은 모공에 침투해 활성산소를 만들 수 있다는 관찰이 있습니다. 이중 세안으로 잔여 오염물질 제거에 도움될 수 있습니다.',
         ingredientTags: ['약산성 클렌저', '세라마이드'],
         timing: '외출 후',
+        sourceIds: [],
       },
       {
         title: '자기 전 보습 관리로 피부장벽을 케어하세요',
@@ -566,6 +590,7 @@ export class GeminiClient {
           '오늘 측정된 피부 수분 지표와 낮 동안의 건조 환경을 고려해, 자기 전 보습 케어가 피부장벽 유지에 도움될 수 있습니다.',
         ingredientTags: ['히알루론산', '세라마이드'],
         timing: '자기 전',
+        sourceIds: [],
       },
     ];
   }
@@ -606,31 +631,58 @@ export class GeminiClient {
   }
 }
 
-// ── Gemini response schemas ──────────────────────
+// ── OpenAI structured output schemas (json_schema strict mode) ──
+// OpenAI strict 모드는 top-level array를 허용하지 않아 { items: [...] } 로 감싼다.
+// 모든 속성은 required에 나열해야 한다(strict 모드 제약) — nullable은 type 배열로 표현.
 
 const RECOMMENDATION_RESPONSE_SCHEMA = {
-  type: 'ARRAY',
-  items: {
-    type: 'OBJECT',
+  name: 'skincare_recommendations',
+  strict: true,
+  schema: {
+    type: 'object',
     properties: {
-      title: { type: 'STRING' },
-      explanation: { type: 'STRING' },
-      ingredientTags: { type: 'ARRAY', items: { type: 'STRING' } },
-      timing: { type: 'STRING', enum: [...RECOMMENDATION_TIMINGS] },
+      items: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            title: { type: 'string' },
+            explanation: { type: 'string' },
+            ingredientTags: { type: 'array', items: { type: 'string' } },
+            timing: { type: ['string', 'null'], enum: [...RECOMMENDATION_TIMINGS, null] },
+            sourceIds: { type: 'array', items: { type: 'string' } },
+          },
+          required: ['title', 'explanation', 'ingredientTags', 'timing', 'sourceIds'],
+          additionalProperties: false,
+        },
+      },
     },
-    required: ['title', 'explanation', 'ingredientTags', 'timing'],
+    required: ['items'],
+    additionalProperties: false,
   },
 } as const;
 
 const PRODUCT_RESPONSE_SCHEMA = {
-  type: 'ARRAY',
-  items: {
-    type: 'OBJECT',
+  name: 'weather_products',
+  strict: true,
+  schema: {
+    type: 'object',
     properties: {
-      timing: { type: 'STRING', enum: [...PRODUCT_TIMINGS] },
-      productId: { type: 'STRING' },
-      explanation: { type: 'STRING' },
+      items: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            timing: { type: 'string', enum: [...PRODUCT_TIMINGS] },
+            productId: { type: 'string' },
+            explanation: { type: 'string' },
+          },
+          required: ['timing', 'productId', 'explanation'],
+          additionalProperties: false,
+        },
+      },
     },
-    required: ['timing', 'productId', 'explanation'],
+    required: ['items'],
+    additionalProperties: false,
   },
 } as const;

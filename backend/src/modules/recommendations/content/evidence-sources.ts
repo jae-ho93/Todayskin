@@ -66,9 +66,13 @@ export function findEvidenceSource(id: string): EvidenceSource | undefined {
 /**
  * id 목록을 출처 레코드로 바꾼다. 레지스트리에 없는 id는 조용히 버린다 —
  * 확인되지 않은 출처를 화면에 내보내는 것보다 출처 없음으로 보이는 편이 낫다.
+ *
+ * OpenAI 마이그레이션: Recommendation.sourceIds는 DB 기본값이 `[]`이지만,
+ * 이 컬럼이 생기기 전에 만들어진 목(mock) fixture나 부분 객체는 필드 자체가
+ * 없을 수 있다 — undefined/null도 빈 배열로 다룬다.
  */
-export function resolveEvidenceSources(ids: string[]): EvidenceSource[] {
-  return ids
+export function resolveEvidenceSources(ids: string[] | null | undefined): EvidenceSource[] {
+  return (ids ?? [])
     .map((id) => BY_ID.get(id))
     .filter((s): s is EvidenceSource => s !== undefined);
 }

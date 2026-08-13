@@ -36,7 +36,7 @@ describe('Diagnosis & Pattern (e2e)', () => {
     process.env.JWT_ACCESS_SECRET = 'e2e_access_secret_at_least_32_characters_long';
     process.env.JWT_REFRESH_SECRET = 'e2e_refresh_secret_at_least_32_characters_long';
     process.env.ALLOWED_ORIGINS = '';
-    process.env.MOCK_GEMINI = 'true';
+    process.env.MOCK_OPENAI = 'true';
     process.env.MOCK_INFERENCE = 'true';
     // N2: OTP allowlist로 고정 OTP(123456) 사용.
     process.env.OTP_ALLOWLIST_PHONES = '01088888888';

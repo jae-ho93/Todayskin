@@ -44,8 +44,10 @@ export function modelToDto(
     title: r.title,
     grade: r.grade as EvidenceGrade,
     sourceLabel: r.sourceLabel,
-    // 사용자별 생성 추천(B·C)은 참조 문서가 없다. 빈 배열이 "인용 없음"의 표현이다.
-    sources: [],
+    // OpenAI 마이그레이션: B등급도 이제 evidence-sources.ts에서 고른 sourceIds를
+    // 가질 수 있다. LLM이 근거를 못 찾았으면 sourceIds가 빈 배열이라 자연히
+    // sources도 빈 배열이 된다 — "인용 없음"은 여전히 빈 배열로 표현한다.
+    sources: resolveEvidenceSources(r.sourceIds),
     explanation: r.explanation,
     observationalNote: r.observationalNote,
     ingredientTags: r.ingredientTags,

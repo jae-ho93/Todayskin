@@ -3,7 +3,7 @@ import { RecommendationController } from './recommendation.controller';
 import { RecommendationService } from './recommendation.service';
 import { RecommendationRepository } from './recommendation.repository';
 import { RecommendationJobHandler } from './recommendation.job-handler';
-import { GeminiModule } from '../gemini/gemini.module';
+import { OpenAiModule } from '../openai/openai.module';
 import { ConsentModule } from '../consent/consent.module';
 import { JobsModule } from '../jobs/jobs.module';
 import { IdempotencyModule } from '../idempotency/idempotency.module';
@@ -15,7 +15,7 @@ import { ProductCatalogModule } from '../products/product-catalog.module';
  */
 @Module({
   imports: [
-    GeminiModule,
+    OpenAiModule,
     ConsentModule,
     JobsModule,
     IdempotencyModule,

@@ -4,7 +4,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
-import { GeminiClient } from '../src/modules/gemini/gemini.client';
+import { OpenAiClient } from '../src/modules/openai/openai.client';
 import { KmaClient } from '../src/modules/weather/clients/kma.client';
 import { AirKoreaClient } from '../src/modules/weather/clients/airkorea.client';
 import { StationClient } from '../src/modules/weather/clients/station.client';
@@ -16,7 +16,7 @@ import { PRODUCTS } from '../prisma/seed-data';
 
 /**
  * Recommendation/Product e2e 테스트.
- * 실제 test DB(todayskin_test) + MOCK_GEMINI=true로 전체 HTTP 경로를 검증한다.
+ * 실제 test DB(todayskin_test) + MOCK_OPENAI=true로 전체 HTTP 경로를 검증한다.
  */
 describe('Recommendation & Product (e2e)', () => {
   let app: INestApplication;
@@ -36,15 +36,15 @@ describe('Recommendation & Product (e2e)', () => {
     process.env.ALLOWED_ORIGINS = '';
     // N2: OTP allowlist로 고정 OTP(123456) 사용.
     process.env.OTP_ALLOWLIST_PHONES = '01066666666,01055555554';
-    // Gemini는 아래 provider override로 고정한다. process.env를 공유하는
+    // OpenAI는 아래 provider override로 고정한다. process.env를 공유하는
     // Jest worker에 mock 플래그를 남기지 않아 다른 e2e suite와 격리한다.
 
     const moduleRef: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
       // 다른 e2e suite가 먼저 AppModule을 초기화해도 환경변수 상태에
-      // 의존하지 않도록 Gemini 경계를 명시적으로 mock한다.
-      .overrideProvider(GeminiClient)
+      // 의존하지 않도록 OpenAI 경계를 명시적으로 mock한다.
+      .overrideProvider(OpenAiClient)
       .useValue({
         generateRecommendations: jest.fn().mockResolvedValue([
           {
@@ -143,7 +143,7 @@ describe('Recommendation & Product (e2e)', () => {
     });
     accessToken = signupRes.body.accessToken;
     userId = signupRes.body.id;
-    // N3: Gemini 추천 생성에 transfer 동의 필수
+    // N3: OpenAI 추천 생성에 transfer 동의 필수
     await grantRecommendationTransfer(app, accessToken);
   });
 
@@ -202,7 +202,7 @@ describe('Recommendation & Product (e2e)', () => {
         .expect(401);
     });
 
-    it('인증 + mock Gemini로 B등급 추천 생성', async () => {
+    it('인증 + mock OpenAI로 B등급 추천 생성', async () => {
       const res = await request(app.getHttpServer())
         .post('/recommendations/generate')
         .set('Authorization', `Bearer ${accessToken}`)
@@ -307,7 +307,7 @@ describe('Recommendation & Product (e2e)', () => {
         // N24: 노출 제품은 purchaseUrl을 가진 실제품이어야 한다
         expect(p.purchaseUrl).toBeDefined();
         expect(p.purchaseUrl).toMatch(/^https?:\/\//);
-        expect(p.id).not.toMatch(/^gemini-product-/);
+        expect(p.id).not.toMatch(/^openai-product-/);
       }
       // timing이 세 상황 모두 포함
       const timings = (res.body.items as Array<{ timing: string }>)
@@ -322,7 +322,7 @@ describe('Recommendation & Product (e2e)', () => {
       expect(liveResult.products).toHaveLength(3);
       for (const p of liveResult.products) {
         expect(p.purchaseUrl).toBeDefined();
-        expect(String(p.id)).not.toMatch(/^gemini-product-/);
+        expect(String(p.id)).not.toMatch(/^openai-product-/);
       }
     });
   });
@@ -360,7 +360,7 @@ describe('Recommendation & Product (e2e)', () => {
         expect(res.body.recommendations.length).toBeGreaterThan(0);
         for (const r of res.body.recommendations) {
           // N31: FALLBACK도 가상 추천 id가 아니고 실제 카탈로그 제품만 연결한다.
-          expect(String(r.id)).not.toMatch(/^gemini-/);
+          expect(String(r.id)).not.toMatch(/^openai-/);
           expect(
             (r.relatedProductIds as string[]).every((pid) =>
               pid.startsWith('prod-'),
@@ -374,9 +374,9 @@ describe('Recommendation & Product (e2e)', () => {
         const liveRecs = (final.result as { recommendations: Array<Record<string, unknown>> })
           .recommendations;
         expect(liveRecs.length).toBeGreaterThan(0);
-        expect(String(liveRecs[0].id)).toMatch(/^gemini-/);
+        expect(String(liveRecs[0].id)).toMatch(/^openai-/);
 
-        // 3) 재호출 — 저장된 LIVE 추천을 즉시 반환한다 (Gemini 재호출 없음).
+        // 3) 재호출 — 저장된 LIVE 추천을 즉시 반환한다 (OpenAI 재호출 없음).
         const second = await request(app.getHttpServer())
           .post('/recommendations/generate/fast')
           .set('Authorization', `Bearer ${accessToken}`)
@@ -457,7 +457,7 @@ describe('Recommendation & Product (e2e)', () => {
   });
 
   describe('동일 진단 중복 생성 방지', () => {
-    it('같은 diagnosisId로 두 번 생성 시 기존 추천 반환 (Gemini 호출 1회)', async () => {
+    it('같은 diagnosisId로 두 번 생성 시 기존 추천 반환 (OpenAI 호출 1회)', async () => {
       // 진단 레코드 생성
       const diagnosis = await prisma.diagnosis.create({
         data: {
@@ -490,7 +490,7 @@ describe('Recommendation & Product (e2e)', () => {
         .send({ diagnosisId: diagnosis.id })
         .expect(200);
 
-      // 두 번째는 Gemini를 다시 호출하지 않고 기존 추천을 반환한다
+      // 두 번째는 OpenAI를 다시 호출하지 않고 기존 추천을 반환한다
       const firstIds = (first.body as Array<{ id: string }>)
         .map((r) => r.id)
         .sort();
@@ -506,18 +506,18 @@ describe('Recommendation & Product (e2e)', () => {
   });
 
   describe('N14 외부 AI 호출 멱등성', () => {
-    it('같은 diagnosisId 동시 요청 → Gemini 1회만 호출, 200 + 409', async () => {
-      const geminiClient = app.get(GeminiClient) as {
+    it('같은 diagnosisId 동시 요청 → OpenAI 1회만 호출, 200 + 409', async () => {
+      const openAiClient = app.get(OpenAiClient) as {
         generateRecommendations: jest.Mock;
       };
       // suite 내 이전 테스트들이 같은 mock을 호출해 카운트가 누적됐으므로
       // 이 테스트의 호출 횟수만 검사하도록 초기화한다.
-      geminiClient.generateRecommendations.mockClear();
-      const original = geminiClient.generateRecommendations.getMockImplementation();
-      // 두 요청이 in-flight 구간에 겹치도록 Gemini 응답에 지연을 건다.
+      openAiClient.generateRecommendations.mockClear();
+      const original = openAiClient.generateRecommendations.getMockImplementation();
+      // 두 요청이 in-flight 구간에 겹치도록 OpenAI 응답에 지연을 건다.
       // (B의 사전 경로: JWT + 동의 + 진단 조회 + 예약 ≈ 수백 ms — 1s로 여유 확보)
       const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-      geminiClient.generateRecommendations.mockImplementation(async () => {
+      openAiClient.generateRecommendations.mockImplementation(async () => {
         await delay(1000);
         return [
           {
@@ -551,13 +551,13 @@ describe('Recommendation & Product (e2e)', () => {
             .send({ diagnosisId: diagnosis.id }),
         ]);
 
-        // N14 핵심: Gemini는 정확히 1회만 호출된다 (비용 중복 방지).
-        expect(geminiClient.generateRecommendations).toHaveBeenCalledTimes(1);
+        // N14 핵심: OpenAI는 정확히 1회만 호출된다 (비용 중복 방지).
+        expect(openAiClient.generateRecommendations).toHaveBeenCalledTimes(1);
         // 하나는 성공, 다른 하나는 in-flight 예약 충돌 409.
         expect([a.status, b.status].sort()).toEqual([200, 409]);
       } finally {
         // 단언 실패 시에도 mock/DB를 복구해 후속 테스트 오염을 막는다.
-        geminiClient.generateRecommendations.mockImplementation(original!);
+        openAiClient.generateRecommendations.mockImplementation(original!);
         await prisma.recommendation.deleteMany({ where: { diagnosisId: diagnosis.id } });
         await prisma.aiCallReservation.deleteMany({
           where: { scopeKey: `recommendation:${diagnosis.id}` },

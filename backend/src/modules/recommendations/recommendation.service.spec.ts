@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { RecommendationService } from './recommendation.service';
 import { RecommendationRepository } from './recommendation.repository';
-import { GeminiClient, GeminiUnavailable } from '../gemini/gemini.client';
+import { OpenAiClient, OpenAiUnavailable } from '../openai/openai.client';
 import { ConsentService } from '../consent/consent.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { IdempotencyService } from '../idempotency/idempotency.service';
@@ -22,11 +22,11 @@ import { RecommendationDto } from './dto/recommendation.dto';
 
 /**
  * RecommendationService 단위 테스트.
- * Prisma와 GeminiClient를 mock하여 비즈니스 로직(전역 목록, 생성, 중복 방지, 소유권)을 검증.
+ * Prisma와 OpenAiClient를 mock하여 비즈니스 로직(전역 목록, 생성, 중복 방지, 소유권)을 검증.
  */
 describe('RecommendationService', () => {
   let service: RecommendationService;
-  let geminiClient: { generateRecommendations: jest.Mock };
+  let openAiClient: { generateRecommendations: jest.Mock };
   let consentService: { requireActive: jest.Mock };
   let idempotency: {
     acquire: jest.Mock;
@@ -44,7 +44,7 @@ describe('RecommendationService', () => {
   let prisma: Record<string, any>;
 
   beforeEach(async () => {
-    geminiClient = {
+    openAiClient = {
       generateRecommendations: jest.fn(),
     };
     consentService = {
@@ -105,7 +105,7 @@ describe('RecommendationService', () => {
         // R7: 리포지토리는 목이 아니라 실제 구현을 쓴다 — 쿼리 모양(정렬·where)까지
         // 계속 검증 대상으로 남기려면 prisma 목 위에서 돌려야 한다.
         RecommendationRepository,
-        { provide: GeminiClient, useValue: geminiClient },
+        { provide: OpenAiClient, useValue: openAiClient },
         { provide: ConsentService, useValue: consentService },
         { provide: IdempotencyService, useValue: idempotency },
         { provide: PrismaService, useValue: prisma },
@@ -183,8 +183,8 @@ describe('RecommendationService', () => {
   });
 
   describe('generate (호환 모드 — skinScore+weather)', () => {
-    it('Gemini 응답으로 B등급 추천 생성 및 저장', async () => {
-      geminiClient.generateRecommendations.mockResolvedValue([
+    it('OpenAI 응답으로 B등급 추천 생성 및 저장', async () => {
+      openAiClient.generateRecommendations.mockResolvedValue([
         {
           title: '이중 세안 권장',
           explanation: 'PM2.5로 인해 이중 세안이 도움될 수 있어요.',
@@ -205,7 +205,7 @@ describe('RecommendationService', () => {
     });
 
     it('N20: 생성 추천의 성분 태그와 매칭되는 제품을 연결한다', async () => {
-      geminiClient.generateRecommendations.mockResolvedValue([
+      openAiClient.generateRecommendations.mockResolvedValue([
         {
           title: '세라마이드 보습 추천',
           explanation: '보습에 도움될 수 있어요.',
@@ -250,9 +250,9 @@ describe('RecommendationService', () => {
       expect(result[0].relatedProductIds).toEqual(['prod-4']);
     });
 
-    it('Gemini 실패 시 503 ServiceUnavailable', async () => {
-      geminiClient.generateRecommendations.mockRejectedValue(
-        new GeminiUnavailable('GEMINI_API_KEY not configured'),
+    it('OpenAI 실패 시 503 ServiceUnavailable', async () => {
+      openAiClient.generateRecommendations.mockRejectedValue(
+        new OpenAiUnavailable('OPENAI_API_KEY not configured'),
       );
       await expect(
         service.generate(1, { skinScore: {}, weather: {} }),
@@ -281,7 +281,7 @@ describe('RecommendationService', () => {
         },
       });
       prisma.recommendation.findMany.mockResolvedValue([]); // 중복 없음
-      geminiClient.generateRecommendations.mockResolvedValue([
+      openAiClient.generateRecommendations.mockResolvedValue([
         { title: 'T', explanation: 'E', ingredientTags: [], timing: null },
       ]);
 
@@ -319,7 +319,7 @@ describe('RecommendationService', () => {
         skinMetrics: [], weatherSnapshot: null,
       });
       prisma.recommendation.findMany.mockResolvedValue([
-        { id: 'gemini-old', userId: 1, diagnosisId: 'diag-1',
+        { id: 'openai-old', userId: 1, diagnosisId: 'diag-1',
           title: '기존 추천', grade: 'B',
           sourceLabel: 'AI 종합 분석 · 피부과학 일반 지식 기반',
           explanation: '...', observationalNote: null,
@@ -328,8 +328,8 @@ describe('RecommendationService', () => {
 
       const result = await service.generate(1, { diagnosisId: 'diag-1' });
       expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('gemini-old');
-      expect(geminiClient.generateRecommendations).not.toHaveBeenCalled();
+      expect(result[0].id).toBe('openai-old');
+      expect(openAiClient.generateRecommendations).not.toHaveBeenCalled();
       expect(prisma.recommendation.createMany).not.toHaveBeenCalled();
     });
   });
@@ -342,30 +342,30 @@ describe('RecommendationService', () => {
         skinMetrics: [], weatherSnapshot: null,
       });
       prisma.recommendation.findMany.mockResolvedValue([]);
-      geminiClient.generateRecommendations.mockResolvedValue([
+      openAiClient.generateRecommendations.mockResolvedValue([
         { title: 'T', explanation: 'E', ingredientTags: [], timing: null },
       ]);
     });
 
-    it('Gemini 호출 전에 예약을 획득하고 성공 시 complete로 전환한다', async () => {
+    it('OpenAI 호출 전에 예약을 획득하고 성공 시 complete로 전환한다', async () => {
       await service.generate(1, { diagnosisId: 'diag-1' });
       expect(idempotency.acquire).toHaveBeenCalledWith('recommendation:diag-1', 1);
       expect(idempotency.complete).toHaveBeenCalledWith('recommendation:diag-1');
       expect(idempotency.release).not.toHaveBeenCalled();
     });
 
-    it('in-flight 예약(동시 요청)은 409 Conflict + Gemini 미호출', async () => {
+    it('in-flight 예약(동시 요청)은 409 Conflict + OpenAI 미호출', async () => {
       idempotency.acquire.mockResolvedValue({ outcome: 'in_flight' });
       await expect(service.generate(1, { diagnosisId: 'diag-1' })).rejects.toThrow(
         ConflictException,
       );
-      expect(geminiClient.generateRecommendations).not.toHaveBeenCalled();
+      expect(openAiClient.generateRecommendations).not.toHaveBeenCalled();
     });
 
-    it('completed 예약 + 기존 결과 존재 시 동일 결과 재반환 (Gemini 미호출)', async () => {
+    it('completed 예약 + 기존 결과 존재 시 동일 결과 재반환 (OpenAI 미호출)', async () => {
       idempotency.acquire.mockResolvedValue({ outcome: 'completed' });
       prisma.recommendation.findMany.mockResolvedValue([
-        { id: 'gemini-old', userId: 1, diagnosisId: 'diag-1',
+        { id: 'openai-old', userId: 1, diagnosisId: 'diag-1',
           title: '기존 추천', grade: 'B',
           sourceLabel: 'AI 종합 분석 · 피부과학 일반 지식 기반',
           explanation: '...', observationalNote: null,
@@ -373,8 +373,8 @@ describe('RecommendationService', () => {
       ]);
 
       const result = await service.generate(1, { diagnosisId: 'diag-1' });
-      expect(result[0].id).toBe('gemini-old');
-      expect(geminiClient.generateRecommendations).not.toHaveBeenCalled();
+      expect(result[0].id).toBe('openai-old');
+      expect(openAiClient.generateRecommendations).not.toHaveBeenCalled();
       expect(idempotency.retake).not.toHaveBeenCalled();
     });
 
@@ -383,7 +383,7 @@ describe('RecommendationService', () => {
       // findMany는 [] (이미 mock 기본값) → retake 성공 후 진행
       await service.generate(1, { diagnosisId: 'diag-1' });
       expect(idempotency.retake).toHaveBeenCalledWith('recommendation:diag-1');
-      expect(geminiClient.generateRecommendations).toHaveBeenCalledTimes(1);
+      expect(openAiClient.generateRecommendations).toHaveBeenCalledTimes(1);
       expect(idempotency.complete).toHaveBeenCalledWith('recommendation:diag-1');
     });
 
@@ -393,12 +393,12 @@ describe('RecommendationService', () => {
       await expect(service.generate(1, { diagnosisId: 'diag-1' })).rejects.toThrow(
         ConflictException,
       );
-      expect(geminiClient.generateRecommendations).not.toHaveBeenCalled();
+      expect(openAiClient.generateRecommendations).not.toHaveBeenCalled();
     });
 
-    it('Gemini 실패(503) 시 예약을 release해 재시도를 허용한다', async () => {
-      geminiClient.generateRecommendations.mockRejectedValue(
-        new GeminiUnavailable('GEMINI_API_KEY not configured'),
+    it('OpenAI 실패(503) 시 예약을 release해 재시도를 허용한다', async () => {
+      openAiClient.generateRecommendations.mockRejectedValue(
+        new OpenAiUnavailable('OPENAI_API_KEY not configured'),
       );
       await expect(service.generate(1, { diagnosisId: 'diag-1' })).rejects.toThrow(
         ServiceUnavailableException,
@@ -427,7 +427,7 @@ describe('RecommendationService', () => {
       weatherSnapshot: null,
     });
 
-    const recRow = (id = 'gemini-done') => ({
+    const recRow = (id = 'openai-done') => ({
       id,
       userId: 1,
       diagnosisId: 'diag-fast',
@@ -452,7 +452,7 @@ describe('RecommendationService', () => {
 
       const result = await service.generateFast(1, { diagnosisId: 'diag-fast' });
       expect(result.source).toBe('LIVE');
-      expect(result.recommendations[0].id).toBe('gemini-done');
+      expect(result.recommendations[0].id).toBe('openai-done');
       expect(jobService.enqueue).not.toHaveBeenCalled();
       expect(redis.getJson).not.toHaveBeenCalled();
     });
@@ -484,7 +484,7 @@ describe('RecommendationService', () => {
       );
       for (const r of result.recommendations) {
         // N31: FALLBACK도 실제 카탈로그 제품만 연결하고 가상 id를 쓰지 않는다.
-        expect(r.id).not.toMatch(/^gemini-/);
+        expect(r.id).not.toMatch(/^openai-/);
         expect(Array.isArray(r.relatedProductIds)).toBe(true);
         expect(
           r.relatedProductIds.every((pid) => pid.startsWith('prod-')),
@@ -500,7 +500,7 @@ describe('RecommendationService', () => {
       redis.getJson.mockResolvedValue({
         items: [
           {
-            id: 'gemini-cached', userId: 1, diagnosisId: 'diag-fast',
+            id: 'openai-cached', userId: 1, diagnosisId: 'diag-fast',
             title: '캐시 추천', grade: 'B', sourceLabel: 'AI',
             explanation: '...', observationalNote: null,
             ingredientTags: [], timing: '외출 후', createdAt: new Date(),
@@ -576,7 +576,7 @@ describe('RecommendationService', () => {
         result: {
           recommendations: [
             {
-              id: 'gemini-job', userId: 1, diagnosisId: 'diag-fast',
+              id: 'openai-job', userId: 1, diagnosisId: 'diag-fast',
               title: 'job 추천', grade: 'B', sourceLabel: 'AI',
               explanation: '...', observationalNote: null,
               ingredientTags: [], timing: '외출 후', createdAt: new Date(),
@@ -612,23 +612,23 @@ describe('RecommendationService', () => {
   describe('getById', () => {
     it('생성 추천 — 소유자 조회 성공', async () => {
       prisma.recommendation.findUnique.mockResolvedValue({
-        id: 'gemini-1', userId: 1, diagnosisId: null,
+        id: 'openai-1', userId: 1, diagnosisId: null,
         title: 'T', grade: 'B',
         sourceLabel: 'src', explanation: 'E', observationalNote: null,
         ingredientTags: [], timing: null, createdAt: new Date(),
       });
-      const result = await service.getById(1, 'gemini-1');
-      expect(result.id).toBe('gemini-1');
+      const result = await service.getById(1, 'openai-1');
+      expect(result.id).toBe('openai-1');
     });
 
     it('생성 추천 — 타 사용자 접근 시 403', async () => {
       prisma.recommendation.findUnique.mockResolvedValue({
-        id: 'gemini-1', userId: 999, diagnosisId: null,
+        id: 'openai-1', userId: 999, diagnosisId: null,
         title: 'T', grade: 'B',
         sourceLabel: 'src', explanation: 'E', observationalNote: null,
         ingredientTags: [], timing: null, createdAt: new Date(),
       });
-      await expect(service.getById(1, 'gemini-1')).rejects.toThrow(ForbiddenException);
+      await expect(service.getById(1, 'openai-1')).rejects.toThrow(ForbiddenException);
     });
 
     it('전역 템플릿 조회 성공 (Recommendation에 없으면 Template에서)', async () => {
