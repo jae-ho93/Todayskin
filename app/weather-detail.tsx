@@ -125,12 +125,15 @@ function MetricCard({
   );
 }
 
-// 오늘 최고 UV 지표 — 히어로 카드. "예상" 표현 제거, 공식값 그대로 (F41).
+// 현재 시간대 자외선 + 오늘 최고 자외선 — 히어로 카드. "예상" 표현 제거, 공식값 그대로 (F41).
 function UvHeroCard({ weather }: { weather: WeatherSnapshot }) {
+  const current = weather.uvIndex;
+  const currentStatus = weather.uvStatus;
   const peak = weather.uvIndexPeak ?? weather.uvIndex;
   const peakStatus = weather.uvStatusPeak ?? weather.uvStatus;
   const peakHour = weather.uvIndexPeakHour;
   const color = peakStatus ? UV_LEVEL_COLOR[peakStatus] : colors.gray400;
+  const currentColor = currentStatus ? UV_LEVEL_COLOR[currentStatus] : colors.gray400;
   return (
     <Card style={styles.heroCard}>
       <View style={styles.heroTop}>
@@ -138,29 +141,57 @@ function UvHeroCard({ weather }: { weather: WeatherSnapshot }) {
           <Ionicons name="sunny-outline" size={26} color={color} />
         </View>
         <View style={{ flex: 1, gap: 2 }}>
-          <Text style={styles.heroLabel}>오늘 최고 자외선지수</Text>
+          <Text style={styles.heroLabel}>자외선지수</Text>
           {typeof peakHour === 'number' && (
-            <Text style={styles.heroSub}>최고 시각 {peakHour}시</Text>
+            <Text style={styles.heroSub}>오늘 최고 시각 {peakHour}시</Text>
           )}
         </View>
-        {peakStatus && (
-          <View style={[styles.statusPill, { backgroundColor: color + '22' }]}>
-            <Text style={[styles.statusPillText, { color }]}>
-              {UV_LEVEL_LABEL[peakStatus]}
-            </Text>
-          </View>
-        )}
       </View>
-      {typeof peak === 'number' ? (
-        <>
-          <View style={styles.heroValueRow}>
-            <Text style={[styles.heroValue, { color }]}>{peak}</Text>
-            <Text style={styles.heroUnit}>지수</Text>
+      {typeof current === 'number' || typeof peak === 'number' ? (
+        <View style={styles.heroValueSplit}>
+          <View style={styles.heroValueCell}>
+            <Text style={styles.heroValueCellLabel}>지금</Text>
+            {typeof current === 'number' ? (
+              <View style={styles.heroValueRow}>
+                <Text style={[styles.heroValue, { color: currentColor }]}>{current}</Text>
+                <Text style={styles.heroUnit}>지수</Text>
+              </View>
+            ) : (
+              <Text style={styles.metricUnavailableText}>측정 불가</Text>
+            )}
+            {currentStatus && (
+              <View style={[styles.statusPill, { backgroundColor: currentColor + '22' }]}>
+                <Text style={[styles.statusPillText, { color: currentColor }]}>
+                  {UV_LEVEL_LABEL[currentStatus]}
+                </Text>
+              </View>
+            )}
           </View>
-          <StatusBar scale="uv" value={peak} status={peakStatus} maxCap={UV_MAX} />
-        </>
+          <View style={styles.heroValueDivider} />
+          <View style={styles.heroValueCell}>
+            <Text style={styles.heroValueCellLabel}>오늘 최고</Text>
+            {typeof peak === 'number' ? (
+              <View style={styles.heroValueRow}>
+                <Text style={[styles.heroValue, { color }]}>{peak}</Text>
+                <Text style={styles.heroUnit}>지수</Text>
+              </View>
+            ) : (
+              <Text style={styles.metricUnavailableText}>측정 불가</Text>
+            )}
+            {peakStatus && (
+              <View style={[styles.statusPill, { backgroundColor: color + '22' }]}>
+                <Text style={[styles.statusPillText, { color }]}>
+                  {UV_LEVEL_LABEL[peakStatus]}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
       ) : (
         <Text style={styles.metricUnavailableText}>값을 분석하고 있어요</Text>
+      )}
+      {typeof peak === 'number' && (
+        <StatusBar scale="uv" value={peak} status={peakStatus} maxCap={UV_MAX} />
       )}
     </Card>
   );
@@ -485,8 +516,17 @@ const styles = StyleSheet.create({
   },
   heroLabel: { ...typography.subtitle, color: colors.textPrimary },
   heroSub: { ...typography.caption, color: colors.textSecondary },
+  heroValueSplit: { flexDirection: 'row', alignItems: 'center' },
+  heroValueCell: { flex: 1, gap: spacing.xs, alignItems: 'flex-start' },
+  heroValueCellLabel: { ...typography.bodySm, color: colors.textSecondary, fontWeight: '600' },
+  heroValueDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    backgroundColor: colors.gray200,
+    marginHorizontal: spacing.md,
+  },
   heroValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.xs },
-  heroValue: { ...typography.displaySm, fontSize: 34, lineHeight: 42, color: colors.textPrimary },
+  heroValue: { ...typography.displaySm, fontSize: 30, lineHeight: 38, color: colors.textPrimary },
   heroUnit: { ...typography.bodySm, color: colors.textSecondary },
 
   // N53: 기온·습도 실황 카드
