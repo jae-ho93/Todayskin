@@ -67,7 +67,7 @@ describe('useCarePlan', () => {
   });
 
   it('combined도 diagnosisId 기준으로 요청한다', async () => {
-    const { result } = renderHook(() => useCarePlan({ careType: 'combined', diagnosisId: 'diag-1' }));
+    renderHook(() => useCarePlan({ careType: 'combined', diagnosisId: 'diag-1' }));
     await flush();
 
     expect(api.getCareCombinedFast).toHaveBeenCalledWith('diag-1', undefined);
