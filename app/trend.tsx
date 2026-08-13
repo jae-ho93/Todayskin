@@ -69,16 +69,41 @@ export default function TrendScreen() {
           <RetryButton onPress={() => void load()} />
         </Card>
       ) : pattern && pattern.status === 'LOCKED' ? (
-        <Card style={styles.lockedCard}>
-          <Ionicons name="construct-outline" size={28} color={colors.textTertiary} />
-          <Text style={styles.lockedTitle}>준비 중이에요</Text>
-          <Text style={styles.lockedBody}>
-            {pattern.lockedMessage ??
-              '피부 상태와 날씨 데이터를 함께 모아 개인화된 패턴을 보여줄 수 있어요.'}
-            {'\n\n'}
-            현재 {pattern.collectedDays}일 기록 · 분석에 필요한 최소 {pattern.requiredDays}일
-          </Text>
-        </Card>
+        <View style={styles.lockedWrap}>
+          <Card style={styles.lockedCard}>
+            <Ionicons name="construct-outline" size={28} color={colors.textTertiary} />
+            <Text style={styles.lockedTitle}>준비 중이에요</Text>
+            <Text style={styles.lockedBody}>
+              {pattern.lockedMessage ??
+                '피부 상태와 날씨 데이터를 함께 모아 개인화된 패턴을 보여줄 수 있어요.'}
+              {'\n\n'}
+              현재 {pattern.collectedDays}일 기록 · 분석에 필요한 최소 {pattern.requiredDays}일
+            </Text>
+            {pattern.requiredDays > pattern.collectedDays && (
+              <Text style={styles.lockedRemaining}>
+                {pattern.requiredDays - pattern.collectedDays}일 더 측정하면 열려요
+              </Text>
+            )}
+          </Card>
+
+          {/* F82: 잠금 해제 전에도 가치를 미리 보여준다 — 예시임을 명시(가짜 데이터 오인 금지) */}
+          <View style={styles.previewLabelRow}>
+            <Ionicons name="eye-outline" size={14} color={colors.textTertiary} />
+            <Text style={styles.previewLabel}>열리면 이런 분석을 볼 수 있어요 — 아래는 예시</Text>
+          </View>
+          <Card style={[styles.corrCard, styles.previewCard]}>
+            <View style={styles.corrHeader}>
+              <Text style={styles.corrTitle}>수분 · 볼 ↔ 습도</Text>
+              <View style={[styles.badge, { backgroundColor: colors.ochre + '22' }]}>
+                <Text style={[styles.badgeText, { color: colors.ochre }]}>예시</Text>
+              </View>
+            </View>
+            <Text style={styles.corrValue}>상관계수 r = 0.62</Text>
+            <Text style={styles.corrMeta}>
+              예시 화면이에요 · 실제 분석은 내 기록으로만 계산돼요
+            </Text>
+          </Card>
+        </View>
       ) : pattern && pattern.status === 'READY' ? (
         <ScrollView contentContainerStyle={styles.readyScroll} showsVerticalScrollIndicator={false}>
           <Card style={styles.disclaimerCard}>
@@ -170,9 +195,21 @@ const styles = StyleSheet.create({
   stateTitle: { ...typography.headline, color: colors.textPrimary },
   stateText: { ...typography.bodySm, color: colors.textSecondary, textAlign: 'center' },
   stateBody: { ...typography.bodySm, color: colors.textSecondary, textAlign: 'center' },
+  lockedWrap: { gap: spacing.md },
   lockedCard: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xxl },
   lockedTitle: { ...typography.headline, color: colors.textPrimary },
   lockedBody: { ...typography.bodySm, color: colors.textSecondary, textAlign: 'center' },
+  lockedRemaining: { ...typography.subtitle, color: colors.sageDark },
+
+  // F82: 잠금 상태 예시 미리보기
+  previewLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  previewLabel: { ...typography.caption, color: colors.textTertiary },
+  previewCard: { opacity: 0.75 },
   readyScroll: { gap: spacing.md },
   disclaimerCard: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
   disclaimerText: {
