@@ -465,28 +465,34 @@ function WeatherSummaryGrid({ weather }: { weather: CalendarWeather }) {
       icon: 'ellipse-outline',
       label: '미세먼지',
       value:
-        weather.pm10 != null
-          ? String(Math.round(weather.pm10))
-          : missing(weather.airCollectionFailed),
-      color: airColor(weather.pm10Status),
+        weather.pm10Peak != null
+          ? String(Math.round(weather.pm10Peak))
+          : weather.pm10 != null
+            ? String(Math.round(weather.pm10))
+            : missing(weather.airCollectionFailed),
+      color: airColor(weather.pm10StatusPeak ?? weather.pm10Status),
     },
     {
       icon: 'layers-outline',
       label: '초미세먼지',
       value:
-        weather.pm25 != null
-          ? String(Math.round(weather.pm25))
-          : missing(weather.airCollectionFailed),
-      color: airColor(weather.pm25Status),
+        weather.pm25Peak != null
+          ? String(Math.round(weather.pm25Peak))
+          : weather.pm25 != null
+            ? String(Math.round(weather.pm25))
+            : missing(weather.airCollectionFailed),
+      color: airColor(weather.pm25StatusPeak ?? weather.pm25Status),
     },
     {
       icon: 'cloud-outline',
       label: '오존',
       value:
-        weather.ozonePpm != null
-          ? String(weather.ozonePpm)
-          : missing(weather.airCollectionFailed),
-      color: airColor(weather.ozoneStatus),
+        weather.ozonePeak != null
+          ? String(weather.ozonePeak)
+          : weather.ozonePpm != null
+            ? String(weather.ozonePpm)
+            : missing(weather.airCollectionFailed),
+      color: airColor(weather.ozoneStatusPeak ?? weather.ozoneStatus),
     },
   ];
 

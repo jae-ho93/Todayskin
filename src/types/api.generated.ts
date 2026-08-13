@@ -1554,10 +1554,16 @@ export interface components {
             uvIndexPeakHour?: number | null;
             ozonePpm?: number | null;
             ozoneStatus?: string | null;
+            ozonePeak?: number | null;
+            ozoneStatusPeak?: string | null;
             pm25?: number | null;
             pm25Status?: string | null;
+            pm25Peak?: number | null;
+            pm25StatusPeak?: string | null;
             pm10?: number | null;
             pm10Status?: string | null;
+            pm10Peak?: number | null;
+            pm10StatusPeak?: string | null;
             caiValue?: number | null;
             caiStatus?: string | null;
             no2Value?: number | null;

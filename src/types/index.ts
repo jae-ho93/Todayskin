@@ -246,10 +246,17 @@ export interface CalendarWeather {
   uvIndexPeakHour?: number | null;
   ozonePpm?: number | null;
   ozoneStatus?: AirStatus | null;
+  // N55: (지역, 이 날의 KST 달력일) 전체 수집분 중 최댓값 — uvIndexPeak와 같은 개념.
+  ozonePeak?: number | null;
+  ozoneStatusPeak?: AirStatus | null;
   pm25?: number | null;
   pm25Status?: AirStatus | null;
+  pm25Peak?: number | null;
+  pm25StatusPeak?: AirStatus | null;
   pm10?: number | null;
   pm10Status?: AirStatus | null;
+  pm10Peak?: number | null;
+  pm10StatusPeak?: AirStatus | null;
   caiValue?: number | null;
   caiStatus?: AirStatus | null;
   no2Value?: number | null;

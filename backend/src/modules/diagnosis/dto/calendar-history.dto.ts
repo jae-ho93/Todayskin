@@ -83,6 +83,19 @@ export class CalendarWeatherDto {
   @ApiPropertyOptional({ type: String, nullable: true })
   ozoneStatus?: string | null;
 
+  /**
+   * N55: (지역, 이 날의 KST 달력일) 전체 수집분 중 최댓값 — UV의 uvIndexPeak와
+   * 같은 개념. 대기질은 예보가 아니라 실시간 관측이라 한 번의 API 호출로는
+   * "오늘 최고"를 알 수 없어, 백그라운드 수집 스케줄러가 하루 동안 쌓아둔
+   * WeatherSnapshot들의 최댓값으로 근사한다. 그날 앱을 거의 안 켰으면(수집 스냅샷이
+   * 적으면) 실제 최고치와 오차가 있을 수 있다.
+   */
+  @ApiPropertyOptional({ type: Number, nullable: true })
+  ozonePeak?: number | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true })
+  ozoneStatusPeak?: string | null;
+
   @ApiPropertyOptional({ type: Number, nullable: true })
   pm25?: number | null;
 
@@ -90,10 +103,22 @@ export class CalendarWeatherDto {
   pm25Status?: string | null;
 
   @ApiPropertyOptional({ type: Number, nullable: true })
+  pm25Peak?: number | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true })
+  pm25StatusPeak?: string | null;
+
+  @ApiPropertyOptional({ type: Number, nullable: true })
   pm10?: number | null;
 
   @ApiPropertyOptional({ type: String, nullable: true })
   pm10Status?: string | null;
+
+  @ApiPropertyOptional({ type: Number, nullable: true })
+  pm10Peak?: number | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true })
+  pm10StatusPeak?: string | null;
 
   @ApiPropertyOptional({ type: Number, nullable: true })
   caiValue?: number | null;
