@@ -1,21 +1,24 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../src/components/Card';
 import { CircularGauge } from '../../src/components/CircularGauge';
 import { RecommendationCard } from '../../src/components/RecommendationCard';
 import { RetryButton } from '../../src/components/RetryButton';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
+import { Skeleton } from '../../src/components/Skeleton';
 import { useToast } from '../../src/components/Toast';
 import { WeatherCard } from '../../src/components/WeatherCard';
 import { useHomeDashboard } from '../../src/features/home/useHomeDashboard';
+import { useOffline } from '../../src/hooks/useOffline';
 import { getSession } from '../../src/lib/session';
 import { colors, MAX_FONT_SCALE, radius, shadow, spacing, typography } from '../../src/theme';
 
 export default function HomeDashboard() {
   const [userName, setUserName] = useState<string | null>(null);
   const { showToast } = useToast();
+  const offline = useOffline();
 
   const {
     weather,
@@ -36,11 +39,35 @@ export default function HomeDashboard() {
 
   useFocusEffect(reloadOnFocus);
 
+  // F82: 배너 카피("연결되면 자동으로 다시 불러와요")를 지키는 부분 —
+  // 오프라인이었다가 돌아오면 한 번 자동 갱신한다.
+  const wasOfflineRef = useRef(false);
+  useEffect(() => {
+    if (offline) {
+      wasOfflineRef.current = true;
+      return;
+    }
+    if (wasOfflineRef.current) {
+      wasOfflineRef.current = false;
+      void reload();
+    }
+  }, [offline, reload]);
+
   const handleRefresh = reload;
 
   return (
     <View style={styles.flex}>
       <ScreenContainer style={styles.content} refreshing={refreshing} onRefresh={handleRefresh}>
+        {/* F82: 오프라인 배너 — 일반 오류 카피 대신 원인을 말해준다 */}
+        {offline && (
+          <View style={styles.offlineBanner}>
+            <Ionicons name="cloud-offline-outline" size={16} color={colors.textInverse} />
+            <Text style={styles.offlineBannerText} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+              오프라인이에요. 연결되면 자동으로 다시 불러와요
+            </Text>
+          </View>
+        )}
+
         <View style={styles.headerRow}>
           <Text style={styles.greeting}>안녕하세요, {userName ?? '회원'}님</Text>
           <Pressable
@@ -61,9 +88,20 @@ export default function HomeDashboard() {
         {weather.status === 'success' ? (
           <WeatherCard weather={weather.data} />
         ) : weather.status === 'loading' ? (
-          <Card style={styles.weatherLoading}>
-            <ActivityIndicator color={colors.sage} />
-            <Text style={styles.weatherLoadingText}>위치 파악 중...</Text>
+          // F82: 통 스피너 대신 날씨 카드 골격 — 무엇이 올 자리인지 먼저 보여준다
+          <Card style={styles.weatherSkeleton}>
+            <View style={styles.weatherSkeletonHeader}>
+              <Skeleton width={44} height={44} borderRadius={radius.full} />
+              <View style={styles.weatherSkeletonLines}>
+                <Skeleton width="55%" height={18} />
+                <Skeleton width="35%" height={13} />
+              </View>
+            </View>
+            <View style={styles.weatherSkeletonChips}>
+              <Skeleton width={72} height={28} borderRadius={radius.full} />
+              <Skeleton width={72} height={28} borderRadius={radius.full} />
+              <Skeleton width={72} height={28} borderRadius={radius.full} />
+            </View>
           </Card>
         ) : (
           <Card style={styles.weatherLoading}>
@@ -71,6 +109,27 @@ export default function HomeDashboard() {
             <Text style={styles.weatherLoadingText}>날씨 정보를 불러올 수 없어요</Text>
             <RetryButton onPress={handleRefresh} disabled={refreshing} />
           </Card>
+        )}
+
+        {/* F82: 피부 스코어·추천 자리 스켈레톤 — 콜드 스타트에서 화면이 비지 않게 */}
+        {skin.status === 'loading' && (
+          <>
+            <View style={styles.scoreCard}>
+              <Skeleton width={120} height={120} borderRadius={radius.full} />
+              <View style={styles.scoreMeta}>
+                <Skeleton width="70%" height={18} />
+                <Skeleton width="95%" height={13} />
+                <Skeleton width="60%" height={13} />
+              </View>
+            </View>
+            <View>
+              <Text style={styles.sectionTitle}>오늘의 추천</Text>
+              <View style={styles.recommendationList}>
+                <Skeleton height={76} borderRadius={radius.lg} />
+                <Skeleton height={76} borderRadius={radius.lg} />
+              </View>
+            </View>
+          </>
         )}
 
         {skin.status === 'empty' && (
@@ -169,6 +228,23 @@ const styles = StyleSheet.create({
   },
   weatherLoading: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
   weatherLoadingText: { ...typography.bodySm, color: colors.textSecondary },
+
+  // F82: 오프라인 배너 + 로딩 스켈레톤
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.gray600,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  offlineBannerText: { ...typography.bodySm, color: colors.textInverse },
+  weatherSkeleton: { gap: spacing.md },
+  weatherSkeletonHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  weatherSkeletonLines: { flex: 1, gap: spacing.xs },
+  weatherSkeletonChips: { flexDirection: 'row', gap: spacing.sm },
   emptyState: {
     alignItems: 'center',
     gap: spacing.sm,
