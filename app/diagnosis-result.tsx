@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../src/api/client';
 import { EvidenceBadge } from '../src/components/EvidenceBadge';
 import { FACE_PART_PIN_POSITION, FaceIllustration } from '../src/components/FaceIllustration';
+import { getLabReportEnabled } from '../src/features/settings/lab';
 import { useAsyncJob, unwrapJobItems } from '../src/hooks/useAsyncJob';
 import { currentMonthBounds } from '../src/lib/kst-date';
 import { getSession } from '../src/lib/session';
@@ -53,6 +54,8 @@ export default function DiagnosisResultScreen() {
   // 얼굴 일러스트 ↔ 여드름/질환 분석 리포트 스와이프 페이지 상태.
   const [pageWidth, setPageWidth] = useState(0);
   const [activePage, setActivePage] = useState(0);
+  // F79: AI 상세 리포트(여드름·질환)는 실험실 옵트인일 때만 노출 (기본 숨김, D-02)
+  const [labEnabled, setLabEnabled] = useState(false);
 
   // 홈 대시보드가 "가장 최근 진단"에만 기회주의적으로 추천을 생성해서, 홈을 들르지
   // 않고 바로 기록을 보면 "추천이 없어요"로 보이는 문제가 있었다. 이 화면(촬영 직후
@@ -65,11 +68,13 @@ export default function DiagnosisResultScreen() {
       api.getSkinScore(),
       getSession(),
       api.getScoreSeries(currentMonthBounds()),
-    ]).then(async ([result, session, scoreSeries]) => {
+      getLabReportEnabled(),
+    ]).then(async ([result, session, scoreSeries, labReportEnabled]) => {
       if (cancelled) return;
       if (result.status === 'ok') setSkinScore(result.data);
       setGender(session?.gender);
       setSeries(scoreSeries);
+      setLabEnabled(labReportEnabled);
       setLoading(false);
 
       if (result.status !== 'ok') return;
@@ -130,7 +135,7 @@ export default function DiagnosisResultScreen() {
 
   const grade = overallGrade(skinScore.overallScore);
   const gradeColor = gradeToColor(grade);
-  const hasExtraReport = Boolean(skinScore.acneReport || skinScore.diseaseClassification);
+  const hasExtraReport = labEnabled && Boolean(skinScore.acneReport || skinScore.diseaseClassification);
 
   function onFacePageLayout(e: LayoutChangeEvent) {
     setPageWidth(e.nativeEvent.layout.width);
@@ -212,6 +217,9 @@ export default function DiagnosisResultScreen() {
                   <View style={styles.reportBetaBadge}>
                     <Text style={styles.reportBetaBadgeText}>베타 · 검증 중인 분석</Text>
                   </View>
+                  <Text style={styles.reportNotice}>
+                    참고용 정보예요. 의학적 진단이 아니며, 설정 &gt; 실험실에서 끌 수 있어요.
+                  </Text>
                   {skinScore.diseaseClassification && (
                     <View style={styles.reportSection}>
                       <Text style={styles.reportSectionTitle}>피부 질환 분류</Text>
@@ -457,6 +465,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   reportBetaBadgeText: { ...typography.caption, color: colors.sage, fontWeight: '700' },
+  reportNotice: { ...typography.caption, color: colors.textTertiary },
   reportSection: { gap: spacing.xs },
   reportSectionTitle: { ...typography.bodySm, color: colors.textSecondary, fontWeight: '600' },
   reportSectionBody: { ...typography.body, color: colors.textPrimary },

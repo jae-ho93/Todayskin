@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { LandmarkOverlay } from '../../src/components/LandmarkOverlay';
 import { api } from '../../src/api/client';
+import { getLabReportEnabled } from '../../src/features/settings/lab';
 import { Card } from '../../src/components/Card';
 import { EvidenceBadge } from '../../src/components/EvidenceBadge';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
@@ -39,6 +40,8 @@ export default function DiagnosisDetailScreen() {
   const [diagnosis, setDiagnosis] = useState<CalendarDiagnosis | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  // F79: AI 상세 리포트(여드름·질환)는 실험실 옵트인일 때만 노출 (기본 숨김, D-02)
+  const [labEnabled, setLabEnabled] = useState(false);
   const { showToast } = useToast();
 
   /**
@@ -75,10 +78,14 @@ export default function DiagnosisDetailScreen() {
     if (!id) return;
     let cancelled = false;
     (async () => {
-      const history = date ? await api.getHistoryByDate(date) : null;
+      const [history, labReportEnabled] = await Promise.all([
+        date ? api.getHistoryByDate(date) : Promise.resolve(null),
+        getLabReportEnabled(),
+      ]);
       if (cancelled) return;
       const found = history?.diagnoses.find((d) => d.id === id) ?? null;
       setDiagnosis(found);
+      setLabEnabled(labReportEnabled);
       setLoading(false);
     })();
     return () => {
@@ -191,12 +198,15 @@ export default function DiagnosisDetailScreen() {
         </View>
       )}
 
-      {/* 여드름/질환 분석 — 베타 */}
-      {(d.diseaseClassification || d.acneReport) && (
+      {/* 여드름/질환 분석 — 실험실 옵트인 시에만 (F79) */}
+      {labEnabled && (d.diseaseClassification || d.acneReport) && (
         <View style={styles.section}>
           <View style={styles.reportBetaBadge}>
             <Text style={styles.reportBetaBadgeText}>베타 · 검증 중인 분석</Text>
           </View>
+          <Text style={styles.reportNotice}>
+            참고용 정보예요. 의학적 진단이 아니며, 설정 &gt; 실험실에서 끌 수 있어요.
+          </Text>
           <Card style={styles.reportCard}>
             {d.diseaseClassification && (
               <View style={styles.reportSection}>
@@ -495,6 +505,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
   },
   reportBetaBadgeText: { ...typography.caption, color: colors.sage, fontWeight: '700' },
+  reportNotice: { ...typography.caption, color: colors.textTertiary },
   reportCard: { gap: spacing.md },
   reportSection: { gap: spacing.xs },
 
