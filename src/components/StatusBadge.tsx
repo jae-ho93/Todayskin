@@ -13,7 +13,7 @@ import { colors, MAX_FONT_SCALE, radius, spacing, typography } from '../theme';
 /**
  * F64: 자외선과 대기질은 등급 어휘가 다르다(낮음~위험 / 좋음~매우나쁨).
  * 판별 유니온으로 받아 스케일에 맞지 않는 등급을 넘기면 컴파일이 실패하게 한다.
- * `status`는 null/undefined일 수 있고, 그때는 "측정 불가"로 표시한다.
+ * `status`는 null/undefined일 수 있고, 그때는 "분석 중"으로 표시한다.
  */
 type StatusBadgeProps = { label: string } & (
   | { scale: 'air'; status?: AirStatus | null }
@@ -30,7 +30,7 @@ export function StatusBadge(props: StatusBadgeProps) {
           style={[styles.text, styles.textUnavailable]}
           maxFontSizeMultiplier={MAX_FONT_SCALE}
         >
-          {label} 측정 불가
+          {label} 분석 중
         </Text>
       </View>
     );

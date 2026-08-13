@@ -61,7 +61,27 @@ export default function CameraGuideScreen() {
   const [qualityIssue, setQualityIssue] = useState<DiagnosisQualityCode | null>(null);
   const [wentOutside, setWentOutside] = useState<boolean | null>(null);
   const cameraRef = useRef<CameraView>(null);
-  const { coords } = useUserLocation();
+  const { coords, permissionDenied } = useUserLocation();
+  // submitPhoto는 렌더 시점 클로저라 coords를 그대로 읽으면 오래된 값을 볼 수 있다 —
+  // "위치 준비될 때까지 잠깐 대기" 폴링에서 최신 값을 보게 ref로 같이 들고 있는다.
+  const coordsRef = useRef(coords);
+  const permissionDeniedRef = useRef(permissionDenied);
+  useEffect(() => {
+    coordsRef.current = coords;
+    permissionDeniedRef.current = permissionDenied;
+  }, [coords, permissionDenied]);
+
+  // "외출했어요"를 골랐는데 위치가 아직 안 잡혔으면(막 앱을 켰거나 GPS fix가 느린 경우),
+  // 좌표 없이 조용히 제출해 서버가 기본 지역(서울)으로 저장해버리는 대신 잠깐 기다려본다.
+  // 권한이 아예 없으면 기다려도 소용없으니 바로 포기한다.
+  const WAIT_FOR_COORDS_MS = 6000;
+  const waitForCoords = async () => {
+    const start = Date.now();
+    while (!coordsRef.current && !permissionDeniedRef.current && Date.now() - start < WAIT_FOR_COORDS_MS) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    return coordsRef.current;
+  };
 
   // ── 필수 동의 확인 (F27) — 마운트 시점 + 진입 시점 양쪽에서 확인한다 ──
   const [consentCheck, setConsentCheck] = useState<'loading' | 'ok' | 'needed'>('loading');
@@ -148,11 +168,14 @@ export default function CameraGuideScreen() {
     try {
       // F72: 원본(최대 10MB)을 그대로 올리면 업로드가 느리다 — 장변 1440px로 줄여 전송.
       // 리사이즈는 '분석 중' 화면에서 진행되고, 실패하면 원본으로 폴백한다.
-      const front = await prepareUploadImage(photo.uri, photo.width, photo.height);
+      const [front, resolvedCoords] = await Promise.all([
+        prepareUploadImage(photo.uri, photo.width, photo.height),
+        wentOutside ? waitForCoords() : Promise.resolve(undefined),
+      ]);
       await api.submitDiagnosis({
         front,
         wentOutside: wentOutside ?? false,
-        coords: wentOutside ? (coords ?? undefined) : undefined,
+        coords: wentOutside ? (resolvedCoords ?? undefined) : undefined,
       });
       router.replace('/diagnosis-result');
     } catch (e) {

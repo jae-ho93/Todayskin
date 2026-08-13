@@ -102,7 +102,7 @@ function MetricCard({
           </View>
         ) : (
           <View style={[styles.statusPill, styles.statusPillUnavailable]}>
-            <Text style={[styles.statusPillText, styles.statusPillTextUnavailable]}>측정 불가</Text>
+            <Text style={[styles.statusPillText, styles.statusPillTextUnavailable]}>분석 중</Text>
           </View>
         )}
       </View>
@@ -119,7 +119,7 @@ function MetricCard({
           <Text style={styles.metricDescription}>{description}</Text>
         </>
       ) : (
-        <Text style={styles.metricUnavailableText}>지금 값을 불러올 수 없어요</Text>
+        <Text style={styles.metricUnavailableText}>값을 분석하고 있어요</Text>
       )}
     </Card>
   );
@@ -160,7 +160,7 @@ function UvHeroCard({ weather }: { weather: WeatherSnapshot }) {
           <StatusBar scale="uv" value={peak} status={peakStatus} maxCap={UV_MAX} />
         </>
       ) : (
-        <Text style={styles.metricUnavailableText}>지금 값을 불러올 수 없어요</Text>
+        <Text style={styles.metricUnavailableText}>값을 분석하고 있어요</Text>
       )}
     </Card>
   );

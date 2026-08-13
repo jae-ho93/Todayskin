@@ -303,11 +303,16 @@ export interface CalendarDiagnosis {
   modelVersion?: string | null;
   parts: SkinPartMetric[];
   weather: CalendarWeather | null;
+  /** 촬영 전 "외출하셨나요?" 응답. weather가 null인 이유(외출 안 함 vs 수집 실패)를 구분한다. */
+  wentOutside: boolean;
   recommendations: CalendarRecommendation[];
   /** 저장 동의 + 이미지 존재 시에만 채워짐. 미동의면 null. */
   image: CalendarImage | null;
   /** 저장 동의 + 랜드마크 존재 시에만 채워짐. 미동의면 null. */
   landmarks: Landmarks | null;
+  // 신규(검증 단계): YOLO 여드름 구역 리포트(텍스트) + 5클래스 질환 분류.
+  acneReport?: string | null;
+  diseaseClassification?: DiseaseClassification | null;
 }
 
 export interface CalendarDayHistory {

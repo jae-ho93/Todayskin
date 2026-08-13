@@ -271,11 +271,15 @@ export class DiagnosisService {
     // 4. 추론 결과 범위 검증.
     this.validateInference(inference.overallScore, inference.parts);
 
-    // 5. 날씨 스냅샷 확보. wentOutside가 true일 때만 연결한다 — 실내에만 있었다면
-    // 그 시각 날씨를 엮을 이유가 없다. 좌표가 없으면 WeatherService가 기본 지역으로 조회한다.
-    // 실패해도 진단 자체는 진행한다.
+    // 5. 날씨 스냅샷 확보. wentOutside가 true이고 좌표가 있을 때만 연결한다.
+    // 좌표가 없으면(GPS가 아직 안 잡혔거나 권한 거부) WeatherService의 "기본 지역"
+    // 폴백(서울)을 타게 되는데, 이건 사용자의 실제 위치가 아니라 진단 기록에는
+    // 부정확한 지역이 영구히 남는 결과가 된다 — 차라리 "외출 안 함"과 동일하게
+    // 취급해 날씨를 아예 엮지 않는다.
+    const hasCoords = typeof opts?.lat === 'number' && typeof opts?.lon === 'number';
+    const wentOutside = Boolean(opts?.wentOutside) && hasCoords;
     let weatherSnapshotId: string | null = null;
-    if (opts?.wentOutside) {
+    if (wentOutside) {
       try {
         const snapshot = await this.weatherService.getOrCreateSnapshot(
           opts?.lat,
@@ -320,6 +324,10 @@ export class DiagnosisService {
           status: 'COMPLETED',
           modelVersion: inference.modelVersion,
           weatherSnapshotId,
+          // 좌표 없이 "외출함"으로 온 요청은 위에서 이미 날씨를 안 엮은 것과 동일하게
+          // 취급했으니(wentOutside), 여기 저장값도 그 보정된 값을 써야 화면이
+          // "외출 안 함"으로 정확히 표시된다 (원본 opts.wentOutside를 쓰면 다시 어긋난다).
+          wentOutside,
           // N8: 저장 동의 시에만 랜드마크 보존(얼굴 기하 정보).
           // N26: 랜드마크 영속화 조건 = 저장 동의(storeImage) && 추론이 랜드마크 제공.
           // 미동의면 DB에 아예 기록하지 않는다 (N8 미노출 계약의 근거).
@@ -765,6 +773,7 @@ export class DiagnosisService {
     dto.weather = d.weatherSnapshot
       ? this.toCalendarWeatherDto(d.weatherSnapshot)
       : null;
+    dto.wentOutside = d.wentOutside;
     dto.recommendations = d.recommendations.map((r) =>
       this.toCalendarRecommendationDto(r),
     );
@@ -788,6 +797,9 @@ export class DiagnosisService {
       dto.image = null;
       dto.landmarks = null;
     }
+
+    dto.acneReport = d.acneReport ?? null;
+    dto.diseaseClassification = this.toDiseaseClassificationDto(d.diseaseClassification);
 
     return dto;
   }

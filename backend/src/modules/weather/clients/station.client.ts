@@ -47,7 +47,9 @@ export interface NearestStation {
 export class StationClient {
   private readonly logger = new Logger(StationClient.name);
   private readonly apiKey: string;
-  private readonly timeoutMs = 8000;
+  // AirKoreaClient와 동일한 이유로 단축 — 순차 호출(측정소 -> 대기질)의 앞단이라
+  // 여기가 느리면 뒤따르는 대기질 조회까지 지연이 배로 겹친다.
+  private readonly timeoutMs = 3500;
 
   constructor(private readonly configService: ConfigService) {
     this.apiKey = configService.get<string>('AIRKOREA_API_KEY', '');

@@ -72,7 +72,10 @@ function safeFloat(value: unknown): number | null {
 export class AirKoreaClient {
   private readonly logger = new Logger(AirKoreaClient.name);
   private readonly apiKey: string;
-  private readonly timeoutMs = 8000;
+  // 8000 -> 3500: 에어코리아가 느리거나 타임아웃날 때 사용자 체감 대기가 너무 길었다
+  // (측정소 조회 -> 대기질 조회 순차 실행이라 최악 16초까지 늘어남). 실패를 더 빨리
+  // 인지하고 "분석 중"으로 보여주는 쪽이 오래 기다리다 실패하는 것보다 낫다.
+  private readonly timeoutMs = 3500;
 
   constructor(private readonly configService: ConfigService) {
     this.apiKey = configService.get<string>('AIRKOREA_API_KEY', '');

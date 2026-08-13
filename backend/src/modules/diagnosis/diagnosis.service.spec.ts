@@ -163,16 +163,23 @@ describe('DiagnosisService', () => {
     });
 
     it('정상 제출 — Diagnosis + SkinMetric transaction 저장 후 스냅샷 반환', async () => {
-      // wentOutside=true면 좌표가 없어도 기본 지역으로 날씨 스냅샷을 확보한다.
       const result = await service.submit(1, validImages, { wentOutside: true });
       expect(result.id).toBe('snap-abc');
       expect(result.overallScore).toBe(78);
       expect(result.parts).toHaveLength(6);
       expect(prisma.$transaction).toHaveBeenCalled();
-      expect(weatherService.getOrCreateSnapshot).toHaveBeenCalledWith(
-        undefined,
-        undefined,
-      );
+    });
+
+    it('wentOutside=true인데 좌표가 없으면 기본 지역으로 추측하지 않고 날씨를 아예 엮지 않는다', async () => {
+      // 좌표 없이 기본 지역(서울)으로 날씨를 붙이면 사용자의 실제 위치가 아닌 값이
+      // 진단 기록에 영구히 남는다 — 차라리 "외출 안 함"과 동일하게 취급한다.
+      await service.submit(1, validImages, { wentOutside: true });
+      expect(weatherService.getOrCreateSnapshot).not.toHaveBeenCalled();
+    });
+
+    it('wentOutside=true이고 좌표도 있으면 그 좌표로 날씨 스냅샷을 확보한다', async () => {
+      await service.submit(1, validImages, { wentOutside: true, lat: 37.5, lon: 126.9 });
+      expect(weatherService.getOrCreateSnapshot).toHaveBeenCalledWith(37.5, 126.9);
     });
 
     it('빈 파일 거부', async () => {
