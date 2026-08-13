@@ -40,21 +40,28 @@ RDS·S3·CloudWatch 연동, Pino·Helmet·JWT·Swagger·Jest를 적용한다.
 각 Task는 브랜치 하나 = PR 하나이며, 코드 변경이 없는 인프라 설정 작업은
 설정 근거와 확인 결과를 PR 본문 또는 이 문서에 남긴다.
 
-### N54. 배포 준비 마감 — 자격 증명 없이 끝낼 수 있는 전부 (Fable5 리뷰 후속)
+### N54. 배포 준비 마감 — 자격 증명 없이 끝낼 수 있는 전부 (Fable5 리뷰 후속) ✅ 2026-08-13
 
 브랜치: `chore/n54-deploy-readiness`
 
 > **목표**: AWS 계정이 준비되는 순간 N16을 바로 실행할 수 있도록, 로컬에서 검증
 > 가능한 배포 준비를 전부 끝낸다. "코드는 완성"이라는 주장을 실측으로 바꾼다.
 
-- [ ] backend·inference **프로덕션 Docker 이미지 로컬 빌드 성공** 검증 (`linux/amd64`, 결과·이미지 크기 기록)
-- [ ] **프로덕션 모드 부팅 스모크**: `NODE_ENV=production` + 필수 env로 backend 컨테이너 기동 →
+- [x] backend·inference **프로덕션 Docker 이미지 로컬 빌드 성공** 검증 (`linux/amd64` — backend 206MB, inference 710MB)
+- [x] **프로덕션 모드 부팅 스모크**: `NODE_ENV=production` + 필수 env로 backend 컨테이너 기동 →
       `/health/live`·`/health/ready` 200 확인 (mock 거부·env 검증이 실제로 작동하는지 실측)
-- [ ] `docs/guides/DEPLOYMENT.md`에 **배포 당일 체크리스트**(순서·확인 항목·예상 소요) 추가
-- [ ] `docs/guides/DEPLOYMENT.md`에 **장애 런북 1페이지** 추가 (N50의 문서 파트 선반영 — 증상 → 확인 순서 → 롤백 판단)
-- [ ] `.github/dependabot.yml` 추가 (npm 루트·backend, pip inference-service, github-actions — weekly)
+- [x] `docs/guides/DEPLOYMENT.md`에 **배포 당일 체크리스트**(순서·확인 항목·예상 소요) 추가
+- [x] `docs/guides/DEPLOYMENT.md`에 **장애 런북 1페이지** 추가 (N50의 문서 파트 선반영 — 증상 → 확인 순서 → 롤백 판단)
+- [x] `.github/dependabot.yml` 추가 (npm 루트·backend, pip inference-service, github-actions — weekly)
 
-완료 기준: 이미지 2종이 로컬에서 빌드·기동되고, 문서만 보고 배포 당일 작업을 수행할 수 있다.
+완료 기준: 이미지 2종이 로컬에서 빌드·기동되고, 문서만 보고 배포 당일 작업을 수행할 수 있다. ✅
+
+**실측 성과**: 스모크 테스트가 실제 배포 차단 버그를 찾았다 — 프로덕션 이미지에 생성된
+Prisma client(`node_modules/.prisma`)가 누락되어 부팅 즉시 `MODULE_NOT_FOUND`로 크래시
+(prod-deps 스테이지가 `--omit=dev`라 generate 불가능한데 runner가 그 node_modules만 복사).
+builder의 `.prisma`를 함께 복사하도록 `backend/Dockerfile`을 수정하고 재검증했다.
+이 검증이 없었으면 **배포 당일 첫 rollout이 실패**했을 것이다. 상세 기록:
+`docs/guides/DEPLOYMENT.md` "로컬 검증 결과 (N54)".
 
 ### N16. AWS 운영 리소스 프로비저닝·첫 배포 (미완료)
 
