@@ -91,7 +91,9 @@ export default function DiagnosisResultScreen() {
     return () => {
       cancelled = true;
     };
-  }, []);
+    // watch는 useAsyncJob 내부에서 빈 deps useCallback으로 고정된 참조라
+    // 매 렌더 재실행을 유발하지 않는다 — 여기 나열은 exhaustive-deps 충족용.
+  }, [watch]);
 
   // 직전 진단 대비 종합점수 변화 배지.
   const change = useMemo(() => {
