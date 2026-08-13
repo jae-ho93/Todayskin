@@ -25,6 +25,7 @@ import {
   formatReminderTime,
   REMINDER_TIME_OPTIONS,
 } from '../../src/features/settings/reminder';
+import { useLabReport } from '../../src/features/settings/useLabReport';
 import { useSkinReminder } from '../../src/features/settings/useSkinReminder';
 import { clearSession } from '../../src/lib/session';
 import { colors, MAX_FONT_SCALE, radius, spacing, typography } from '../../src/theme';
@@ -85,6 +86,9 @@ export default function SettingsScreen() {
     setTime: setReminderTime,
   } = useSkinReminder();
   const reminder = reminderState.status === 'ready' ? reminderState : null;
+
+  // ── 실험실 (F79: AI 상세 리포트 옵트인 — 기본 숨김) ──
+  const { state: labState, setEnabled: setLabEnabled } = useLabReport();
 
   // ── 동의/처리방침 모달 ──
   const [consentModalOpen, setConsentModalOpen] = useState(false);
@@ -324,6 +328,32 @@ export default function SettingsScreen() {
             onPress={() => router.push('/legal/privacy')}
           />
         </Card>
+      </View>
+
+      {/* F79: 실험실 — 규제 경계 기능(질환·여드름 리포트)은 옵트인으로만 노출 */}
+      <View>
+        <Text style={styles.sectionTitle}>실험실</Text>
+        <Card style={styles.listCard}>
+          <SettingsRow
+            icon="flask-outline"
+            label="AI 상세 리포트 (베타)"
+            right={
+              <Switch
+                value={labState.status === 'ready' ? labState.enabled : false}
+                onValueChange={(value) => void setLabEnabled(value)}
+                disabled={labState.status !== 'ready'}
+                trackColor={{ true: colors.sage, false: colors.gray200 }}
+              />
+            }
+          />
+        </Card>
+        <Text style={styles.readyText}>
+          검증 중인 AI 분석(여드름·질환 분류)을 결과 화면에 표시해요. 참고용이며 의학적 진단이
+          아니에요.
+        </Text>
+        {labState.status === 'ready' && labState.saveError && (
+          <Text style={styles.errorText}>{labState.saveError}</Text>
+        )}
       </View>
 
       {/* F61: 개인정보·동의 관리는 설정 최하단 (다른 앱 관례 — 카카오/토스/당근) */}
