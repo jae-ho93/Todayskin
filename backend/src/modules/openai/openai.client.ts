@@ -102,6 +102,8 @@ export interface GeneratedCareRoutineStep {
   ingredient: string | null;
   amount: string | null;
   reason: string;
+  /** 카드를 펼쳤을 때 보여줄 긴 설명(뷰티 유튜버 톤의 요령·순서·흔한 실수 등). */
+  detail: string | null;
   evidence: GeneratedCareEvidence | null;
 }
 
@@ -253,7 +255,8 @@ const CARE_JSON_FORMAT_SPEC = `반드시 아래 형식의 JSON **객체 하나�
       "step": "무엇을 하는 단계인지",
       "ingredient": "핵심 성분 (없으면 null)",
       "amount": "바르는 양, 예: 500원 동전 크기 (없으면 null)",
-      "reason": "오늘 수치/피부상태를 근거로 한 이유",
+      "reason": "오늘 수치/피부상태를 근거로 한 이유 (1~2문장)",
+      "detail": "카드를 펼쳤을 때 보여줄 긴 팁 — 뷰티 유튜버 톤 (없으면 null)",
       "evidence": { "sourceName": "출처명", "sourceUrl": "실제 URL", "sourceType": "WHO|FDA|식약처|AAD|PubMed" } 또는 null
     }
   ],
@@ -304,6 +307,15 @@ step에는 구체적인 동작과 방법을 적으세요 (예: "손바닥에 덜
 "오늘 상태를 고려해" 같은 뭉뚱그린 표현 대신 실제 값을 쓰세요). amount와 ingredient는 해당되면
 반드시 채우고, null은 정말 해당 사항이 없을 때만 쓰세요.`;
 
+const CARE_TIP_RULE = `모든 routine 단계의 detail을 반드시 채우세요(null 금지) — 뷰티 유튜버가 카메라 앞에서
+직접 알려주듯, 친근하고 구체적인 말투로 4~6문장 정도 쓰세요. 다음 내용을 자연스럽게 섞어 넣으세요:
+- 손을 어떻게 움직이는지(문지르기/두드리기/눌러주기 등), 방향, 힘 조절 같은 구체적인 동작 팁
+- "이거 놓치는 사람 많은데" 식으로 흔히 하는 실수와 그걸 피하는 방법
+- 순서를 지켜야 하는 이유(예: 유분기 있는 제품을 먼저 바르면 뒤 제품 흡수가 안 될 수 있어요)
+- 보통 언제쯤 효과를 체감하기 시작하는지, 꾸준히 하면 뭐가 달라지는지에 대한 현실적인 기대치
+"~하는 경향이 있어요"처럼 완곡한 톤은 유지하되, 말투 자체는 친구가 옆에서 알려주는 것처럼 편하게
+쓰세요 — 논문 요약처럼 딱딱하게 쓰지 마세요.`;
+
 function careExcludeRule(excludeProducts: string[]): string {
   if (excludeProducts.length === 0) return '';
   return `\n\n다음 제품은 최근에 이미 추천했으니 이번에는 다른 제품을 고르세요: ${excludeProducts.join(', ')}`;
@@ -323,7 +335,8 @@ products는 최소 5개, web_search로 실제 존재를 확인한 제품으로 �
 2. ${CARE_EVIDENCE_RULE}
 3. ${CARE_PRODUCT_RULE}
 4. ${CARE_DETAIL_RULE}
-5. ${CARE_JSON_FORMAT_SPEC}`;
+5. ${CARE_TIP_RULE}
+6. ${CARE_JSON_FORMAT_SPEC}`;
 
 const CARE_SKIN_SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 피부 상태 기반 케어 가이드 작성자입니다.
 사용자의 오늘 피부 측정값(부위별 상태·수분·탄력), 여드름 구역 리포트(있으면), 피부 상태 분류
@@ -346,7 +359,8 @@ products는 최소 5개, web_search로 실제 존재를 확인한 제품으로 �
 3. ${CARE_PRODUCT_RULE}
 4. ${CARE_SAFETY_RULE}
 5. ${CARE_DETAIL_RULE}
-6. ${CARE_JSON_FORMAT_SPEC}`;
+6. ${CARE_TIP_RULE}
+7. ${CARE_JSON_FORMAT_SPEC}`;
 
 const CARE_COMBINED_SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 날씨+피부 상태 복합 케어 가이드
 작성자입니다. 사용자는 방금 외출했다 귀가해 세안하고 피부를 측정했습니다. 오늘 피부 측정값과
@@ -367,7 +381,8 @@ products는 최소 5개, web_search로 실제 존재를 확인한 제품으로 �
 3. ${CARE_PRODUCT_RULE}
 4. ${CARE_SAFETY_RULE}
 5. ${CARE_DETAIL_RULE}
-6. ${CARE_JSON_FORMAT_SPEC}`;
+6. ${CARE_TIP_RULE}
+7. ${CARE_JSON_FORMAT_SPEC}`;
 
 const CARE_MORNING_SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 아침 외출 준비 케어 가이드
 작성자입니다. 사용자는 어젯밤 세안 후 피부를 측정했고, 지금은 그 다음날 아침입니다 — 아직 새로
@@ -388,7 +403,8 @@ routine의 phase는 "외출 전"/"외출 중"처럼 오늘 하루 흐름에 맞�
 3. ${CARE_PRODUCT_RULE}
 4. ${CARE_SAFETY_RULE}
 5. ${CARE_DETAIL_RULE}
-6. ${CARE_JSON_FORMAT_SPEC}`;
+6. ${CARE_TIP_RULE}
+7. ${CARE_JSON_FORMAT_SPEC}`;
 
 const CARE_SYSTEM_PROMPTS: Record<CareType, string> = {
   weather: CARE_WEATHER_SYSTEM_PROMPT,
@@ -462,6 +478,7 @@ function normalizeGeneratedCarePlan(raw: unknown): GeneratedCarePlan {
         ingredient: typeof raw.ingredient === 'string' ? raw.ingredient : null,
         amount: typeof raw.amount === 'string' ? raw.amount : null,
         reason: item.reason,
+        detail: typeof raw.detail === 'string' ? raw.detail : null,
         evidence: normalizeGeneratedCareEvidence(raw.evidence),
       };
     });
@@ -1081,6 +1098,7 @@ export class OpenAiClient {
             careType === 'weather'
               ? '오늘 자외선지수를 고려해 외출 전 차단이 도움될 수 있어요.'
               : '오늘 측정된 피부 수분 지표를 고려해 보습이 도움될 수 있어요.',
+          detail: 'mock 응답 — 실제 생성 결과가 아닙니다.',
           evidence: null,
         },
         {
@@ -1089,6 +1107,7 @@ export class OpenAiClient {
           ingredient: '센텔라',
           amount: '앰플 2~3방울',
           reason: '하루 동안의 환경 노출 이후 피부 진정에 도움될 수 있어요.',
+          detail: 'mock 응답 — 실제 생성 결과가 아닙니다.',
           evidence: null,
         },
       ],

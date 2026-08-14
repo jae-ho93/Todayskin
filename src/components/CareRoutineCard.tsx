@@ -35,62 +35,75 @@ function phaseStyle(phase: string): (typeof PHASE_PALETTE)[number] {
   return PHASE_PALETTE[3];
 }
 
-/** 케어 루틴 한 단계 — 왼쪽 phase 강조선 + 배지 + 성분/사용량 강조 + 이유 + (있으면) 접이식 근거. */
+/**
+ * 케어 루틴 한 단계 — 왼쪽 phase 강조선 + 배지 + 성분/사용량 강조 + 이유.
+ * 카드 전체가 탭 가능하다 — 누르면 뷰티 유튜버 톤의 상세 팁(detail)과 근거를 펼쳐 보여준다.
+ */
 export function CareRoutineCard({ step }: CareRoutineCardProps) {
   const [expanded, setExpanded] = useState(false);
   const hasEvidence = Boolean(step.evidence && step.evidence.sourceType !== '없음');
+  const hasMore = Boolean(step.detail) || hasEvidence;
   const phase = phaseStyle(step.phase);
 
   return (
-    <Card style={[styles.card, { borderLeftWidth: 4, borderLeftColor: phase.accent }]}>
-      <View style={[styles.phaseBadge, { backgroundColor: phase.bg }]}>
-        <Ionicons name={phase.icon} size={13} color={phase.accent} />
-        <Text style={[styles.phaseText, { color: phase.accent }]} maxFontSizeMultiplier={MAX_FONT_SCALE}>
-          {step.phase}
-        </Text>
-      </View>
-      <Text style={styles.stepText}>{step.step}</Text>
-
-      {(step.ingredient || step.amount) && (
-        <View style={styles.detailRow}>
-          {step.ingredient && (
-            <View style={styles.ingredientChip}>
-              <Ionicons name="leaf-outline" size={12} color={colors.sageDark} />
-              <Text style={styles.ingredientText} maxFontSizeMultiplier={MAX_FONT_SCALE}>
-                {step.ingredient}
-              </Text>
-            </View>
-          )}
-          {step.amount && <Text style={styles.amountText}>{step.amount}</Text>}
-        </View>
-      )}
-
-      <Text style={styles.reason}>{step.reason}</Text>
-
-      {hasEvidence && (
-        <View>
-          <Pressable
-            onPress={() => setExpanded((v) => !v)}
-            accessibilityRole="button"
-            accessibilityLabel={expanded ? '근거 접기' : '근거 보기'}
-            style={styles.toggleRow}
-          >
-            <Text style={styles.toggleText}>{expanded ? '근거 접기' : '근거 보기'}</Text>
+    <Pressable
+      onPress={() => hasMore && setExpanded((v) => !v)}
+      disabled={!hasMore}
+      accessibilityRole={hasMore ? 'button' : undefined}
+      accessibilityLabel={hasMore ? (expanded ? '자세히 접기' : '자세히 보기') : undefined}
+    >
+      <Card style={[styles.card, { borderLeftWidth: 4, borderLeftColor: phase.accent }]}>
+        <View style={styles.topRow}>
+          <View style={[styles.phaseBadge, { backgroundColor: phase.bg }]}>
+            <Ionicons name={phase.icon} size={13} color={phase.accent} />
+            <Text style={[styles.phaseText, { color: phase.accent }]} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+              {step.phase}
+            </Text>
+          </View>
+          {hasMore && (
             <Ionicons
               name={expanded ? 'chevron-up' : 'chevron-down'}
-              size={14}
+              size={18}
               color={colors.textTertiary}
             />
-          </Pressable>
-          {expanded && step.evidence && <EvidenceLink evidence={step.evidence} />}
+          )}
         </View>
-      )}
-    </Card>
+        <Text style={styles.stepText}>{step.step}</Text>
+
+        {(step.ingredient || step.amount) && (
+          <View style={styles.detailRow}>
+            {step.ingredient && (
+              <View style={styles.ingredientChip}>
+                <Ionicons name="leaf-outline" size={12} color={colors.sageDark} />
+                <Text style={styles.ingredientText} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+                  {step.ingredient}
+                </Text>
+              </View>
+            )}
+            {step.amount && <Text style={styles.amountText}>{step.amount}</Text>}
+          </View>
+        )}
+
+        <Text style={styles.reason}>{step.reason}</Text>
+
+        {!expanded && hasMore && (
+          <Text style={styles.expandHint}>자세히 보기</Text>
+        )}
+
+        {expanded && (
+          <View style={styles.expandedSection}>
+            {step.detail && <Text style={styles.detailText}>{step.detail}</Text>}
+            {hasEvidence && step.evidence && <EvidenceLink evidence={step.evidence} />}
+          </View>
+        )}
+      </Card>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   card: { gap: spacing.sm },
+  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   phaseBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -115,6 +128,13 @@ const styles = StyleSheet.create({
   ingredientText: { ...typography.bodySm, color: colors.sageDark, fontWeight: '600' },
   amountText: { ...typography.bodySm, color: colors.textSecondary },
   reason: { ...typography.bodySm, color: colors.textSecondary },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  toggleText: { ...typography.caption, color: colors.textTertiary },
+  expandHint: { ...typography.caption, color: colors.sageDark, fontWeight: '700' },
+  expandedSection: {
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  detailText: { ...typography.bodySm, color: colors.textPrimary, lineHeight: 20 },
 });

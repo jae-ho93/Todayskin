@@ -413,6 +413,8 @@ export interface CareRoutineStep {
   ingredient: string | null;
   amount: string | null;
   reason: string;
+  /** 카드를 펼치면 보여주는 긴 팁(뷰티 유튜버 톤 — 발라주는 요령, 흔한 실수, 효과 시점 등). */
+  detail?: string | null;
   evidence?: CareEvidence | null;
 }
 

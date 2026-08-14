@@ -1574,6 +1574,8 @@ export interface components {
             amount?: Record<string, never> | null;
             /** @description 오늘 수치/피부상태 기반 이유 */
             reason: string;
+            /** @description 카드를 펼쳤을 때 보여줄 상세 팁 — 뷰티 유튜버가 알려주듯 구체적인 발라주는 요령·순서·흔한 실수·효과가 언제쯤 느껴지는지 등을 담은 긴 설명(없으면 null) */
+            detail?: Record<string, never> | null;
             evidence?: components["schemas"]["CareEvidenceDto"] | null;
         };
         CareProductDto: {
