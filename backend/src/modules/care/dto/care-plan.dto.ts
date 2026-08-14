@@ -22,6 +22,19 @@ export const CARE_EVIDENCE_SOURCE_TYPES = [
 ] as const;
 export type CareEvidenceSourceType = (typeof CARE_EVIDENCE_SOURCE_TYPES)[number];
 
+/** 제품을 화장품 종류(사용 단계)로 묶어 보여주기 위한 고정 카테고리 — 8개(2×4 그리드). */
+export const CARE_PRODUCT_CATEGORIES = [
+  '클렌저',
+  '토너',
+  '에센스/세럼/앰플',
+  '로션',
+  '크림',
+  '선크림',
+  '마스크팩',
+  '기타',
+] as const;
+export type CareProductCategory = (typeof CARE_PRODUCT_CATEGORIES)[number];
+
 /**
  * 근거 출처 — web_search로 실제 확인된 것만. `sourceType: '없음'`이면 근거 없이
  * 일반 피부과학 지식에 기반했다는 뜻이고, 이때 name/url은 없다.
@@ -80,6 +93,9 @@ export class CareProductDto {
 
   @ApiProperty({ description: '이 제품을 고른 이유' })
   reason!: string;
+
+  @ApiProperty({ enum: CARE_PRODUCT_CATEGORIES, description: '화장품 종류(사용 단계)' })
+  category!: CareProductCategory;
 
   @ApiPropertyOptional({ type: CareEvidenceDto, nullable: true })
   evidence?: CareEvidenceDto | null;

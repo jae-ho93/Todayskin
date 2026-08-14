@@ -425,11 +425,22 @@ export interface CareRoutineStep {
   evidence?: CareEvidence | null;
 }
 
+export type CareProductCategory =
+  | '클렌저'
+  | '토너'
+  | '에센스/세럼/앰플'
+  | '로션'
+  | '크림'
+  | '선크림'
+  | '마스크팩'
+  | '기타';
+
 export interface CareProduct {
   name: string;
   /** 서버가 실존 여부 검증에만 쓰는 URL — 화면은 특정 판매처로 안 보내고 제품명으로 검색한다. */
   url: string;
   reason: string;
+  category: CareProductCategory;
   evidence?: CareEvidence | null;
 }
 

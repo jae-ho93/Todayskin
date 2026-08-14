@@ -3266,6 +3266,20 @@
             "type": "string",
             "description": "이 제품을 고른 이유"
           },
+          "category": {
+            "type": "string",
+            "enum": [
+              "클렌저",
+              "토너",
+              "에센스/세럼/앰플",
+              "로션",
+              "크림",
+              "선크림",
+              "마스크팩",
+              "기타"
+            ],
+            "description": "화장품 종류(사용 단계)"
+          },
           "evidence": {
             "nullable": true,
             "type": "object",
@@ -3279,7 +3293,8 @@
         "required": [
           "name",
           "url",
-          "reason"
+          "reason",
+          "category"
         ]
       },
       "CarePlanDto": {

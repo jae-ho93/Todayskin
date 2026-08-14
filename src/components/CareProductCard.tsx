@@ -1,19 +1,15 @@
 import { useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Card } from './Card';
 import { EvidenceLink } from './EvidenceLink';
 import { useToast } from './Toast';
+import { categoryStyle, productSearchUrl } from '../lib/care-products';
 import { colors, MAX_FONT_SCALE, radius, spacing, typography } from '../theme';
 import type { CareProduct } from '../types';
 
 interface CareProductCardProps {
   product: CareProduct;
-}
-
-/** 제품명으로 네이버 검색 결과를 연다 — 특정 판매처 하나로 고정하지 않는다. */
-function productSearchUrl(name: string): string {
-  return `https://search.naver.com/search.naver?query=${encodeURIComponent(name)}`;
 }
 
 /**
@@ -25,6 +21,7 @@ export function CareProductCard({ product }: CareProductCardProps) {
   const [expanded, setExpanded] = useState(false);
   const { showToast } = useToast();
   const hasEvidence = Boolean(product.evidence && product.evidence.sourceType !== '없음');
+  const category = categoryStyle(product.category);
 
   const openProductSearch = async () => {
     try {
@@ -37,10 +34,15 @@ export function CareProductCard({ product }: CareProductCardProps) {
   return (
     <Card style={styles.card}>
       <View style={styles.header}>
-        <View style={styles.iconBadge}>
-          <Ionicons name="bag-handle-outline" size={18} color={colors.sageDark} />
+        <View style={[styles.iconBadge, { backgroundColor: category.bg }]}>
+          <MaterialCommunityIcons name={category.icon} size={18} color={category.accent} />
         </View>
         <View style={styles.headerText}>
+          <View style={[styles.categoryTag, { backgroundColor: category.bg }]}>
+            <Text style={[styles.categoryTagText, { color: category.accent }]} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+              {product.category}
+            </Text>
+          </View>
           <Text style={styles.name} numberOfLines={2}>
             {product.name}
           </Text>
@@ -90,11 +92,17 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: radius.full,
-    backgroundColor: colors.sageLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerText: { flex: 1, gap: 2 },
+  headerText: { flex: 1, gap: 4 },
+  categoryTag: {
+    alignSelf: 'flex-start',
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  categoryTagText: { ...typography.caption, fontWeight: '700', fontSize: 11 },
   name: { ...typography.subtitle, color: colors.textPrimary, fontSize: 16 },
   reason: { ...typography.bodySm, color: colors.textSecondary },
   ctaButton: {

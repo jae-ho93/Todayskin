@@ -18,7 +18,9 @@ const carePlan: CarePlan = {
   routine: [
     { phase: '외출 전', step: '자외선 차단', ingredient: '징크옥사이드', amount: '한 마디', reason: '오늘 자외선이 높아요', evidence: null },
   ],
-  products: [{ name: '선크림', url: 'https://example.com/sunscreen', reason: '적합해요', evidence: null }],
+  products: [
+    { name: '선크림', url: 'https://example.com/sunscreen', reason: '적합해요', category: '선크림', evidence: null },
+  ],
   medicalDisclaimer: null,
 };
 

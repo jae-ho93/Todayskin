@@ -2,10 +2,12 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisService } from '../../redis/redis.service';
 import {
+  CARE_FIXED_PHASES,
   GeneratedCarePlan,
   GeneratedCareProduct,
   GeneratedCareRoutineStep,
   OpenAiClient,
+  UserProfileInput,
   WeatherInput,
 } from '../openai/openai.client';
 import { WeatherService } from '../weather/weather.service';
@@ -25,7 +27,6 @@ import { diagnosisToSkinInput } from './mappers/skin-analysis.mapper';
 import { fallbackCarePlan } from './content/fallback-content';
 import { isLinkDead } from './care-link-validator';
 import { CarePlanDto, CarePlanFastResponseDto, CareType } from './dto/care-plan.dto';
-import { CARE_FIXED_PHASES } from '../openai/openai.client';
 
 /** Redis exclude 세션 TTL — 하루 지나면 "최근 추천"의 의미가 옅어진다. */
 const EXCLUDE_TTL_S = 24 * 60 * 60;
@@ -38,6 +39,18 @@ function sleepMs(ms: number): Promise<void> {
 
 function normalizeProductName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, '');
+}
+
+/** 만 나이. 생일이 아직 안 지났으면 1을 뺀다. */
+function computeAge(birthDate: Date | null): number | null {
+  if (!birthDate) return null;
+  const now = new Date();
+  let age = now.getUTCFullYear() - birthDate.getUTCFullYear();
+  const beforeBirthdayThisYear =
+    now.getUTCMonth() < birthDate.getUTCMonth() ||
+    (now.getUTCMonth() === birthDate.getUTCMonth() && now.getUTCDate() < birthDate.getUTCDate());
+  if (beforeBirthdayThisYear) age -= 1;
+  return age;
 }
 
 /** morning 케어에 잘못 섞여 들어온 밤 시간대 단계(자기 전/저녁/세안 등)를 걸러낸다. */
@@ -198,11 +211,12 @@ export class CareService {
     const skin = careType !== 'weather' ? await this.loadSkinInput(payload.diagnosisId!, userId) : null;
     const weather =
       careType !== 'skin' ? await this.loadWeatherInput(careType, payload) : null;
+    const profile = await this.loadUserProfile(userId);
 
     const excludeKey = this.excludeKey(userId, careType);
     const excludeProducts = (await this.redis.getJson<string[]>(excludeKey)) ?? [];
 
-    let generated = await this.openAiClient.generateCarePlan(careType, skin, weather, excludeProducts);
+    let generated = await this.openAiClient.generateCarePlan(careType, skin, weather, profile, excludeProducts);
     let plan = await this.postProcess(generated, careType, excludeProducts);
 
     if (plan.products.length === 0 && generated.products.length > 0) {
@@ -212,7 +226,7 @@ export class CareService {
       const retryExclude = Array.from(
         new Set([...excludeProducts, ...generated.products.map((p) => p.name)]),
       );
-      generated = await this.openAiClient.generateCarePlan(careType, skin, weather, retryExclude);
+      generated = await this.openAiClient.generateCarePlan(careType, skin, weather, profile, retryExclude);
       plan = await this.postProcess(generated, careType, retryExclude);
     }
 
@@ -233,6 +247,7 @@ export class CareService {
     const routine = payload.routineOverride!;
     const skin = careType !== 'weather' ? await this.loadSkinInput(payload.diagnosisId!, userId) : null;
     const weather = careType !== 'skin' ? await this.loadWeatherInput(careType, payload) : null;
+    const profile = await this.loadUserProfile(userId);
 
     const excludeKey = this.excludeKey(userId, careType);
     const excludeProducts = (await this.redis.getJson<string[]>(excludeKey)) ?? [];
@@ -248,6 +263,7 @@ export class CareService {
       routineContext,
       skin,
       weather,
+      profile,
       excludeProducts,
     );
     let products = await this.filterAndValidateProducts(generatedProducts, excludeProducts);
@@ -264,6 +280,7 @@ export class CareService {
         routineContext,
         skin,
         weather,
+        profile,
         retryExclude,
       );
       products = await this.filterAndValidateProducts(generatedProducts, retryExclude);
@@ -291,6 +308,18 @@ export class CareService {
       throw new NotFoundException('진단을 찾을 수 없어요');
     }
     return diagnosisToSkinInput(diagnosis, diagnosis.skinMetrics);
+  }
+
+  /** 나이/성별 둘 다 선택 입력이라 없을 수 있다 — 있는 것만 프롬프트에 실어 보낸다. */
+  private async loadUserProfile(userId: number): Promise<UserProfileInput> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { birthDate: true, gender: true },
+    });
+    return {
+      age: computeAge(user?.birthDate ?? null),
+      gender: user?.gender ?? null,
+    };
   }
 
   /**
