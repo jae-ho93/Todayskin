@@ -75,7 +75,7 @@ function RoutineStepRow({
 }) {
   const [expanded, setExpanded] = useState(false);
   const hasEvidence = Boolean(step.evidence && step.evidence.sourceType !== '없음');
-  const hasMore = Boolean(step.detail) || hasEvidence;
+  const hasMore = Boolean(step.detail);
 
   return (
     <Pressable
@@ -110,6 +110,8 @@ function RoutineStepRow({
           </View>
         )}
 
+        {hasEvidence && step.evidence && <EvidenceLink evidence={step.evidence} />}
+
         {hasMore && (
           <View style={styles.expandHintRow}>
             <Text style={[styles.expandHint, { color: accent }]}>{expanded ? '접기' : '자세히 보기'}</Text>
@@ -117,10 +119,9 @@ function RoutineStepRow({
           </View>
         )}
 
-        {expanded && (
+        {expanded && step.detail && (
           <View style={styles.expandedSection}>
-            {step.detail && <Text style={styles.detailText}>{step.detail}</Text>}
-            {hasEvidence && step.evidence && <EvidenceLink evidence={step.evidence} />}
+            <Text style={styles.detailText}>{step.detail}</Text>
           </View>
         )}
       </View>
