@@ -11,29 +11,35 @@ interface CareProductCardProps {
   product: CareProduct;
 }
 
+/** 제품명으로 가격 비교 검색 결과를 연다 — 특정 판매처 하나로 고정하지 않는다. */
+function productSearchUrl(name: string): string {
+  return `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(name)}`;
+}
+
 /**
- * 실제 구매 가능한 제품 — web_search로 확인된 name/url만 온다(가상 제품 없음).
- * 카드를 누르면 바로 구매 페이지로 이동하고, 근거는 접이식으로 따로 둔다.
+ * 실제 존재하는 제품 — web_search로 확인된 name만 신뢰한다(가상 제품 없음, url은 서버가
+ * 실존 여부 검증용으로만 쓴다). 카드를 누르면 특정 판매처로 바로 이동하는 대신 제품명으로
+ * 가격비교 검색 결과를 연다 — 사용자마다 자주 쓰는 쇼핑몰이나 쿠폰이 다르기 때문이다.
  */
 export function CareProductCard({ product }: CareProductCardProps) {
   const [expanded, setExpanded] = useState(false);
   const { showToast } = useToast();
   const hasEvidence = Boolean(product.evidence && product.evidence.sourceType !== '없음');
 
-  const openProductUrl = async () => {
+  const openProductSearch = async () => {
     try {
-      await Linking.openURL(product.url);
+      await Linking.openURL(productSearchUrl(product.name));
     } catch {
-      showToast('구매 링크를 다시 확인해주세요', { type: 'error' });
+      showToast('검색 화면을 열 수 없어요', { type: 'error' });
     }
   };
 
   return (
     <Card style={styles.card}>
       <Pressable
-        onPress={openProductUrl}
+        onPress={openProductSearch}
         accessibilityRole="link"
-        accessibilityLabel={`${product.name} 구매 페이지 열기`}
+        accessibilityLabel={`${product.name} 검색해서 구매하기`}
         style={({ pressed }) => [styles.header, pressed && styles.pressed]}
       >
         <View style={styles.thumb} />
@@ -42,7 +48,7 @@ export function CareProductCard({ product }: CareProductCardProps) {
             {product.name}
           </Text>
           <View style={styles.linkRow}>
-            <Text style={styles.linkLabel}>구매 페이지 열기</Text>
+            <Text style={styles.linkLabel}>검색해서 구매하기</Text>
             <Ionicons name="open-outline" size={14} color={colors.sageDark} />
           </View>
         </View>

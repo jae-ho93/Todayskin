@@ -56,7 +56,11 @@ export class CareProductDto {
   @ApiProperty({ description: '실제 제품명' })
   name!: string;
 
-  @ApiProperty({ description: 'web_search로 확인된 구매 페이지 URL' })
+  @ApiProperty({
+    description:
+      'web_search로 확인된 구매 페이지 URL. 실존 여부 검증용이며 클라이언트는 이 URL로 바로 이동하지 ' +
+      '않고 제품명으로 검색 결과를 연다(판매처·쿠폰이 사용자마다 다르기 때문).',
+  })
   url!: string;
 
   @ApiProperty({ description: '이 제품을 고른 이유' })

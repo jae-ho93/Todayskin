@@ -277,7 +277,19 @@ const CARE_TONE_RULE = `"진단", "치료", "질환", "처방" 등 의료적 확
 "~하는 경향이 있어요" 같은 완곡한 표현만 사용하세요. 톤은 병원이 아니라 매일 쓰는 날씨 앱처럼 친근하게.`;
 
 const CARE_PRODUCT_RULE = `products의 name과 url은 반드시 web_search로 실제로 존재를 확인한 제품만 쓰세요.
-가상의 제품명이나 지어낸 URL은 절대 포함하지 마세요. url은 그 제품을 실제로 구매할 수 있는 페이지여야 합니다.`;
+가상의 제품명이나 지어낸 URL은 절대 포함하지 마세요. url은 그 제품을 실제로 구매할 수 있는 페이지여야 합니다.
+각 product는 routine의 특정 단계·성분과 연결되어야 합니다 — routine과 무관하게 따로 노는 제품을 넣지
+마세요. reason 첫 문장에 그 연결을 명시하세요 (예: "위 세럼 단계의 히알루론산을 이 제품으로 대신 쓸 수
+있어요" / "자외선 차단 단계에 맞는 제품이에요"). products의 각 항목이 routine의 서로 다른 단계를
+하나씩 대응하도록 고르세요 — 같은 단계에 제품 여러 개를 몰아주지 마세요.`;
+
+const CARE_SAFETY_RULE = `사용자의 피부 상태 분류 결과(민감한 피부 양상)가 있다면, routine과 products
+모두에서 자극이 될 수 있는 성분·제품 유형(물리적 스크럽, 고농도 AHA/BHA 필링, 향료, 알코올, 강한
+세정력의 클렌저 등)을 추천하지 마세요. 대신 진정·보습 중심의 순한 선택지를 우선하세요. 분류 결과가
+없거나 "정상"이면 이 제한은 적용하지 않아도 됩니다.
+이 규칙을 설명할 때도 다른 문구와 똑같이 완곡한 표현만 쓰세요 — "염증", "치료", "질환" 같은 단어를
+피하고 "자극이 될 수 있어요", "순한 제품이 더 편할 수 있어요"처럼 CARE_TONE_RULE과 같은 톤으로
+쓰세요. 절대 의료적 확정 표현으로 이유를 설명하지 마세요.`;
 
 function careExcludeRule(excludeProducts: string[]): string {
   if (excludeProducts.length === 0) return '';
@@ -318,7 +330,8 @@ products는 web_search로 실제 존재를 확인한 제품 2~4개를 담고, �
 1. ${CARE_TONE_RULE}
 2. ${CARE_EVIDENCE_RULE}
 3. ${CARE_PRODUCT_RULE}
-4. ${CARE_JSON_FORMAT_SPEC}`;
+4. ${CARE_SAFETY_RULE}
+5. ${CARE_JSON_FORMAT_SPEC}`;
 
 const CARE_COMBINED_SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 날씨+피부 상태 복합 케어 가이드
 작성자입니다. 사용자의 오늘 피부 측정값과 오늘의 날씨/대기질 데이터를 함께 보고, 두 정보를 모두
@@ -336,7 +349,8 @@ products는 web_search로 실제 존재를 확인한 제품 2~4개를 담고, �
 1. ${CARE_TONE_RULE}
 2. ${CARE_EVIDENCE_RULE}
 3. ${CARE_PRODUCT_RULE}
-4. ${CARE_JSON_FORMAT_SPEC}`;
+4. ${CARE_SAFETY_RULE}
+5. ${CARE_JSON_FORMAT_SPEC}`;
 
 const CARE_SYSTEM_PROMPTS: Record<CareType, string> = {
   weather: CARE_WEATHER_SYSTEM_PROMPT,

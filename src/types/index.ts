@@ -418,6 +418,7 @@ export interface CareRoutineStep {
 
 export interface CareProduct {
   name: string;
+  /** 서버가 실존 여부 검증에만 쓰는 URL — 화면은 특정 판매처로 안 보내고 제품명으로 검색한다. */
   url: string;
   reason: string;
   evidence?: CareEvidence | null;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -38,6 +38,7 @@ export default function ProductsScreen() {
   const [activeTab, setActiveTab] = useState<CareType>('weather');
   const [pageWidth, setPageWidth] = useState(0);
   const [activePage, setActivePage] = useState(0);
+  const scrollRef = useRef<ScrollView>(null);
 
   // 피부/복합 탭은 최신 진단이 필요하다 — 촬영 전이면 촬영 유도 빈 상태를 보여준다.
   const [diagnosisId, setDiagnosisId] = useState<string | null | undefined>(undefined);
@@ -67,41 +68,17 @@ export default function ProductsScreen() {
     setActivePage(Math.round(e.nativeEvent.contentOffset.x / pageWidth));
   }
 
+  function goToPage(i: number) {
+    setActivePage(i);
+    scrollRef.current?.scrollTo({ x: i * pageWidth, animated: true });
+  }
+
   const needsDiagnosis = activeTab !== 'weather' && diagnosisId === null;
 
   return (
     <ScreenContainer refreshing={refreshing} onRefresh={reload}>
-      <Text style={styles.title}>케어 루틴 · 추천 제품</Text>
-
-      <View style={styles.tabRow}>
-        {CARE_TABS.map((tab) => {
-          const active = tab.key === activeTab;
-          return (
-            <Pressable
-              key={tab.key}
-              onPress={() => {
-                setActiveTab(tab.key);
-                setActivePage(0);
-              }}
-              style={[styles.tabChip, active && styles.tabChipActive]}
-            >
-              <Text style={[styles.tabText, active && styles.tabTextActive]} maxFontSizeMultiplier={MAX_FONT_SCALE}>
-                {tab.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      <View style={styles.sectionHeaderRow}>
-        {liveRefreshing ? (
-          <View style={styles.refreshingRow}>
-            <ActivityIndicator size="small" color={colors.sage} />
-            <Text style={styles.refreshingLabel}>갱신 중</Text>
-          </View>
-        ) : (
-          <View />
-        )}
+      <View style={styles.titleRow}>
+        <Text style={styles.title}>케어 루틴 · 추천 제품</Text>
         {state.status === 'success' && (
           <Pressable
             onPress={() => void refresh()}
@@ -115,6 +92,34 @@ export default function ProductsScreen() {
           </Pressable>
         )}
       </View>
+
+      <View style={styles.tabRow}>
+        {CARE_TABS.map((tab) => {
+          const active = tab.key === activeTab;
+          return (
+            <Pressable
+              key={tab.key}
+              onPress={() => {
+                setActiveTab(tab.key);
+                setActivePage(0);
+                scrollRef.current?.scrollTo({ x: 0, animated: false });
+              }}
+              style={[styles.tabChip, active && styles.tabChipActive]}
+            >
+              <Text style={[styles.tabText, active && styles.tabTextActive]} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+                {tab.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {liveRefreshing && (
+        <View style={styles.refreshingRow}>
+          <ActivityIndicator size="small" color={colors.sage} />
+          <Text style={styles.refreshingLabel}>갱신 중</Text>
+        </View>
+      )}
 
       {needsDiagnosis ? (
         <View style={styles.emptyState}>
@@ -142,8 +147,30 @@ export default function ProductsScreen() {
         <Text style={styles.emptyText}>먼저 피부를 촬영해주세요</Text>
       ) : (
         <View>
+          <View style={styles.pageToggleRow}>
+            {PAGE_TABS.map((p, i) => {
+              const active = activePage === i;
+              return (
+                <Pressable
+                  key={p.key}
+                  onPress={() => goToPage(i)}
+                  accessibilityRole="button"
+                  accessibilityLabel={p.label}
+                  style={[styles.pageToggle, active && styles.pageToggleActive]}
+                >
+                  <Text
+                    style={[styles.pageToggleText, active && styles.pageToggleTextActive]}
+                    maxFontSizeMultiplier={MAX_FONT_SCALE}
+                  >
+                    {p.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
           <View onLayout={onPageLayout}>
             <ScrollView
+              ref={scrollRef}
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
@@ -178,16 +205,6 @@ export default function ProductsScreen() {
               <View key={p.key} style={[styles.pageDot, activePage === i && styles.pageDotActive]} />
             ))}
           </View>
-          <View style={styles.pageLabelRow}>
-            {PAGE_TABS.map((p, i) => (
-              <Text
-                key={p.key}
-                style={[styles.pageLabel, activePage === i && styles.pageLabelActive]}
-              >
-                {p.label}
-              </Text>
-            ))}
-          </View>
           {state.data.medicalDisclaimer && (
             <Text style={styles.disclaimer}>{state.data.medicalDisclaimer}</Text>
           )}
@@ -198,6 +215,12 @@ export default function ProductsScreen() {
 }
 
 const styles = StyleSheet.create({
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
   title: { ...typography.displaySm, color: colors.textPrimary },
   tabRow: { flexDirection: 'row', gap: spacing.sm },
   tabChip: {
@@ -212,12 +235,6 @@ const styles = StyleSheet.create({
   tabChipActive: { backgroundColor: colors.sage, borderColor: colors.sage },
   tabText: { ...typography.bodySm, color: colors.textSecondary },
   tabTextActive: { color: colors.textInverse, fontWeight: '600' },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: 28,
-  },
   refreshingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   refreshingLabel: { ...typography.caption, color: colors.sageDark },
   refreshButton: {
@@ -249,12 +266,24 @@ const styles = StyleSheet.create({
   captureButtonText: { ...typography.subtitle, color: colors.textInverse },
   page: { gap: spacing.md, paddingRight: spacing.xs },
   list: { gap: spacing.md },
+  pageToggleRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  pageToggle: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceMuted,
+  },
+  pageToggleActive: { backgroundColor: colors.sageLight },
+  pageToggleText: { ...typography.bodySm, color: colors.textTertiary, fontWeight: '600' },
+  pageToggleTextActive: { color: colors.sageDark },
   pageDots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: spacing.sm },
   pageDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.gray200 },
   pageDotActive: { backgroundColor: colors.sage, width: 16 },
-  pageLabelRow: { flexDirection: 'row', justifyContent: 'center', gap: spacing.lg, marginTop: spacing.xs },
-  pageLabel: { ...typography.caption, color: colors.textTertiary },
-  pageLabelActive: { color: colors.sageDark, fontWeight: '700' },
   disclaimer: {
     ...typography.caption,
     color: colors.textTertiary,
