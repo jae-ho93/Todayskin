@@ -668,6 +668,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/care/morning": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 다음날 아침 케어 루틴+제품 빠른 경로
+         * @description 지정한 진단(어젯밤 측정)의 피부 상태는 그대로 두고 날씨만 오늘 좌표 기준 실시간 값으로 갱신해 외출 전/외출 중 케어를 생성한다.
+         */
+        post: operations["CareController_morning"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/diagnosis/latest": {
         parameters: {
             query?: never;
@@ -1567,7 +1587,7 @@ export interface components {
         };
         CarePlanDto: {
             /** @enum {string} */
-            careType: "weather" | "skin" | "combined";
+            careType: "weather" | "skin" | "combined" | "morning";
             routine: components["schemas"]["CareRoutineStepDto"][];
             products: components["schemas"]["CareProductDto"][];
             /** @description 의료 면책 문구 */
@@ -1588,6 +1608,22 @@ export interface components {
         CareDiagnosisRequestDto: {
             /** @description 이 진단 기준으로 생성 */
             diagnosisId?: string;
+            /** @description 직전 결과를 무시하고 새로 생성 */
+            refresh?: boolean;
+        };
+        CareMorningRequestDto: {
+            /** @description 이 진단의 피부 상태를 기준으로 생성 */
+            diagnosisId?: string;
+            /**
+             * @description 위도 (-90 ~ 90)
+             * @example 37.5665
+             */
+            lat?: number;
+            /**
+             * @description 경도 (-180 ~ 180)
+             * @example 126.978
+             */
+            lon?: number;
             /** @description 직전 결과를 무시하고 새로 생성 */
             refresh?: boolean;
         };
@@ -2693,6 +2729,29 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["CareDiagnosisRequestDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CarePlanFastResponseDto"];
+                };
+            };
+        };
+    };
+    CareController_morning: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CareMorningRequestDto"];
             };
         };
         responses: {

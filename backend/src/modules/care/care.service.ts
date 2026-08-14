@@ -107,6 +107,27 @@ export class CareService {
     );
   }
 
+  /**
+   * "다음날 아침" — 같은(최신) 진단의 피부 상태 + 오늘 실시간 날씨. combined와 달리
+   * 진단에 연결된(그날의) 날씨가 아니라 지금 좌표 기준 실시간 날씨를 쓴다 — 그래서
+   * careKey에 날짜를 넣어 날이 바뀌면 자연히 새로 생성되게 한다.
+   */
+  async getMorningFast(
+    userId: number,
+    diagnosisId: string,
+    opts?: { lat?: number; lon?: number; refresh?: boolean },
+  ): Promise<CarePlanFastResponseDto> {
+    await this.assertDiagnosisOwnership(diagnosisId, userId);
+    const careKey = `morning:${diagnosisId}:${todayKst()}`;
+    return this.resolveFast(userId, 'morning', careKey, opts?.refresh, () =>
+      this.enqueueCareJob(userId, 'morning', careKey, {
+        diagnosisId,
+        lat: opts?.lat,
+        lon: opts?.lon,
+      }),
+    );
+  }
+
   private async assertDiagnosisOwnership(diagnosisId: string, userId: number): Promise<void> {
     const diagnosis = await this.prisma.diagnosis.findFirst({
       where: notDeletedWhere({ id: diagnosisId, userId }),
@@ -165,7 +186,8 @@ export class CareService {
   }
 
   /**
-   * weather: 좌표 기반 오늘 날씨(서버 소유 계약, N12).
+   * weather/morning: 좌표 기반 실시간 날씨(서버 소유 계약, N12) — morning은 "오늘 아침"
+   * 기준으로 매번 갱신되어야 하므로 진단에 연결된 과거 스냅샷이 아니라 지금 날씨를 쓴다.
    * combined: 그 진단에 실제로 연결된 WeatherSnapshot(diagnosis.weatherSnapshotId) —
    * "이 진단 당시의 날씨"라는 뜻이라 좌표를 받지 않는다(요청 바디에도 lat/lon이 없다).
    * 연결된 스냅샷이 없으면(외출 안 함) null — combined도 사실상 skin과 동일하게 처리된다.
@@ -174,7 +196,7 @@ export class CareService {
     careType: CareType,
     payload: CareJobPayload,
   ): Promise<WeatherInput | null> {
-    if (careType === 'weather') {
+    if (careType === 'weather' || careType === 'morning') {
       const dto = await this.weatherService.resolveServerWeather(payload.lat, payload.lon);
       return { ...dto };
     }

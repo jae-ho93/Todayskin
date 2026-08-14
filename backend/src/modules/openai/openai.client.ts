@@ -334,9 +334,10 @@ products는 web_search로 실제 존재를 확인한 제품 2~4개를 담고, �
 5. ${CARE_JSON_FORMAT_SPEC}`;
 
 const CARE_COMBINED_SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 날씨+피부 상태 복합 케어 가이드
-작성자입니다. 사용자의 오늘 피부 측정값과 오늘의 날씨/대기질 데이터를 함께 보고, 두 정보를 모두
-반영한 케어 루틴(routine)과 실제 구매 가능한 제품(products)을 함께 제시하세요. 예: 오늘 자외선이
-높고 피부 수분이 낮다면 그 조합에 맞는 케어를 제안하세요.
+작성자입니다. 사용자는 방금 외출했다 귀가해 세안하고 피부를 측정했습니다. 오늘 피부 측정값과
+오늘(외출했던 날) 날씨/대기질 데이터를 함께 보고, 두 정보를 모두 반영한 오늘 저녁~밤 케어
+루틴(routine)과 실제 구매 가능한 제품(products)을 제시하세요. 예: 오늘 자외선이 높고 피부 수분이
+낮다면 그 조합에 맞는 케어를 제안하세요.
 
 routine에는 각 단계에서 어떤 성분(ingredient)을 얼마나(amount) 바르는지 구체적으로 담으세요.
 products는 web_search로 실제 존재를 확인한 제품 2~4개를 담고, 오늘 날씨와 피부 상태를 함께
@@ -352,10 +353,31 @@ products는 web_search로 실제 존재를 확인한 제품 2~4개를 담고, �
 4. ${CARE_SAFETY_RULE}
 5. ${CARE_JSON_FORMAT_SPEC}`;
 
+const CARE_MORNING_SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 아침 외출 준비 케어 가이드
+작성자입니다. 사용자는 어젯밤 세안 후 피부를 측정했고, 지금은 그 다음날 아침입니다 — 아직 새로
+측정하지 않았으므로 어젯밤 피부 측정값을 그대로 쓰되, 날씨는 오늘 아침 실시간 값입니다. 이
+조합으로 오늘 "외출 전 준비"와 "외출 중 관리" 중심의 케어 루틴(routine)과 실제 구매 가능한
+제품(products)을 제시하세요 — 어젯밤 케어(자기 전 등)는 다루지 마세요.
+
+routine의 phase는 "외출 전"/"외출 중"처럼 오늘 하루 흐름에 맞게 쓰고, 각 단계에서 어떤
+성분(ingredient)을 얼마나(amount) 바르는지 구체적으로 담으세요. products는 web_search로 실제
+존재를 확인한 제품 2~4개를 담고, 오늘 날씨와 어젯밤 피부 상태를 함께 근거로 reason에 쓰세요.
+
+**피부 상태 분류 결과를 언급할 때는 반드시 완곡하게 표현하세요** ("~일 수 있어요" 등). 이 서비스는
+의료 진단을 제공하지 않으므로 medicalDisclaimer에 참고용 문구를 반드시 포함하세요.
+
+반드시 지킬 규칙:
+1. ${CARE_TONE_RULE}
+2. ${CARE_EVIDENCE_RULE}
+3. ${CARE_PRODUCT_RULE}
+4. ${CARE_SAFETY_RULE}
+5. ${CARE_JSON_FORMAT_SPEC}`;
+
 const CARE_SYSTEM_PROMPTS: Record<CareType, string> = {
   weather: CARE_WEATHER_SYSTEM_PROMPT,
   skin: CARE_SKIN_SYSTEM_PROMPT,
   combined: CARE_COMBINED_SYSTEM_PROMPT,
+  morning: CARE_MORNING_SYSTEM_PROMPT,
 };
 
 function buildCareUserContent(

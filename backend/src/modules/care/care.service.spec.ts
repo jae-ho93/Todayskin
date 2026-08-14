@@ -144,6 +144,24 @@ describe('CareService', () => {
     });
   });
 
+  describe('getMorningFast', () => {
+    it('진단이 없거나 다른 사용자 소유면 404', async () => {
+      prisma.diagnosis.findFirst.mockResolvedValue(null);
+      await expect(service.getMorningFast(1, 'diag-1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('진단의 피부 상태 + 좌표 기준 실시간 날씨로 job을 enqueue한다', async () => {
+      prisma.diagnosis.findFirst.mockResolvedValue({ id: 'diag-1' });
+      const result = await service.getMorningFast(1, 'diag-1', { lat: 37.5, lon: 127 });
+      expect(result.source).toBe('FALLBACK');
+      expect(jobService.enqueue).toHaveBeenCalledWith(
+        1,
+        'CARE_GENERATE',
+        expect.objectContaining({ careType: 'morning', diagnosisId: 'diag-1', lat: 37.5, lon: 127 }),
+      );
+    });
+  });
+
   describe('generateLive', () => {
     const generatedPlan = (products: { name: string; url: string }[]) => ({
       routine: [
@@ -230,6 +248,30 @@ describe('CareService', () => {
       expect(plan.products.map((p) => p.name)).toEqual(['살아있는 제품']);
       // 근거 URL만 죽으면 루틴 단계 자체는 남기고 evidence만 비운다.
       expect(plan.routine[0].evidence).toBeNull();
+    });
+
+    it('morning은 combined와 달리 진단에 연결된 스냅샷이 아니라 좌표 기준 실시간 날씨를 쓴다', async () => {
+      prisma.diagnosis.findFirst.mockResolvedValue({
+        id: 'diag-1',
+        capturedAt: new Date(),
+        overallScore: 70,
+        acneReport: null,
+        diseaseClassification: null,
+        skinMetrics: [],
+      });
+      openAiClient.generateCarePlan.mockResolvedValue(generatedPlan([]));
+
+      await service.generateLive(1, 'morning', {
+        careKey: 'morning:diag-1:2026-08-14',
+        careType: 'morning',
+        diagnosisId: 'diag-1',
+        lat: 37.5,
+        lon: 127,
+      });
+
+      expect(weatherService.resolveServerWeather).toHaveBeenCalledWith(37.5, 127);
+      expect(weatherService.getSnapshotById).not.toHaveBeenCalled();
+      expect(prisma.diagnosis.findUnique).not.toHaveBeenCalled();
     });
   });
 });

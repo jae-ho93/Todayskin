@@ -395,7 +395,7 @@ export interface WeatherProductsFastResponse {
 
 // ── 케어 루틴+제품 (OpenAI Responses API + web_search) ──────────────
 
-export type CareType = 'weather' | 'skin' | 'combined';
+export type CareType = 'weather' | 'skin' | 'combined' | 'morning';
 
 /**
  * 근거 출처 — 기존 추천의 EvidenceSource(사람이 검증한 정적 레지스트리)와 달리

@@ -1,7 +1,11 @@
-import { Body, Controller, Get, HttpCode, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CareService } from './care.service';
-import { CareDiagnosisRequestDto, CareWeatherQueryDto } from './dto/care-request.dto';
+import {
+  CareDiagnosisRequestDto,
+  CareMorningRequestDto,
+  CareWeatherQueryDto,
+} from './dto/care-request.dto';
 import { CarePlanFastResponseDto } from './dto/care-plan.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -65,5 +69,28 @@ export class CareController {
     @Body() body: CareDiagnosisRequestDto,
   ): Promise<CarePlanFastResponseDto> {
     return this.careService.getCombinedFast(user.sub, body.diagnosisId, body.refresh);
+  }
+
+  @Post('morning')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: '다음날 아침 케어 루틴+제품 빠른 경로',
+    description:
+      '지정한 진단(어젯밤 측정)의 피부 상태는 그대로 두고 날씨만 오늘 좌표 기준 실시간 값으로 ' +
+      '갱신해 외출 전/외출 중 케어를 생성한다.',
+  })
+  @ApiOkResponse({ type: CarePlanFastResponseDto })
+  async morning(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: CareMorningRequestDto,
+  ): Promise<CarePlanFastResponseDto> {
+    if ((body.lat === undefined) !== (body.lon === undefined)) {
+      throw new BadRequestException('lat과 lon은 함께 보내야 합니다');
+    }
+    return this.careService.getMorningFast(user.sub, body.diagnosisId, {
+      lat: body.lat,
+      lon: body.lon,
+      refresh: body.refresh,
+    });
   }
 }

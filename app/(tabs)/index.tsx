@@ -3,6 +3,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../src/components/Card';
+import { CareRoutinePreview } from '../../src/components/CareRoutinePreview';
 import { CircularGauge } from '../../src/components/CircularGauge';
 import { RecommendationCard } from '../../src/components/RecommendationCard';
 import { RetryButton } from '../../src/components/RetryButton';
@@ -10,6 +11,7 @@ import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { Skeleton } from '../../src/components/Skeleton';
 import { useToast } from '../../src/components/Toast';
 import { WeatherCard } from '../../src/components/WeatherCard';
+import { useCarePlan } from '../../src/features/care/useCarePlan';
 import { useHomeDashboard } from '../../src/features/home/useHomeDashboard';
 import { useOffline } from '../../src/hooks/useOffline';
 import { getSession } from '../../src/lib/session';
@@ -32,6 +34,12 @@ export default function HomeDashboard() {
     onRefreshFailed: () =>
       showToast('새로고침하지 못했어요 — 기존 정보를 유지합니다', { type: 'error' }),
   });
+
+  // 하루 순환 케어 루틴 미리보기 — 오늘의 추천(A/B/C) 아래 추가. 진단이 아직 없으면
+  // (skin.status !== 'success') diagnosisId를 null로 둬서 훅이 조용히 empty로 대기한다.
+  const diagnosisId = skin.status === 'success' ? skin.data.id : null;
+  const afterWashCare = useCarePlan({ careType: 'combined', diagnosisId });
+  const morningCare = useCarePlan({ careType: 'morning', diagnosisId });
 
   useEffect(() => {
     getSession().then((user) => setUserName(user?.name ?? null));
@@ -129,6 +137,13 @@ export default function HomeDashboard() {
                 <Skeleton height={76} borderRadius={radius.lg} />
               </View>
             </View>
+            <View>
+              <Text style={styles.sectionTitle}>케어 루틴</Text>
+              <View style={styles.careRoutineList}>
+                <Skeleton height={76} borderRadius={radius.lg} />
+                <Skeleton height={76} borderRadius={radius.lg} />
+              </View>
+            </View>
           </>
         )}
 
@@ -188,6 +203,22 @@ export default function HomeDashboard() {
                     ))}
                 </View>
               )}
+            </View>
+
+            <View>
+              <Text style={styles.sectionTitle}>케어 루틴</Text>
+              <View style={styles.careRoutineList}>
+                <CareRoutinePreview
+                  title="세안 후 케어"
+                  state={afterWashCare.state}
+                  onPress={() => router.push({ pathname: '/products', params: { tab: 'combined' } })}
+                />
+                <CareRoutinePreview
+                  title="다음날 아침 케어"
+                  state={morningCare.state}
+                  onPress={() => router.push({ pathname: '/products', params: { tab: 'morning' } })}
+                />
+              </View>
             </View>
           </>
         )}
@@ -285,6 +316,7 @@ const styles = StyleSheet.create({
   recommendationLoadingText: { ...typography.bodySm, color: colors.textSecondary },
   refreshingLabel: { ...typography.caption, color: colors.sageDark, marginBottom: spacing.sm },
   recommendationList: { gap: spacing.sm },
+  careRoutineList: { gap: spacing.sm },
   fab: {
     position: 'absolute',
     bottom: spacing.xl,

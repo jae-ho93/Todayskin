@@ -3,9 +3,7 @@ import { JobHandlerRegistry } from '../jobs/handlers/job-handler.registry';
 import { optionalNumber, optionalString, toJobError } from '../jobs/handlers/job-error';
 import { JobType } from '../jobs/enums/job-type.enum';
 import { CareService } from './care.service';
-import { CareType } from './dto/care-plan.dto';
-
-const CARE_TYPES: readonly CareType[] = ['weather', 'skin', 'combined'];
+import { CARE_TYPES, CareType } from './dto/care-plan.dto';
 
 function requireCareType(payload: Record<string, unknown>): CareType {
   const value = payload.careType;

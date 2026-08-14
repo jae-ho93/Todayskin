@@ -464,6 +464,16 @@ export const api = {
     safePostJson<CarePlanFastResponse>('/care/skin', { diagnosisId, refresh }, 20000),
   getCareCombinedFast: (diagnosisId: string, refresh?: boolean) =>
     safePostJson<CarePlanFastResponse>('/care/combined', { diagnosisId, refresh }, 20000),
+  // "다음날 아침" — 같은 진단의 피부 상태 + 오늘 좌표 기준 실시간 날씨.
+  getCareMorningFast: (
+    diagnosisId: string,
+    opts?: { coords?: { latitude: number; longitude: number }; refresh?: boolean },
+  ) =>
+    safePostJson<CarePlanFastResponse>(
+      '/care/morning',
+      { diagnosisId, lat: opts?.coords?.latitude, lon: opts?.coords?.longitude, refresh: opts?.refresh },
+      20000,
+    ),
 
   // F0: job polling 유틸 — jobId로 상태 조회 (PENDING → COMPLETED/FAILED)
   // 호출부가 interval을 제어하므로 이 함수는 1회만 호출 후 결과 확인
