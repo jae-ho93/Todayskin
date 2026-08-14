@@ -45,8 +45,10 @@ model User {
   phoneNumber String?  @unique @map("phone_number")
   name        String
   // N33: 소셜 계정은 생년월일 없이 생성, 온보딩(전화 연결) 시 입력받는다.
+  // 케어 루틴+제품 추천 프롬프트에서 나이 계산에 쓴다(CareService.loadUserProfile) — 선택 입력이라 없을 수 있다.
   birthDate   DateTime? @map("birth_date")
-  // 선택 입력. 모델 학습 전에는 추천 로직에 임의로 사용하지 않는다.
+  // 선택 입력. 케어 루틴+제품 추천 프롬프트에서 참고 정보로만 쓰고("~해야 한다"류 단정 금지),
+  // 실제 오늘 피부/날씨 수치가 우선한다(CareService.loadUserProfile).
   gender      Gender?
   // T3에서 access token은 User 테이블에 저장하지 않고 RefreshSession으로 분리한다.
   role        Role     @default(USER)

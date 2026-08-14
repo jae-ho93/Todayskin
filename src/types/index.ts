@@ -421,8 +421,7 @@ export interface CareRoutineStep {
 export type CareProductCategory =
   | '클렌저'
   | '토너'
-  | '에센스/세럼'
-  | '앰플'
+  | '에센스/세럼/앰플'
   | '로션'
   | '크림'
   | '선크림'

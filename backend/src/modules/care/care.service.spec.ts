@@ -33,6 +33,7 @@ describe('CareService', () => {
   let idempotency: { acquire: jest.Mock; complete: jest.Mock; release: jest.Mock };
   let prisma: {
     diagnosis: { findFirst: jest.Mock; findUnique: jest.Mock };
+    user: { findUnique: jest.Mock };
   };
   const isLinkDead = linkValidator.isLinkDead as jest.Mock;
 
@@ -85,6 +86,9 @@ describe('CareService', () => {
       diagnosis: {
         findFirst: jest.fn(),
         findUnique: jest.fn(),
+      },
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ birthDate: null, gender: null }),
       },
     };
 
@@ -196,6 +200,33 @@ describe('CareService', () => {
         'care:exclude:1:weather',
         ['제품A'],
         24 * 60 * 60,
+      );
+    });
+
+    it('사용자의 생년월일·성별로 나이를 계산해 [프로필]로 OpenAiClient에 넘긴다', async () => {
+      // 실행 시점과 무관하게 항상 "생일이 지난 만 28세"가 되도록 오늘 날짜 기준으로 역산한다.
+      const today = new Date();
+      const birthDate = new Date(Date.UTC(today.getUTCFullYear() - 28, 0, 1));
+      prisma.user.findUnique.mockResolvedValue({ birthDate, gender: 'female' });
+      openAiClient.generateCarePlan.mockResolvedValue(generatedPlan([]));
+
+      await service.generateLive(1, 'weather', {
+        careKey: 'weather:서울특별시:2026-08-14',
+        careType: 'weather',
+        lat: 37.5,
+        lon: 127,
+      });
+
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+        where: { id: 1 },
+        select: { birthDate: true, gender: true },
+      });
+      expect(openAiClient.generateCarePlan).toHaveBeenCalledWith(
+        'weather',
+        null,
+        expect.objectContaining({ uvIndex: 8 }),
+        { age: 28, gender: 'female' },
+        [],
       );
     });
 
@@ -334,6 +365,7 @@ describe('CareService', () => {
           [{ phase: '아침', step: '보습', ingredient: '히알루론산', amount: '2방울' }],
           null,
           expect.objectContaining({ uvIndex: 8 }),
+          { age: null, gender: null },
           [],
         );
         expect(plan.routine).toEqual(fixedRoutine);

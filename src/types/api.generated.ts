@@ -1589,7 +1589,7 @@ export interface components {
              * @description 화장품 종류(사용 단계)
              * @enum {string}
              */
-            category: "클렌저" | "토너" | "에센스/세럼" | "앰플" | "로션" | "크림" | "선크림" | "마스크팩" | "기타";
+            category: "클렌저" | "토너" | "에센스/세럼/앰플" | "로션" | "크림" | "선크림" | "마스크팩" | "기타";
             evidence?: components["schemas"]["CareEvidenceDto"] | null;
         };
         CarePlanDto: {

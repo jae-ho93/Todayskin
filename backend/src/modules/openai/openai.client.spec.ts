@@ -290,7 +290,7 @@ describe('OpenAiClient', () => {
 
     it('MOCK_OPENAI=true 시 careType별 mock 루틴+제품을 반환한다', async () => {
       const client = new OpenAiClient(makeConfig({ MOCK_OPENAI: 'true' }), policy);
-      const plan = await client.generateCarePlan('weather', null, { uvIndex: 8 }, []);
+      const plan = await client.generateCarePlan('weather', null, { uvIndex: 8 }, null, []);
       expect(plan.routine.length).toBeGreaterThan(0);
       expect(plan.products.length).toBeGreaterThan(0);
     });
@@ -298,7 +298,7 @@ describe('OpenAiClient', () => {
     it('키 없음 시 OpenAiUnavailable', async () => {
       const client = new OpenAiClient(makeConfig({ MOCK_OPENAI: 'false' }), policy);
       await expect(
-        client.generateCarePlan('weather', null, { uvIndex: 5 }, []),
+        client.generateCarePlan('weather', null, { uvIndex: 5 }, null, []),
       ).rejects.toThrow(OpenAiUnavailable);
     });
 
@@ -331,7 +331,7 @@ describe('OpenAiClient', () => {
       });
       stubFetchOnce([responsesEnvelope(body)]);
 
-      const plan = await makeClient().generateCarePlan('weather', null, { uvIndex: 8 }, []);
+      const plan = await makeClient().generateCarePlan('weather', null, { uvIndex: 8 }, null, []);
       expect(plan.routine).toHaveLength(1);
       expect(plan.products).toHaveLength(1);
       expect(plan.products[0].name).toBe('실제 선크림');
@@ -350,7 +350,7 @@ describe('OpenAiClient', () => {
       });
       stubFetchOnce([responsesEnvelope(body)]);
 
-      const plan = await makeClient().generateCarePlan('weather', null, { uvIndex: 8 }, []);
+      const plan = await makeClient().generateCarePlan('weather', null, { uvIndex: 8 }, null, []);
       expect(plan.products.map((p) => p.category)).toEqual(['기타', '기타']);
     });
 
@@ -373,7 +373,7 @@ describe('OpenAiClient', () => {
       });
       stubFetchOnce([responsesEnvelope(body)]);
 
-      const plan = await makeClient().generateCarePlan('weather', null, { uvIndex: 8 }, []);
+      const plan = await makeClient().generateCarePlan('weather', null, { uvIndex: 8 }, null, []);
       expect(plan.products[0].evidence).toBeNull();
     });
 
@@ -394,7 +394,7 @@ describe('OpenAiClient', () => {
       });
       stubFetchOnce([responsesEnvelope(`\`\`\`json\n${jsonPart}\n\`\`\``)]);
 
-      const plan = await makeClient().generateCarePlan('weather', null, { uvIndex: 3 }, []);
+      const plan = await makeClient().generateCarePlan('weather', null, { uvIndex: 3 }, null, []);
       expect(plan.routine).toHaveLength(1);
       expect(plan.routine[0].ingredient).toBe('히알루론산');
     });
@@ -419,7 +419,7 @@ describe('OpenAiClient', () => {
         responsesEnvelope(goodBody, 'resp_good'),
       ]);
 
-      const plan = await makeClient().generateCarePlan('weather', null, { uvIndex: 3 }, []);
+      const plan = await makeClient().generateCarePlan('weather', null, { uvIndex: 3 }, null, []);
       expect(fetchMock).toHaveBeenCalledTimes(2);
       const secondCallBody = JSON.parse(fetchMock.mock.calls[1][1].body as string);
       expect(secondCallBody.previous_response_id).toBe('resp_bad');
@@ -432,7 +432,7 @@ describe('OpenAiClient', () => {
         responsesEnvelope('텍스트2', 'resp_bad2'),
       ]);
       await expect(
-        makeClient().generateCarePlan('weather', null, { uvIndex: 3 }, []),
+        makeClient().generateCarePlan('weather', null, { uvIndex: 3 }, null, []),
       ).rejects.toThrow(OpenAiUnavailable);
     });
 
@@ -440,7 +440,7 @@ describe('OpenAiClient', () => {
       const body = JSON.stringify({ routine: [], products: [], medicalDisclaimer: null });
       stubFetchOnce([responsesEnvelope(body)]);
       await expect(
-        makeClient().generateCarePlan('weather', null, { uvIndex: 3 }, []),
+        makeClient().generateCarePlan('weather', null, { uvIndex: 3 }, null, []),
       ).rejects.toThrow(OpenAiUnavailable);
     });
 
@@ -461,7 +461,7 @@ describe('OpenAiClient', () => {
       });
       stubFetchOnce([responsesEnvelope(body)]);
       await expect(
-        makeClient().generateCarePlan('skin', { overallScore: 60 }, null, []),
+        makeClient().generateCarePlan('skin', { overallScore: 60 }, null, null, []),
       ).rejects.toThrow(OpenAiUnavailable);
     });
 
@@ -469,12 +469,38 @@ describe('OpenAiClient', () => {
       const body = JSON.stringify({ routine: [], products: [], medicalDisclaimer: null });
       const fetchMock = stubFetchOnce([responsesEnvelope(body)]);
       await expect(
-        makeClient().generateCarePlan('weather', null, { uvIndex: 3 }, ['이미 추천한 제품']),
+        makeClient().generateCarePlan('weather', null, { uvIndex: 3 }, null, ['이미 추천한 제품']),
       ).rejects.toThrow(OpenAiUnavailable); // routine/products 둘 다 비어 예외지만 요청 내용은 검증 가능
 
       const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       const userMessage = requestBody.input.find((m: { role: string }) => m.role === 'user');
       expect(userMessage.content).toContain('이미 추천한 제품');
+    });
+
+    it('나이·성별이 있으면 [사용자 정보]로 user content에 포함시킨다', async () => {
+      const body = JSON.stringify({ routine: [], products: [], medicalDisclaimer: null });
+      const fetchMock = stubFetchOnce([responsesEnvelope(body)]);
+      await expect(
+        makeClient().generateCarePlan('weather', null, { uvIndex: 3 }, { age: 27, gender: 'female' }, []),
+      ).rejects.toThrow(OpenAiUnavailable);
+
+      const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+      const userMessage = requestBody.input.find((m: { role: string }) => m.role === 'user');
+      expect(userMessage.content).toContain('[사용자 정보]');
+      expect(userMessage.content).toContain('"age":27');
+      expect(userMessage.content).toContain('"gender":"female"');
+    });
+
+    it('나이·성별이 둘 다 없으면 [사용자 정보]를 넣지 않는다', async () => {
+      const body = JSON.stringify({ routine: [], products: [], medicalDisclaimer: null });
+      const fetchMock = stubFetchOnce([responsesEnvelope(body)]);
+      await expect(
+        makeClient().generateCarePlan('weather', null, { uvIndex: 3 }, { age: null, gender: null }, []),
+      ).rejects.toThrow(OpenAiUnavailable);
+
+      const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+      const userMessage = requestBody.input.find((m: { role: string }) => m.role === 'user');
+      expect(userMessage.content).not.toContain('[사용자 정보]');
     });
   });
 
@@ -522,14 +548,14 @@ describe('OpenAiClient', () => {
 
     it('MOCK_OPENAI=true 시 mock 제품 목록을 반환한다', async () => {
       const client = new OpenAiClient(makeConfig({ MOCK_OPENAI: 'true' }), policy);
-      const products = await client.generateCareProducts('weather', fixedRoutine, null, { uvIndex: 8 }, []);
+      const products = await client.generateCareProducts('weather', fixedRoutine, null, { uvIndex: 8 }, null, []);
       expect(products.length).toBeGreaterThan(0);
     });
 
     it('키 없음 시 OpenAiUnavailable', async () => {
       const client = new OpenAiClient(makeConfig({ MOCK_OPENAI: 'false' }), policy);
       await expect(
-        client.generateCareProducts('weather', fixedRoutine, null, { uvIndex: 5 }, []),
+        client.generateCareProducts('weather', fixedRoutine, null, { uvIndex: 5 }, null, []),
       ).rejects.toThrow(OpenAiUnavailable);
     });
 
@@ -546,6 +572,7 @@ describe('OpenAiClient', () => {
         fixedRoutine,
         null,
         { uvIndex: 8 },
+        null,
         [],
       );
       expect(products).toHaveLength(1);
@@ -561,7 +588,7 @@ describe('OpenAiClient', () => {
       const body = JSON.stringify({ products: [] });
       stubFetchOnce([responsesEnvelope(body)]);
       await expect(
-        makeClient().generateCareProducts('weather', fixedRoutine, null, { uvIndex: 8 }, []),
+        makeClient().generateCareProducts('weather', fixedRoutine, null, { uvIndex: 8 }, null, []),
       ).rejects.toThrow(OpenAiUnavailable);
     });
 
@@ -573,7 +600,7 @@ describe('OpenAiClient', () => {
       });
       stubFetchOnce([responsesEnvelope(body)]);
       await expect(
-        makeClient().generateCareProducts('skin', fixedRoutine, { overallScore: 60 }, null, []),
+        makeClient().generateCareProducts('skin', fixedRoutine, { overallScore: 60 }, null, null, []),
       ).rejects.toThrow(OpenAiUnavailable);
     });
   });

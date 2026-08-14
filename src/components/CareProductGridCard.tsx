@@ -1,5 +1,5 @@
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Card } from './Card';
 import { useToast } from './Toast';
 import { categoryStyle, productSearchUrl } from '../lib/care-products';
@@ -36,7 +36,7 @@ export function CareProductGridCard({ product }: CareProductGridCardProps) {
     >
       <Card style={styles.card}>
         <View style={[styles.iconBadge, { backgroundColor: category.bg }]}>
-          <Ionicons name={category.icon} size={22} color={category.accent} />
+          <MaterialCommunityIcons name={category.icon} size={22} color={category.accent} />
         </View>
         <Text style={styles.name} numberOfLines={2}>
           {product.name}

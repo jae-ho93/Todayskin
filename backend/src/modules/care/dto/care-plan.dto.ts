@@ -22,12 +22,11 @@ export const CARE_EVIDENCE_SOURCE_TYPES = [
 ] as const;
 export type CareEvidenceSourceType = (typeof CARE_EVIDENCE_SOURCE_TYPES)[number];
 
-/** 제품을 화장품 종류(사용 단계)로 묶어 보여주기 위한 고정 카테고리. */
+/** 제품을 화장품 종류(사용 단계)로 묶어 보여주기 위한 고정 카테고리 — 8개(2×4 그리드). */
 export const CARE_PRODUCT_CATEGORIES = [
   '클렌저',
   '토너',
-  '에센스/세럼',
-  '앰플',
+  '에센스/세럼/앰플',
   '로션',
   '크림',
   '선크림',

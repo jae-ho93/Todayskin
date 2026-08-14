@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Card } from './Card';
 import { EvidenceLink } from './EvidenceLink';
 import { useToast } from './Toast';
@@ -35,7 +35,7 @@ export function CareProductCard({ product }: CareProductCardProps) {
     <Card style={styles.card}>
       <View style={styles.header}>
         <View style={[styles.iconBadge, { backgroundColor: category.bg }]}>
-          <Ionicons name={category.icon} size={18} color={category.accent} />
+          <MaterialCommunityIcons name={category.icon} size={18} color={category.accent} />
         </View>
         <View style={styles.headerText}>
           <View style={[styles.categoryTag, { backgroundColor: category.bg }]}>

@@ -145,6 +145,12 @@ export interface WeatherInput {
   [key: string]: unknown;
 }
 
+/** 나이/성별은 선택 입력(둘 다 없을 수 있다) — 있는 것만 프롬프트에 실어 보낸다. */
+export interface UserProfileInput {
+  age: number | null;
+  gender: 'male' | 'female' | null;
+}
+
 interface SkinInput {
   id?: string;
   capturedAt?: string;
@@ -301,9 +307,8 @@ routine과 무관하게 따로 노는 제품을 넣지 마세요. reason 첫 문
 제품을 고르세요.
 
 **category는 반드시 ${CARE_PRODUCT_CATEGORIES.join('/')} 중 정확히 하나로 분류하세요** — 그 제품이
-실제로 어떤 단계에 쓰는 제품인지(클렌저/토너/에센스/앰플/로션/크림/선크림/마스크팩) 기준으로
-고르고, 어디에도 안 맞으면 "기타"로 두세요. 화면이 이 카테고리로 제품을 묶어서 보여주므로
-반드시 채워야 합니다.`;
+실제로 어떤 단계에 쓰는 제품인지를 기준으로 고르고, 어디에도 안 맞으면 "기타"로 두세요. 화면이
+이 카테고리로 제품을 묶어서 보여주므로 반드시 채워야 합니다.`;
 
 const CARE_SAFETY_RULE = `사용자의 피부 상태 분류 결과(민감한 피부 양상)가 있다면, routine과 products
 모두에서 자극이 될 수 있는 성분·제품 유형(물리적 스크럽, 고농도 AHA/BHA 필링, 향료, 알코올, 강한
@@ -312,6 +317,13 @@ const CARE_SAFETY_RULE = `사용자의 피부 상태 분류 결과(민감한 피
 이 규칙을 설명할 때도 다른 문구와 똑같이 완곡한 표현만 쓰세요 — "염증", "치료", "질환" 같은 단어를
 피하고 "자극이 될 수 있어요", "순한 제품이 더 편할 수 있어요"처럼 CARE_TONE_RULE과 같은 톤으로
 쓰세요. 절대 의료적 확정 표현으로 이유를 설명하지 마세요.`;
+
+const CARE_PROFILE_RULE = `[사용자 정보]에 age(나이)나 gender(성별)가 있으면 참고하세요 — 나이대에 따라
+달라질 수 있는 피부 변화(예: 탄력·유수분 밸런스 변화, 자외선 누적 손상에 대한 민감도)나 성별에 따라
+경향이 다를 수 있는 부분을 자연스럽게 반영해도 좋습니다. 다만 "여성은 ~해야 한다", "이 나이대는
+전부 ~하다"처럼 단정적이고 고정관념적인 표현은 쓰지 마세요 — 반영하더라도 그 사람의 실제 피부
+측정값·오늘 수치가 우선이고 나이·성별은 보조 참고일 뿐입니다. [사용자 정보]가 없으면 이 항목은
+그냥 무시하고 언급하지 마세요.`;
 
 const CARE_DETAIL_RULE = `routine은 최소 4단계, 최대 7단계로 세분화하세요 — "보습하기" 한 줄로 뭉뚱그리지
 말고 세안 직후/각 제품을 바르는 순서/마무리까지 실제로 따라 할 수 있게 단계를 쪼개세요. 각 단계의
@@ -375,7 +387,8 @@ products는 최소 5개, web_search로 실제 존재를 확인한 제품으로 �
 4. ${CARE_DETAIL_RULE}
 5. ${CARE_TIP_RULE}
 6. ${carePhaseRule('weather')}
-7. ${CARE_JSON_FORMAT_SPEC}`;
+7. ${CARE_PROFILE_RULE}
+8. ${CARE_JSON_FORMAT_SPEC}`;
 
 const CARE_SKIN_SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 피부 상태 기반 케어 가이드 작성자입니다.
 사용자의 오늘 피부 측정값(부위별 상태·수분·탄력), 여드름 구역 리포트(있으면), 피부 상태 분류
@@ -400,7 +413,8 @@ products는 최소 5개, web_search로 실제 존재를 확인한 제품으로 �
 5. ${CARE_DETAIL_RULE}
 6. ${CARE_TIP_RULE}
 7. ${carePhaseRule('skin')}
-8. ${CARE_JSON_FORMAT_SPEC}`;
+8. ${CARE_PROFILE_RULE}
+9. ${CARE_JSON_FORMAT_SPEC}`;
 
 const CARE_COMBINED_SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 날씨+피부 상태 복합 케어 가이드
 작성자입니다. 사용자는 방금 외출했다 귀가해 세안하고 피부를 측정했습니다. 오늘 피부 측정값과
@@ -423,7 +437,8 @@ products는 최소 5개, web_search로 실제 존재를 확인한 제품으로 �
 5. ${CARE_DETAIL_RULE}
 6. ${CARE_TIP_RULE}
 7. ${carePhaseRule('combined')}
-8. ${CARE_JSON_FORMAT_SPEC}`;
+8. ${CARE_PROFILE_RULE}
+9. ${CARE_JSON_FORMAT_SPEC}`;
 
 const CARE_MORNING_SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 아침 외출 준비 케어 가이드
 작성자입니다. 사용자는 어젯밤 세안 후 피부를 측정했고, 지금은 그 다음날 아침입니다 — 아직 새로
@@ -450,7 +465,8 @@ products는 최소 5개, web_search로 실제 존재를 확인한 제품으로 �
 4. ${CARE_SAFETY_RULE}
 5. ${CARE_DETAIL_RULE}
 6. ${CARE_TIP_RULE}
-7. ${CARE_JSON_FORMAT_SPEC}`;
+7. ${CARE_PROFILE_RULE}
+8. ${CARE_JSON_FORMAT_SPEC}`;
 
 const CARE_SYSTEM_PROMPTS: Record<CareType, string> = {
   weather: CARE_WEATHER_SYSTEM_PROMPT,
@@ -489,17 +505,22 @@ const CARE_PRODUCTS_ONLY_SYSTEM_PROMPT = `당신은 화장품 추천 서비스�
 2. ${CARE_EVIDENCE_RULE}
 3. ${CARE_PRODUCT_RULE}
 4. ${CARE_SAFETY_RULE}
-5. ${CARE_PRODUCTS_ONLY_JSON_FORMAT_SPEC}`;
+5. ${CARE_PROFILE_RULE}
+6. ${CARE_PRODUCTS_ONLY_JSON_FORMAT_SPEC}`;
 
 function buildCareUserContent(
   careType: CareType,
   skin: SkinInput | null,
   weather: WeatherInput | null,
+  profile: UserProfileInput | null,
   excludeProducts: string[],
 ): string {
   const parts: string[] = [];
   if (weather) parts.push(`[오늘 날씨/대기질]\n${JSON.stringify(weather)}`);
   if (skin) parts.push(`[오늘 피부 측정값]\n${JSON.stringify(skin)}`);
+  if (profile && (profile.age !== null || profile.gender !== null)) {
+    parts.push(`[사용자 정보]\n${JSON.stringify(profile)}`);
+  }
   return parts.join('\n\n') + careExcludeRule(excludeProducts);
 }
 
@@ -822,6 +843,7 @@ export class OpenAiClient {
     careType: CareType,
     skin: SkinInput | null,
     weather: WeatherInput | null,
+    profile: UserProfileInput | null = null,
     excludeProducts: string[] = [],
   ): Promise<GeneratedCarePlan> {
     if (this.mockEnabled) {
@@ -835,7 +857,7 @@ export class OpenAiClient {
       model: this.model,
       input: [
         { role: 'system', content: CARE_SYSTEM_PROMPTS[careType] },
-        { role: 'user', content: buildCareUserContent(careType, skin, weather, excludeProducts) },
+        { role: 'user', content: buildCareUserContent(careType, skin, weather, profile, excludeProducts) },
       ],
       tools: [{ type: 'web_search' }],
     };
@@ -871,6 +893,7 @@ export class OpenAiClient {
     routine: Pick<GeneratedCareRoutineStep, 'phase' | 'step' | 'ingredient' | 'amount'>[],
     skin: SkinInput | null,
     weather: WeatherInput | null,
+    profile: UserProfileInput | null = null,
     excludeProducts: string[] = [],
   ): Promise<GeneratedCareProduct[]> {
     if (this.mockEnabled) {
@@ -888,7 +911,7 @@ export class OpenAiClient {
           role: 'user',
           content:
             `[이미 확정된 케어 루틴 — 절대 바꾸지 마세요]\n${JSON.stringify(routine)}\n\n` +
-            buildCareUserContent(careType, skin, weather, excludeProducts),
+            buildCareUserContent(careType, skin, weather, profile, excludeProducts),
         },
       ],
       tools: [{ type: 'web_search' }],
