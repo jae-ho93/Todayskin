@@ -35,6 +35,7 @@
 | 홈 · 날씨 | 현재 기상·대기질, 측정 불가 시 명시적 unavailable |
 | 진단 | 카메라 가이드 → 부위별 점수 · 결과 화면 |
 | 추천 · 제품 | 실제 화장품 + 구매 링크, 빠른 응답 후 AI 결과로 갱신 |
+| 케어 루틴 | 날씨/피부/복합/아침 기반 2단계 루틴 + 카테고리별 실제 제품(근거 링크 포함) |
 | 기록 · 패턴 | 날짜별 히스토리, 랜드마크(동의 시), 개인 패턴 |
 | 설정 | 프로필 · 동의 · 알림 선호 · 탈퇴 |
 
@@ -63,6 +64,7 @@
 | 데이터 | **PostgreSQL** · **Prisma 7** |
 | 캐시 · 큐 | **Redis** · **BullMQ** (없으면 Inline fallback) |
 | 인증 | JWT access/refresh · OTP(SMS/MO) · 소셜 토큰 검증 |
+| AI 연동 | **OpenAI** — Chat Completions(strict json_schema, 추천/제품) · Responses API + `web_search`(케어 루틴/제품, 근거 검증) |
 | 전송 | REST · **SSE** (job 상태 실시간 — `GET /jobs/:id/events`) |
 | 저장소 | **S3** (동의 이미지) · 감사·동의 게이트 |
 | 관측 | Pino(구조화 로그) · Helmet · Throttler · correlationId |
@@ -115,12 +117,15 @@ flowchart TB
   subgraph AI["Inference"]
     INF["FastAPI<br/>MobileNetV3"]
   end
+  OPENAI["OpenAI<br/>추천 · 케어 루틴/제품"]
   APP -->|REST + JWT| API
   API --> PG
   API --> REDIS
   API -->|동의 시| S3
   API -->|이미지 바이트| INF
   INF -->|점수 · 등급 · landmarks| API
+  API -->|피부 · 날씨 데이터| OPENAI
+  OPENAI -->|루틴 · 제품 · 근거| API
 ```
 
 ---
@@ -135,6 +140,7 @@ flowchart TB
 | 리팩토링 R1~R35 (배치 B1~B6) | **완료** (2026-08-12) |
 | Fable5 리뷰 대응 — 보안·품질 게이트·기온/습도 (F72~F78 · N46~N49 · N53) | **완료** (2026-08-13) |
 | 배포 준비 웨이브 — 실험실 옵트인·주간 요약·측정 신뢰·상태 완성도·Pretendard·배포 스모크 (F79~F83 · N54) | **완료** (2026-08-13) |
+| LLM 프로바이더 전환(Gemini→OpenAI) · 케어 루틴/제품 카테고리 신설(`care` 모듈, 카테고리별 그리드 UI) | **완료** (2026-08-14) |
 | AWS 첫 배포 (N16) | 계정·시크릿 준비 후 별도 — 이미지 빌드·부팅 스모크 실측 완료, 체크리스트·런북 문서화 |
 | EAS 스토어 · 구독 결제 · Sentry | 보류 (해커톤 범위 밖) |
 
