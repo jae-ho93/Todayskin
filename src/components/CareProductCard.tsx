@@ -4,16 +4,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { Card } from './Card';
 import { EvidenceLink } from './EvidenceLink';
 import { useToast } from './Toast';
-import { colors, MAX_FONT_SCALE, radius, spacing, typography } from '../theme';
+import { colors, MAX_FONT_SCALE, spacing, typography } from '../theme';
 import type { CareProduct } from '../types';
 
 interface CareProductCardProps {
   product: CareProduct;
 }
 
-/** 제품명으로 가격 비교 검색 결과를 연다 — 특정 판매처 하나로 고정하지 않는다. */
+/** 제품명으로 네이버 검색 결과를 연다 — 특정 판매처 하나로 고정하지 않는다. */
 function productSearchUrl(name: string): string {
-  return `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(name)}`;
+  return `https://search.naver.com/search.naver?query=${encodeURIComponent(name)}`;
 }
 
 /**
@@ -42,7 +42,6 @@ export function CareProductCard({ product }: CareProductCardProps) {
         accessibilityLabel={`${product.name} 검색해서 구매하기`}
         style={({ pressed }) => [styles.header, pressed && styles.pressed]}
       >
-        <View style={styles.thumb} />
         <View style={styles.headerText}>
           <Text style={styles.name} numberOfLines={2}>
             {product.name}
@@ -84,7 +83,6 @@ const styles = StyleSheet.create({
   card: { gap: spacing.sm },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   pressed: { opacity: 0.72 },
-  thumb: { width: 48, height: 48, borderRadius: radius.md, backgroundColor: colors.gray100 },
   headerText: { flex: 1, gap: 2 },
   name: { ...typography.subtitle, color: colors.textPrimary },
   linkRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },

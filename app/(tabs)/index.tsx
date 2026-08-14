@@ -5,7 +5,6 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { Card } from '../../src/components/Card';
 import { CareRoutinePreview } from '../../src/components/CareRoutinePreview';
 import { CircularGauge } from '../../src/components/CircularGauge';
-import { RecommendationCard } from '../../src/components/RecommendationCard';
 import { RetryButton } from '../../src/components/RetryButton';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { Skeleton } from '../../src/components/Skeleton';
@@ -25,8 +24,6 @@ export default function HomeDashboard() {
   const {
     weather,
     skin,
-    recommendations,
-    liveRefreshing,
     refreshing,
     reload,
     reloadOnFocus,
@@ -131,14 +128,7 @@ export default function HomeDashboard() {
               </View>
             </View>
             <View>
-              <Text style={styles.sectionTitle}>오늘의 추천</Text>
-              <View style={styles.recommendationList}>
-                <Skeleton height={76} borderRadius={radius.lg} />
-                <Skeleton height={76} borderRadius={radius.lg} />
-              </View>
-            </View>
-            <View>
-              <Text style={styles.sectionTitle}>케어 루틴</Text>
+              <Text style={styles.sectionTitle}>오늘의 루틴</Text>
               <View style={styles.careRoutineList}>
                 <Skeleton height={76} borderRadius={radius.lg} />
                 <Skeleton height={76} borderRadius={radius.lg} />
@@ -180,43 +170,21 @@ export default function HomeDashboard() {
 </View>
 
             <View>
-              <Text style={styles.sectionTitle}>오늘의 추천</Text>
-              {liveRefreshing && <Text style={styles.refreshingLabel}>최신 추천으로 갱신 중…</Text>}
-              {recommendations.status === 'loading' ? (
-                <View style={styles.recommendationLoading}>
-                  <ActivityIndicator color={colors.sage} />
-                  <Text style={styles.recommendationLoadingText}>
-                    어젯밤 피부 상태와 오늘 날씨를 분석하고 있어요…
-                  </Text>
-                </View>
-              ) : recommendations.status === 'error' ? (
-                <View style={styles.recommendationLoading}>
-                  <Text style={styles.recommendationLoadingText}>추천을 불러올 수 없어요</Text>
-                  <RetryButton onPress={handleRefresh} disabled={refreshing} />
-                </View>
-              ) : (
-                <View style={styles.recommendationList}>
-                  {(recommendations.status === 'success' ? recommendations.data : [])
-                    .slice(0, 4)
-                    .map((rec) => (
-                      <RecommendationCard key={rec.id} recommendation={rec} />
-                    ))}
-                </View>
-              )}
-            </View>
-
-            <View>
-              <Text style={styles.sectionTitle}>케어 루틴</Text>
+              <Text style={styles.sectionTitle}>오늘의 루틴</Text>
               <View style={styles.careRoutineList}>
                 <CareRoutinePreview
                   title="세안 후 케어"
                   state={afterWashCare.state}
-                  onPress={() => router.push({ pathname: '/products', params: { tab: 'combined' } })}
+                  onPress={() =>
+                    router.push({ pathname: '/care/[type]', params: { type: 'combined', diagnosisId: diagnosisId ?? '' } })
+                  }
                 />
                 <CareRoutinePreview
                   title="다음날 아침 케어"
                   state={morningCare.state}
-                  onPress={() => router.push({ pathname: '/products', params: { tab: 'morning' } })}
+                  onPress={() =>
+                    router.push({ pathname: '/care/[type]', params: { type: 'morning', diagnosisId: diagnosisId ?? '' } })
+                  }
                 />
               </View>
             </View>
@@ -308,14 +276,6 @@ const styles = StyleSheet.create({
   scoreMetaBody: { ...typography.bodySm, color: colors.textSecondary },
   patternLink: { ...typography.bodySm, color: colors.sageDark, fontWeight: '600', marginTop: spacing.xs },
   sectionTitle: { ...typography.headline, color: colors.textPrimary, marginBottom: spacing.sm },
-  recommendationLoading: {
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.xl,
-  },
-  recommendationLoadingText: { ...typography.bodySm, color: colors.textSecondary },
-  refreshingLabel: { ...typography.caption, color: colors.sageDark, marginBottom: spacing.sm },
-  recommendationList: { gap: spacing.sm },
   careRoutineList: { gap: spacing.sm },
   fab: {
     position: 'absolute',
