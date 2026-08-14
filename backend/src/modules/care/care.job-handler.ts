@@ -3,9 +3,13 @@ import { JobHandlerRegistry } from '../jobs/handlers/job-handler.registry';
 import { optionalNumber, optionalString, toJobError } from '../jobs/handlers/job-error';
 import { JobType } from '../jobs/enums/job-type.enum';
 import { CareService } from './care.service';
-import { CareType } from './dto/care-plan.dto';
+import { CARE_TYPES, CarePlanDto, CareType } from './dto/care-plan.dto';
 
-const CARE_TYPES: readonly CareType[] = ['weather', 'skin', 'combined'];
+/** routine 그대로 넘겨받은 job payload 필드 — 있으면 CareService가 products만 재생성한다. */
+function optionalRoutine(payload: Record<string, unknown>): CarePlanDto['routine'] | undefined {
+  const value = payload.routineOverride;
+  return Array.isArray(value) ? (value as CarePlanDto['routine']) : undefined;
+}
 
 function requireCareType(payload: Record<string, unknown>): CareType {
   const value = payload.careType;
@@ -45,6 +49,8 @@ export class CareJobHandler implements OnModuleInit {
           diagnosisId: optionalString(payload, 'diagnosisId'),
           lat: optionalNumber(payload, 'lat'),
           lon: optionalNumber(payload, 'lon'),
+          routineOverride: optionalRoutine(payload),
+          medicalDisclaimerOverride: optionalString(payload, 'medicalDisclaimerOverride') ?? null,
         });
         return { plan, source: 'LIVE' };
       } catch (e) {

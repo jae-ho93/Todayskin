@@ -668,6 +668,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/care/morning": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 다음날 아침 케어 루틴+제품 빠른 경로
+         * @description 지정한 진단(어젯밤 측정)의 피부 상태는 그대로 두고 날씨만 오늘 좌표 기준 실시간 값으로 갱신해 외출 전/외출 중 케어를 생성한다.
+         */
+        post: operations["CareController_morning"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/diagnosis/latest": {
         parameters: {
             query?: never;
@@ -1554,12 +1574,14 @@ export interface components {
             amount?: Record<string, never> | null;
             /** @description 오늘 수치/피부상태 기반 이유 */
             reason: string;
+            /** @description 카드를 펼쳤을 때 보여줄 상세 팁 — 뷰티 유튜버가 알려주듯 구체적인 발라주는 요령·순서·흔한 실수·효과가 언제쯤 느껴지는지 등을 담은 긴 설명(없으면 null) */
+            detail?: Record<string, never> | null;
             evidence?: components["schemas"]["CareEvidenceDto"] | null;
         };
         CareProductDto: {
             /** @description 실제 제품명 */
             name: string;
-            /** @description web_search로 확인된 구매 페이지 URL */
+            /** @description web_search로 확인된 구매 페이지 URL. 실존 여부 검증용이며 클라이언트는 이 URL로 바로 이동하지 않고 제품명으로 검색 결과를 연다(판매처·쿠폰이 사용자마다 다르기 때문). */
             url: string;
             /** @description 이 제품을 고른 이유 */
             reason: string;
@@ -1567,7 +1589,7 @@ export interface components {
         };
         CarePlanDto: {
             /** @enum {string} */
-            careType: "weather" | "skin" | "combined";
+            careType: "weather" | "skin" | "combined" | "morning";
             routine: components["schemas"]["CareRoutineStepDto"][];
             products: components["schemas"]["CareProductDto"][];
             /** @description 의료 면책 문구 */
@@ -1585,11 +1607,36 @@ export interface components {
             generatedAt?: string;
             plan: components["schemas"]["CarePlanDto"];
         };
+        CareRoutineStepInputDto: Record<string, never>;
         CareDiagnosisRequestDto: {
             /** @description 이 진단 기준으로 생성 */
             diagnosisId?: string;
             /** @description 직전 결과를 무시하고 새로 생성 */
             refresh?: boolean;
+            /** @description 화면에 이미 떠 있는 루틴 — 있으면 routine은 재생성하지 않고 products만 새로 찾는다. */
+            routine?: components["schemas"]["CareRoutineStepInputDto"][];
+            /** @description routine과 함께 그대로 유지할 의료 면책 문구 */
+            medicalDisclaimer?: Record<string, never> | null;
+        };
+        CareMorningRequestDto: {
+            /** @description 이 진단의 피부 상태를 기준으로 생성 */
+            diagnosisId?: string;
+            /**
+             * @description 위도 (-90 ~ 90)
+             * @example 37.5665
+             */
+            lat?: number;
+            /**
+             * @description 경도 (-180 ~ 180)
+             * @example 126.978
+             */
+            lon?: number;
+            /** @description 직전 결과를 무시하고 새로 생성 */
+            refresh?: boolean;
+            /** @description 화면에 이미 떠 있는 루틴 — 있으면 routine은 재생성하지 않고 products만 새로 찾는다. */
+            routine?: components["schemas"]["CareRoutineStepInputDto"][];
+            /** @description routine과 함께 그대로 유지할 의료 면책 문구 */
+            medicalDisclaimer?: Record<string, never> | null;
         };
         SkinPartMetricDto: {
             /**
@@ -2699,6 +2746,29 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["CareDiagnosisRequestDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CarePlanFastResponseDto"];
+                };
+            };
+        };
+    };
+    CareController_morning: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CareMorningRequestDto"];
             };
         };
         responses: {

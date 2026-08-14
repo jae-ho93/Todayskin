@@ -1276,6 +1276,44 @@
         ]
       }
     },
+    "/care/morning": {
+      "post": {
+        "description": "지정한 진단(어젯밤 측정)의 피부 상태는 그대로 두고 날씨만 오늘 좌표 기준 실시간 값으로 갱신해 외출 전/외출 중 케어를 생성한다.",
+        "operationId": "CareController_morning",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CareMorningRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CarePlanFastResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "다음날 아침 케어 루틴+제품 빠른 경로",
+        "tags": [
+          "care"
+        ]
+      }
+    },
     "/diagnosis/latest": {
       "get": {
         "operationId": "DiagnosisController_getLatest",
@@ -3192,6 +3230,11 @@
             "type": "string",
             "description": "오늘 수치/피부상태 기반 이유"
           },
+          "detail": {
+            "type": "object",
+            "description": "카드를 펼쳤을 때 보여줄 상세 팁 — 뷰티 유튜버가 알려주듯 구체적인 발라주는 요령·순서·흔한 실수·효과가 언제쯤 느껴지는지 등을 담은 긴 설명(없으면 null)",
+            "nullable": true
+          },
           "evidence": {
             "nullable": true,
             "type": "object",
@@ -3217,7 +3260,7 @@
           },
           "url": {
             "type": "string",
-            "description": "web_search로 확인된 구매 페이지 URL"
+            "description": "web_search로 확인된 구매 페이지 URL. 실존 여부 검증용이며 클라이언트는 이 URL로 바로 이동하지 않고 제품명으로 검색 결과를 연다(판매처·쿠폰이 사용자마다 다르기 때문)."
           },
           "reason": {
             "type": "string",
@@ -3247,7 +3290,8 @@
             "enum": [
               "weather",
               "skin",
-              "combined"
+              "combined",
+              "morning"
             ]
           },
           "routine": {
@@ -3303,6 +3347,10 @@
           "plan"
         ]
       },
+      "CareRoutineStepInputDto": {
+        "type": "object",
+        "properties": {}
+      },
       "CareDiagnosisRequestDto": {
         "type": "object",
         "properties": {
@@ -3313,6 +3361,53 @@
           "refresh": {
             "type": "boolean",
             "description": "직전 결과를 무시하고 새로 생성"
+          },
+          "routine": {
+            "description": "화면에 이미 떠 있는 루틴 — 있으면 routine은 재생성하지 않고 products만 새로 찾는다.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CareRoutineStepInputDto"
+            }
+          },
+          "medicalDisclaimer": {
+            "type": "object",
+            "description": "routine과 함께 그대로 유지할 의료 면책 문구",
+            "nullable": true
+          }
+        }
+      },
+      "CareMorningRequestDto": {
+        "type": "object",
+        "properties": {
+          "diagnosisId": {
+            "type": "string",
+            "description": "이 진단의 피부 상태를 기준으로 생성"
+          },
+          "lat": {
+            "type": "number",
+            "description": "위도 (-90 ~ 90)",
+            "example": 37.5665
+          },
+          "lon": {
+            "type": "number",
+            "description": "경도 (-180 ~ 180)",
+            "example": 126.978
+          },
+          "refresh": {
+            "type": "boolean",
+            "description": "직전 결과를 무시하고 새로 생성"
+          },
+          "routine": {
+            "description": "화면에 이미 떠 있는 루틴 — 있으면 routine은 재생성하지 않고 products만 새로 찾는다.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CareRoutineStepInputDto"
+            }
+          },
+          "medicalDisclaimer": {
+            "type": "object",
+            "description": "routine과 함께 그대로 유지할 의료 면책 문구",
+            "nullable": true
           }
         }
       },

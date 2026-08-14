@@ -3,13 +3,14 @@ import { router, useFocusEffect } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../src/components/Card';
+import { CareRoutinePreview } from '../../src/components/CareRoutinePreview';
 import { CircularGauge } from '../../src/components/CircularGauge';
-import { RecommendationCard } from '../../src/components/RecommendationCard';
 import { RetryButton } from '../../src/components/RetryButton';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { Skeleton } from '../../src/components/Skeleton';
 import { useToast } from '../../src/components/Toast';
 import { WeatherCard } from '../../src/components/WeatherCard';
+import { useCarePlan } from '../../src/features/care/useCarePlan';
 import { useHomeDashboard } from '../../src/features/home/useHomeDashboard';
 import { useOffline } from '../../src/hooks/useOffline';
 import { getSession } from '../../src/lib/session';
@@ -23,8 +24,6 @@ export default function HomeDashboard() {
   const {
     weather,
     skin,
-    recommendations,
-    liveRefreshing,
     refreshing,
     reload,
     reloadOnFocus,
@@ -32,6 +31,12 @@ export default function HomeDashboard() {
     onRefreshFailed: () =>
       showToast('새로고침하지 못했어요 — 기존 정보를 유지합니다', { type: 'error' }),
   });
+
+  // 하루 순환 케어 루틴 미리보기 — 오늘의 추천(A/B/C) 아래 추가. 진단이 아직 없으면
+  // (skin.status !== 'success') diagnosisId를 null로 둬서 훅이 조용히 empty로 대기한다.
+  const diagnosisId = skin.status === 'success' ? skin.data.id : null;
+  const afterWashCare = useCarePlan({ careType: 'combined', diagnosisId });
+  const morningCare = useCarePlan({ careType: 'morning', diagnosisId });
 
   useEffect(() => {
     getSession().then((user) => setUserName(user?.name ?? null));
@@ -123,8 +128,8 @@ export default function HomeDashboard() {
               </View>
             </View>
             <View>
-              <Text style={styles.sectionTitle}>오늘의 추천</Text>
-              <View style={styles.recommendationList}>
+              <Text style={styles.sectionTitle}>오늘의 루틴</Text>
+              <View style={styles.careRoutineList}>
                 <Skeleton height={76} borderRadius={radius.lg} />
                 <Skeleton height={76} borderRadius={radius.lg} />
               </View>
@@ -165,29 +170,29 @@ export default function HomeDashboard() {
 </View>
 
             <View>
-              <Text style={styles.sectionTitle}>오늘의 추천</Text>
-              {liveRefreshing && <Text style={styles.refreshingLabel}>최신 추천으로 갱신 중…</Text>}
-              {recommendations.status === 'loading' ? (
-                <View style={styles.recommendationLoading}>
-                  <ActivityIndicator color={colors.sage} />
-                  <Text style={styles.recommendationLoadingText}>
-                    어젯밤 피부 상태와 오늘 날씨를 분석하고 있어요…
-                  </Text>
-                </View>
-              ) : recommendations.status === 'error' ? (
-                <View style={styles.recommendationLoading}>
-                  <Text style={styles.recommendationLoadingText}>추천을 불러올 수 없어요</Text>
-                  <RetryButton onPress={handleRefresh} disabled={refreshing} />
-                </View>
-              ) : (
-                <View style={styles.recommendationList}>
-                  {(recommendations.status === 'success' ? recommendations.data : [])
-                    .slice(0, 4)
-                    .map((rec) => (
-                      <RecommendationCard key={rec.id} recommendation={rec} />
-                    ))}
-                </View>
-              )}
+              <Text style={styles.sectionTitle}>오늘의 루틴</Text>
+              <View style={styles.careRoutineList}>
+                <CareRoutinePreview
+                  title="세안 후 케어"
+                  icon="water-outline"
+                  accent="#4F8F5B"
+                  accentBg="#DCEEDC"
+                  state={afterWashCare.state}
+                  onPress={() =>
+                    router.push({ pathname: '/care/[type]', params: { type: 'combined', diagnosisId: diagnosisId ?? '' } })
+                  }
+                />
+                <CareRoutinePreview
+                  title="다음날 아침 케어"
+                  icon="sunny-outline"
+                  accent="#3F6FA6"
+                  accentBg="#DCEAFB"
+                  state={morningCare.state}
+                  onPress={() =>
+                    router.push({ pathname: '/care/[type]', params: { type: 'morning', diagnosisId: diagnosisId ?? '' } })
+                  }
+                />
+              </View>
             </View>
           </>
         )}
@@ -277,14 +282,7 @@ const styles = StyleSheet.create({
   scoreMetaBody: { ...typography.bodySm, color: colors.textSecondary },
   patternLink: { ...typography.bodySm, color: colors.sageDark, fontWeight: '600', marginTop: spacing.xs },
   sectionTitle: { ...typography.headline, color: colors.textPrimary, marginBottom: spacing.sm },
-  recommendationLoading: {
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.xl,
-  },
-  recommendationLoadingText: { ...typography.bodySm, color: colors.textSecondary },
-  refreshingLabel: { ...typography.caption, color: colors.sageDark, marginBottom: spacing.sm },
-  recommendationList: { gap: spacing.sm },
+  careRoutineList: { gap: spacing.sm },
   fab: {
     position: 'absolute',
     bottom: spacing.xl,

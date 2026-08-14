@@ -1,9 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-/** 케어 시스템이 다루는 세 가지 근거 유형. */
-export type CareType = 'weather' | 'skin' | 'combined';
+/**
+ * 케어 시스템이 다루는 근거 유형.
+ * - weather/skin: 단독 근거(내부용 — 지금은 탭으로 노출하지 않는다).
+ * - combined("세안 후"): 그날 촬영한 진단의 피부 상태 + 그 진단에 연결된 그날의 날씨.
+ *   외출 후 귀가해 세안하고 촬영하는 순간에 맞는 조합이다.
+ * - morning("다음날 아침"): 같은(최신) 진단의 피부 상태는 그대로 두고, 날씨만 오늘
+ *   실시간 값으로 갱신한다 — 전날 밤 측정한 피부로 오늘 아침 외출을 준비하는 조합.
+ */
+export type CareType = 'weather' | 'skin' | 'combined' | 'morning';
 
-export const CARE_TYPES: readonly CareType[] = ['weather', 'skin', 'combined'];
+export const CARE_TYPES: readonly CareType[] = ['weather', 'skin', 'combined', 'morning'];
 
 export const CARE_EVIDENCE_SOURCE_TYPES = [
   'WHO',
@@ -47,6 +54,14 @@ export class CareRoutineStepDto {
   @ApiProperty({ description: '오늘 수치/피부상태 기반 이유' })
   reason!: string;
 
+  @ApiPropertyOptional({
+    description:
+      '카드를 펼쳤을 때 보여줄 상세 팁 — 뷰티 유튜버가 알려주듯 구체적인 발라주는 요령·순서·' +
+      '흔한 실수·효과가 언제쯤 느껴지는지 등을 담은 긴 설명(없으면 null)',
+    nullable: true,
+  })
+  detail?: string | null;
+
   @ApiPropertyOptional({ type: CareEvidenceDto, nullable: true })
   evidence?: CareEvidenceDto | null;
 }
@@ -56,7 +71,11 @@ export class CareProductDto {
   @ApiProperty({ description: '실제 제품명' })
   name!: string;
 
-  @ApiProperty({ description: 'web_search로 확인된 구매 페이지 URL' })
+  @ApiProperty({
+    description:
+      'web_search로 확인된 구매 페이지 URL. 실존 여부 검증용이며 클라이언트는 이 URL로 바로 이동하지 ' +
+      '않고 제품명으로 검색 결과를 연다(판매처·쿠폰이 사용자마다 다르기 때문).',
+  })
   url!: string;
 
   @ApiProperty({ description: '이 제품을 고른 이유' })

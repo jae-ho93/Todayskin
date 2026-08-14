@@ -460,4 +460,104 @@ describe('OpenAiClient', () => {
       expect(userMessage.content).toContain('이미 추천한 제품');
     });
   });
+
+  /**
+   * "다른 추천 보기" 전용 경로 — routine은 그대로 두고 products만 새로 생성한다.
+   * routine을 재요청하지 않으므로 응답 스키마도 `{ products: [...] }`뿐이다.
+   */
+  describe('generateCareProducts (products-only)', () => {
+    const originalFetch = global.fetch;
+
+    afterEach(() => {
+      global.fetch = originalFetch;
+    });
+
+    const fixedRoutine = [
+      { phase: '외출 전', step: '자외선 차단제 도포', ingredient: '징크옥사이드', amount: '한 마디' },
+    ];
+
+    function responsesEnvelope(text: string, id = 'resp_1'): unknown {
+      return {
+        id,
+        output: [{ type: 'message', content: [{ type: 'output_text', text }] }],
+      };
+    }
+
+    function stubFetchOnce(bodies: unknown[]): jest.Mock {
+      const queue = [...bodies];
+      const fn = jest.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(queue.shift()),
+        } as unknown as Response),
+      );
+      global.fetch = fn as unknown as typeof fetch;
+      return fn;
+    }
+
+    function makeClient(): OpenAiClient {
+      return new OpenAiClient(
+        makeConfig({ OPENAI_API_KEY: 'k', MOCK_OPENAI: 'false' }),
+        policy,
+      );
+    }
+
+    it('MOCK_OPENAI=true 시 mock 제품 목록을 반환한다', async () => {
+      const client = new OpenAiClient(makeConfig({ MOCK_OPENAI: 'true' }), policy);
+      const products = await client.generateCareProducts('weather', fixedRoutine, null, { uvIndex: 8 }, []);
+      expect(products.length).toBeGreaterThan(0);
+    });
+
+    it('키 없음 시 OpenAiUnavailable', async () => {
+      const client = new OpenAiClient(makeConfig({ MOCK_OPENAI: 'false' }), policy);
+      await expect(
+        client.generateCareProducts('weather', fixedRoutine, null, { uvIndex: 5 }, []),
+      ).rejects.toThrow(OpenAiUnavailable);
+    });
+
+    it('정상 응답을 products로 파싱하고, 요청에 고정 루틴을 포함시킨다', async () => {
+      const body = JSON.stringify({
+        products: [
+          { name: '실제 선크림', url: 'https://example.com/sunscreen', reason: '적합해요.', evidence: null },
+        ],
+      });
+      const fetchMock = stubFetchOnce([responsesEnvelope(body)]);
+
+      const products = await makeClient().generateCareProducts(
+        'weather',
+        fixedRoutine,
+        null,
+        { uvIndex: 8 },
+        [],
+      );
+      expect(products).toHaveLength(1);
+      expect(products[0].name).toBe('실제 선크림');
+
+      const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+      const userMessage = requestBody.input.find((m: { role: string }) => m.role === 'user');
+      expect(userMessage.content).toContain('이미 확정된 케어 루틴');
+      expect(userMessage.content).toContain('징크옥사이드');
+    });
+
+    it('products가 비어 있으면 OpenAiUnavailable', async () => {
+      const body = JSON.stringify({ products: [] });
+      stubFetchOnce([responsesEnvelope(body)]);
+      await expect(
+        makeClient().generateCareProducts('weather', fixedRoutine, null, { uvIndex: 8 }, []),
+      ).rejects.toThrow(OpenAiUnavailable);
+    });
+
+    it('reason에 의료적 확정 표현이 섞이면 OpenAiUnavailable', async () => {
+      const body = JSON.stringify({
+        products: [
+          { name: '제품', url: 'https://example.com/p', reason: '치료 효과가 있어요.', evidence: null },
+        ],
+      });
+      stubFetchOnce([responsesEnvelope(body)]);
+      await expect(
+        makeClient().generateCareProducts('skin', fixedRoutine, { overallScore: 60 }, null, []),
+      ).rejects.toThrow(OpenAiUnavailable);
+    });
+  });
 });

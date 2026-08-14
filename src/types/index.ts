@@ -402,7 +402,7 @@ export interface WeatherProductsFastResponse {
 
 // ── 케어 루틴+제품 (OpenAI Responses API + web_search) ──────────────
 
-export type CareType = 'weather' | 'skin' | 'combined';
+export type CareType = 'weather' | 'skin' | 'combined' | 'morning';
 
 /**
  * 근거 출처 — 기존 추천의 EvidenceSource(사람이 검증한 정적 레지스트리)와 달리
@@ -420,11 +420,14 @@ export interface CareRoutineStep {
   ingredient: string | null;
   amount: string | null;
   reason: string;
+  /** 카드를 펼치면 보여주는 긴 팁(뷰티 유튜버 톤 — 발라주는 요령, 흔한 실수, 효과 시점 등). */
+  detail?: string | null;
   evidence?: CareEvidence | null;
 }
 
 export interface CareProduct {
   name: string;
+  /** 서버가 실존 여부 검증에만 쓰는 URL — 화면은 특정 판매처로 안 보내고 제품명으로 검색한다. */
   url: string;
   reason: string;
   evidence?: CareEvidence | null;
