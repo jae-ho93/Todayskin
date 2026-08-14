@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import type { ComponentProps } from 'react';
 import {
   ActivityIndicator,
   LayoutChangeEvent,
@@ -21,16 +22,18 @@ import { api } from '../../src/api/client';
 import { colors, MAX_FONT_SCALE, radius, spacing, typography } from '../../src/theme';
 import type { CareType } from '../../src/types';
 
-const CARE_TABS: { key: CareType; label: string }[] = [
-  { key: 'weather', label: '날씨 기반' },
-  { key: 'skin', label: '피부 기반' },
-  { key: 'combined', label: '복합 기반' },
-  { key: 'morning', label: '다음날 아침' },
+type IoniconName = ComponentProps<typeof Ionicons>['name'];
+
+const CARE_TABS: { key: CareType; label: string; icon: IoniconName }[] = [
+  { key: 'weather', label: '날씨 기반', icon: 'partly-sunny-outline' },
+  { key: 'skin', label: '피부 기반', icon: 'body-outline' },
+  { key: 'combined', label: '복합 기반', icon: 'water-outline' },
+  { key: 'morning', label: '다음날 아침', icon: 'sunny-outline' },
 ];
 
-const PAGE_TABS: { key: 'routine' | 'products'; label: string }[] = [
-  { key: 'routine', label: '케어 루틴' },
-  { key: 'products', label: '추천 제품' },
+const PAGE_TABS: { key: 'routine' | 'products'; label: string; icon: IoniconName }[] = [
+  { key: 'routine', label: '케어 루틴', icon: 'clipboard-outline' },
+  { key: 'products', label: '추천 제품', icon: 'bag-handle-outline' },
 ];
 
 // 화면 7 개편: 케어 루틴+제품 추천 — 날씨/피부/복합/다음날 아침 4탭, 탭마다 루틴↔제품 스와이프.
@@ -92,7 +95,12 @@ export default function ProductsScreen() {
   return (
     <ScreenContainer refreshing={refreshing} onRefresh={reload}>
       <View style={styles.titleRow}>
-        <Text style={styles.title}>케어 루틴 · 추천 제품</Text>
+        <View style={styles.titleWithIcon}>
+          <View style={styles.titleIconBadge}>
+            <Ionicons name="sparkles-outline" size={16} color={colors.sageDark} />
+          </View>
+          <Text style={styles.title}>케어 루틴 · 추천 제품</Text>
+        </View>
         {state.status === 'success' && (
           <Pressable
             onPress={() => void refresh()}
@@ -120,6 +128,11 @@ export default function ProductsScreen() {
               }}
               style={[styles.tabChip, active && styles.tabChipActive]}
             >
+              <Ionicons
+                name={tab.icon}
+                size={14}
+                color={active ? colors.textInverse : colors.textSecondary}
+              />
               <Text style={[styles.tabText, active && styles.tabTextActive]} maxFontSizeMultiplier={MAX_FONT_SCALE}>
                 {tab.label}
               </Text>
@@ -171,6 +184,11 @@ export default function ProductsScreen() {
                   accessibilityLabel={p.label}
                   style={[styles.pageToggle, active && styles.pageToggleActive]}
                 >
+                  <Ionicons
+                    name={p.icon}
+                    size={15}
+                    color={active ? colors.sageDark : colors.textTertiary}
+                  />
                   <Text
                     style={[styles.pageToggleText, active && styles.pageToggleTextActive]}
                     maxFontSizeMultiplier={MAX_FONT_SCALE}
@@ -234,12 +252,24 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.sm,
   },
+  titleWithIcon: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  titleIconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.full,
+    backgroundColor: colors.sageLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   title: { ...typography.displaySm, color: colors.textPrimary },
   tabRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   tabChip: {
     flexGrow: 1,
     minWidth: '46%',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
     paddingVertical: spacing.sm,
     borderRadius: radius.full,
     backgroundColor: colors.surface,
@@ -287,7 +317,10 @@ const styles = StyleSheet.create({
   },
   pageToggle: {
     flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
     paddingVertical: spacing.sm,
     borderRadius: radius.md,
     backgroundColor: colors.surfaceMuted,

@@ -1,28 +1,40 @@
 import { Ionicons } from '@expo/vector-icons';
+import type { ComponentProps } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from './Card';
-import { colors, MAX_FONT_SCALE, spacing, typography } from '../theme';
+import { colors, MAX_FONT_SCALE, radius, spacing, typography } from '../theme';
 import type { AsyncState } from '../lib/async-state';
 import type { CarePlan } from '../types';
 
+type IoniconName = ComponentProps<typeof Ionicons>['name'];
+
 interface CareRoutinePreviewProps {
   title: string;
+  icon: IoniconName;
+  accent: string;
+  accentBg: string;
   state: AsyncState<CarePlan>;
   onPress: () => void;
 }
 
 /**
- * 홈 화면용 케어 루틴 요약 카드 — 첫 단계만 미리 보여주고, 누르면 케어 탭의
- * 해당 루틴(세안 후/다음날 아침)으로 이동한다. 상세(성분·양·근거)는 케어 탭에서.
+ * 홈 화면용 케어 루틴 요약 카드 — 첫 단계만 미리 보여주고, 누르면 상세(케어 루틴+제품)
+ * 화면으로 이동한다. icon/accent는 카드마다 달라서(세안 후=민트, 다음날 아침=하늘빛)
+ * CareRoutineCard의 phase 팔레트와 같은 톤으로 홈 화면에서도 바로 구분이 된다.
  */
-export function CareRoutinePreview({ title, state, onPress }: CareRoutinePreviewProps) {
+export function CareRoutinePreview({ title, icon, accent, accentBg, state, onPress }: CareRoutinePreviewProps) {
   const firstStep = state.status === 'success' ? state.data.routine[0] : null;
 
   return (
     <Pressable onPress={onPress} style={({ pressed }) => pressed && styles.pressed}>
-      <Card style={styles.card}>
+      <Card style={[styles.card, { borderLeftWidth: 4, borderLeftColor: accent }]}>
         <View style={styles.headerRow}>
-          <Text style={styles.title}>{title}</Text>
+          <View style={styles.titleRow}>
+            <View style={[styles.iconBadge, { backgroundColor: accentBg }]}>
+              <Ionicons name={icon} size={16} color={accent} />
+            </View>
+            <Text style={styles.title}>{title}</Text>
+          </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
         </View>
 
@@ -54,6 +66,14 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.72 },
   card: { gap: spacing.xs },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  iconBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   title: { ...typography.subtitle, color: colors.textPrimary, fontWeight: '700' },
   loadingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   bodyText: { ...typography.bodySm, color: colors.textTertiary },

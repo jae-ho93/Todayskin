@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Card } from './Card';
 import { EvidenceLink } from './EvidenceLink';
 import { useToast } from './Toast';
-import { colors, MAX_FONT_SCALE, spacing, typography } from '../theme';
+import { colors, MAX_FONT_SCALE, radius, spacing, typography } from '../theme';
 import type { CareProduct } from '../types';
 
 interface CareProductCardProps {
@@ -19,7 +19,7 @@ function productSearchUrl(name: string): string {
 /**
  * 실제 존재하는 제품 — web_search로 확인된 name만 신뢰한다(가상 제품 없음, url은 서버가
  * 실존 여부 검증용으로만 쓴다). 카드를 누르면 특정 판매처로 바로 이동하는 대신 제품명으로
- * 가격비교 검색 결과를 연다 — 사용자마다 자주 쓰는 쇼핑몰이나 쿠폰이 다르기 때문이다.
+ * 검색 결과를 연다 — 사용자마다 자주 쓰는 쇼핑몰이나 쿠폰이 다르기 때문이다.
  */
 export function CareProductCard({ product }: CareProductCardProps) {
   const [expanded, setExpanded] = useState(false);
@@ -36,24 +36,28 @@ export function CareProductCard({ product }: CareProductCardProps) {
 
   return (
     <Card style={styles.card}>
-      <Pressable
-        onPress={openProductSearch}
-        accessibilityRole="link"
-        accessibilityLabel={`${product.name} 검색해서 구매하기`}
-        style={({ pressed }) => [styles.header, pressed && styles.pressed]}
-      >
+      <View style={styles.header}>
+        <View style={styles.iconBadge}>
+          <Ionicons name="bag-handle-outline" size={18} color={colors.sageDark} />
+        </View>
         <View style={styles.headerText}>
           <Text style={styles.name} numberOfLines={2}>
             {product.name}
           </Text>
-          <View style={styles.linkRow}>
-            <Text style={styles.linkLabel}>검색해서 구매하기</Text>
-            <Ionicons name="open-outline" size={14} color={colors.sageDark} />
-          </View>
         </View>
-      </Pressable>
+      </View>
 
       <Text style={styles.reason}>{product.reason}</Text>
+
+      <Pressable
+        onPress={openProductSearch}
+        accessibilityRole="link"
+        accessibilityLabel={`${product.name} 검색해서 구매하기`}
+        style={({ pressed }) => [styles.ctaButton, pressed && styles.ctaButtonPressed]}
+      >
+        <Ionicons name="search-outline" size={15} color={colors.textInverse} />
+        <Text style={styles.ctaText}>검색해서 구매하기</Text>
+      </Pressable>
 
       {hasEvidence && (
         <View>
@@ -82,12 +86,28 @@ export function CareProductCard({ product }: CareProductCardProps) {
 const styles = StyleSheet.create({
   card: { gap: spacing.sm },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  pressed: { opacity: 0.72 },
+  iconBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.full,
+    backgroundColor: colors.sageLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerText: { flex: 1, gap: 2 },
-  name: { ...typography.subtitle, color: colors.textPrimary },
-  linkRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  linkLabel: { ...typography.caption, color: colors.sageDark, fontWeight: '600' },
+  name: { ...typography.subtitle, color: colors.textPrimary, fontSize: 16 },
   reason: { ...typography.bodySm, color: colors.textSecondary },
+  ctaButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.sage,
+    borderRadius: radius.full,
+    paddingVertical: spacing.sm,
+  },
+  ctaButtonPressed: { backgroundColor: colors.sageDark },
+  ctaText: { ...typography.bodySm, color: colors.textInverse, fontWeight: '700' },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   toggleText: { ...typography.caption, color: colors.textTertiary },
 });

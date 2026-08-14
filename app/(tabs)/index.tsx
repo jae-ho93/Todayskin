@@ -174,6 +174,9 @@ export default function HomeDashboard() {
               <View style={styles.careRoutineList}>
                 <CareRoutinePreview
                   title="세안 후 케어"
+                  icon="water-outline"
+                  accent="#4F8F5B"
+                  accentBg="#DCEEDC"
                   state={afterWashCare.state}
                   onPress={() =>
                     router.push({ pathname: '/care/[type]', params: { type: 'combined', diagnosisId: diagnosisId ?? '' } })
@@ -181,6 +184,9 @@ export default function HomeDashboard() {
                 />
                 <CareRoutinePreview
                   title="다음날 아침 케어"
+                  icon="sunny-outline"
+                  accent="#3F6FA6"
+                  accentBg="#DCEAFB"
                   state={morningCare.state}
                   onPress={() =>
                     router.push({ pathname: '/care/[type]', params: { type: 'morning', diagnosisId: diagnosisId ?? '' } })
