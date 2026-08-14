@@ -40,6 +40,11 @@ export function useCarePlan({ careType, diagnosisId }: UseCarePlanOptions) {
   const [refreshing, setRefreshing] = useState(false);
   const mountedRef = useRef(true);
   const { refreshing: liveRefreshing, watch, cancel } = useAsyncJob<CarePlan>(unwrapCarePlan);
+  // refresh() 시점에 "지금 화면에 떠 있는 루틴"을 그대로 서버에 돌려보내려면 최신 state가
+  // 필요하다 — fetchPlan을 careType/coords/diagnosisId에만 의존시켜 재생성을 줄이는 대신
+  // ref로 최신값을 읽는다.
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -50,16 +55,30 @@ export function useCarePlan({ careType, diagnosisId }: UseCarePlanOptions) {
 
   const fetchPlan = useCallback(
     (refresh?: boolean): Promise<CarePlanFastResponse | null> => {
+      // "다른 추천 보기": 이미 보여주고 있던 루틴을 그대로 서버에 돌려보내 routine은
+      // 재생성하지 않고 products만 새로 받는다 — 매번 루틴까지 바뀌면 사용자가 방금
+      // 확인한 케어 순서가 새로고침마다 흔들린다.
+      const current = stateRef.current;
+      const preserved = refresh && current.status === 'success' ? current.data : null;
+
       if (careType === 'weather') {
         return api.getCareWeatherFast({ coords: coords ?? undefined, refresh });
       }
       if (!diagnosisId) return Promise.resolve(null);
       if (careType === 'morning') {
-        return api.getCareMorningFast(diagnosisId, { coords: coords ?? undefined, refresh });
+        return api.getCareMorningFast(diagnosisId, {
+          coords: coords ?? undefined,
+          refresh,
+          routine: preserved?.routine,
+          medicalDisclaimer: preserved?.medicalDisclaimer,
+        });
       }
-      return careType === 'skin'
-        ? api.getCareSkinFast(diagnosisId, refresh)
-        : api.getCareCombinedFast(diagnosisId, refresh);
+      const fn = careType === 'skin' ? api.getCareSkinFast : api.getCareCombinedFast;
+      return fn(diagnosisId, {
+        refresh,
+        routine: preserved?.routine,
+        medicalDisclaimer: preserved?.medicalDisclaimer,
+      });
     },
     [careType, coords, diagnosisId],
   );

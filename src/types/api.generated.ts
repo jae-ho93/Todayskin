@@ -1607,11 +1607,16 @@ export interface components {
             generatedAt?: string;
             plan: components["schemas"]["CarePlanDto"];
         };
+        CareRoutineStepInputDto: Record<string, never>;
         CareDiagnosisRequestDto: {
             /** @description 이 진단 기준으로 생성 */
             diagnosisId?: string;
             /** @description 직전 결과를 무시하고 새로 생성 */
             refresh?: boolean;
+            /** @description 화면에 이미 떠 있는 루틴 — 있으면 routine은 재생성하지 않고 products만 새로 찾는다. */
+            routine?: components["schemas"]["CareRoutineStepInputDto"][];
+            /** @description routine과 함께 그대로 유지할 의료 면책 문구 */
+            medicalDisclaimer?: Record<string, never> | null;
         };
         CareMorningRequestDto: {
             /** @description 이 진단의 피부 상태를 기준으로 생성 */
@@ -1628,6 +1633,10 @@ export interface components {
             lon?: number;
             /** @description 직전 결과를 무시하고 새로 생성 */
             refresh?: boolean;
+            /** @description 화면에 이미 떠 있는 루틴 — 있으면 routine은 재생성하지 않고 products만 새로 찾는다. */
+            routine?: components["schemas"]["CareRoutineStepInputDto"][];
+            /** @description routine과 함께 그대로 유지할 의료 면책 문구 */
+            medicalDisclaimer?: Record<string, never> | null;
         };
         SkinPartMetricDto: {
             /**

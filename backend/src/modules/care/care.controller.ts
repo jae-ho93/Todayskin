@@ -53,7 +53,11 @@ export class CareController {
     @CurrentUser() user: JwtPayload,
     @Body() body: CareDiagnosisRequestDto,
   ): Promise<CarePlanFastResponseDto> {
-    return this.careService.getSkinFast(user.sub, body.diagnosisId, body.refresh);
+    return this.careService.getSkinFast(user.sub, body.diagnosisId, {
+      refresh: body.refresh,
+      routine: body.routine,
+      medicalDisclaimer: body.medicalDisclaimer,
+    });
   }
 
   @Post('combined')
@@ -68,7 +72,11 @@ export class CareController {
     @CurrentUser() user: JwtPayload,
     @Body() body: CareDiagnosisRequestDto,
   ): Promise<CarePlanFastResponseDto> {
-    return this.careService.getCombinedFast(user.sub, body.diagnosisId, body.refresh);
+    return this.careService.getCombinedFast(user.sub, body.diagnosisId, {
+      refresh: body.refresh,
+      routine: body.routine,
+      medicalDisclaimer: body.medicalDisclaimer,
+    });
   }
 
   @Post('morning')
@@ -91,6 +99,8 @@ export class CareController {
       lat: body.lat,
       lon: body.lon,
       refresh: body.refresh,
+      routine: body.routine,
+      medicalDisclaimer: body.medicalDisclaimer,
     });
   }
 }

@@ -2,10 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CareProductCard } from '../../src/components/CareProductCard';
-import { CareRoutineCard } from '../../src/components/CareRoutineCard';
+import { CareRoutinePhaseCard } from '../../src/components/CareRoutinePhaseCard';
 import { RetryButton } from '../../src/components/RetryButton';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { useCarePlan } from '../../src/features/care/useCarePlan';
+import { groupRoutineByPhase } from '../../src/lib/care-routine';
 import { colors, spacing, typography } from '../../src/theme';
 import type { CareType } from '../../src/types';
 
@@ -56,8 +57,8 @@ export default function CareDetailScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>케어 루틴</Text>
             <View style={styles.list}>
-              {state.data.routine.map((step, i) => (
-                <CareRoutineCard key={`${step.phase}-${i}`} step={step} />
+              {groupRoutineByPhase(state.data.routine).map((group) => (
+                <CareRoutinePhaseCard key={group.phase} group={group} />
               ))}
             </View>
           </View>

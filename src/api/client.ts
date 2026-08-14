@@ -14,6 +14,7 @@ import type {
   RecommendationsFastResponse,
   WeatherProductsFastResponse,
   CarePlanFastResponse,
+  CareRoutineStep,
   ScoreSeries,
   SignupRequest,
   SocialLoginResponse,
@@ -460,18 +461,46 @@ export const api = {
     const qs = params.toString();
     return safeGetJson<CarePlanFastResponse>(`/care/weather${qs ? `?${qs}` : ''}`, 20000);
   },
-  getCareSkinFast: (diagnosisId: string, refresh?: boolean) =>
-    safePostJson<CarePlanFastResponse>('/care/skin', { diagnosisId, refresh }, 20000),
-  getCareCombinedFast: (diagnosisId: string, refresh?: boolean) =>
-    safePostJson<CarePlanFastResponse>('/care/combined', { diagnosisId, refresh }, 20000),
+  // refresh=true일 때 opts.routine/medicalDisclaimer를 같이 보내면 서버가 그 루틴을
+  // 그대로 유지하고 products만 새로 생성한다("다른 추천 보기"가 루틴까지 바꾸지 않게).
+  getCareSkinFast: (
+    diagnosisId: string,
+    opts?: { refresh?: boolean; routine?: CareRoutineStep[]; medicalDisclaimer?: string | null },
+  ) =>
+    safePostJson<CarePlanFastResponse>(
+      '/care/skin',
+      { diagnosisId, refresh: opts?.refresh, routine: opts?.routine, medicalDisclaimer: opts?.medicalDisclaimer },
+      20000,
+    ),
+  getCareCombinedFast: (
+    diagnosisId: string,
+    opts?: { refresh?: boolean; routine?: CareRoutineStep[]; medicalDisclaimer?: string | null },
+  ) =>
+    safePostJson<CarePlanFastResponse>(
+      '/care/combined',
+      { diagnosisId, refresh: opts?.refresh, routine: opts?.routine, medicalDisclaimer: opts?.medicalDisclaimer },
+      20000,
+    ),
   // "다음날 아침" — 같은 진단의 피부 상태 + 오늘 좌표 기준 실시간 날씨.
   getCareMorningFast: (
     diagnosisId: string,
-    opts?: { coords?: { latitude: number; longitude: number }; refresh?: boolean },
+    opts?: {
+      coords?: { latitude: number; longitude: number };
+      refresh?: boolean;
+      routine?: CareRoutineStep[];
+      medicalDisclaimer?: string | null;
+    },
   ) =>
     safePostJson<CarePlanFastResponse>(
       '/care/morning',
-      { diagnosisId, lat: opts?.coords?.latitude, lon: opts?.coords?.longitude, refresh: opts?.refresh },
+      {
+        diagnosisId,
+        lat: opts?.coords?.latitude,
+        lon: opts?.coords?.longitude,
+        refresh: opts?.refresh,
+        routine: opts?.routine,
+        medicalDisclaimer: opts?.medicalDisclaimer,
+      },
       20000,
     ),
 

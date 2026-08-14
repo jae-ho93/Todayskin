@@ -25,7 +25,7 @@ jest.mock('./care-link-validator', () => ({
  */
 describe('CareService', () => {
   let service: CareService;
-  let openAiClient: { generateCarePlan: jest.Mock };
+  let openAiClient: { generateCarePlan: jest.Mock; generateCareProducts: jest.Mock };
   let weatherService: { resolveServerWeather: jest.Mock; getSnapshotById: jest.Mock };
   let redis: { getJson: jest.Mock; setJson: jest.Mock; invalidate: jest.Mock };
   let jobService: { enqueue: jest.Mock };
@@ -62,7 +62,7 @@ describe('CareService', () => {
     jest.clearAllMocks();
     isLinkDead.mockResolvedValue(false);
 
-    openAiClient = { generateCarePlan: jest.fn() };
+    openAiClient = { generateCarePlan: jest.fn(), generateCareProducts: jest.fn() };
     weatherService = {
       resolveServerWeather: jest.fn().mockResolvedValue(liveWeather()),
       getSnapshotById: jest.fn(),
@@ -250,6 +250,33 @@ describe('CareService', () => {
       expect(plan.routine[0].evidence).toBeNull();
     });
 
+    it('weather/skin/combined은 phase를 "외출 후(세안 후)"/"자기 전" 두 값으로 정규화한다', async () => {
+      openAiClient.generateCarePlan.mockResolvedValue({
+        routine: [
+          { phase: '아침', step: '보습', ingredient: null, amount: null, reason: 'r', evidence: null },
+          { phase: '외출 후(세안 후)', step: '세럼', ingredient: null, amount: null, reason: 'r', evidence: null },
+          { phase: '취침 전 마무리', step: '크림', ingredient: null, amount: null, reason: 'r', evidence: null },
+          { phase: '자기 전', step: '수분팩', ingredient: null, amount: null, reason: 'r', evidence: null },
+        ],
+        products: [],
+        medicalDisclaimer: null,
+      });
+
+      const plan = await service.generateLive(1, 'weather', {
+        careKey: 'weather:서울특별시:2026-08-14',
+        careType: 'weather',
+        lat: 37.5,
+        lon: 127,
+      });
+
+      expect(plan.routine.map((r) => r.phase)).toEqual([
+        '외출 후(세안 후)',
+        '외출 후(세안 후)', // "세안"이 들어있어도 밤 신호로 오분류되지 않는다
+        '자기 전',
+        '자기 전',
+      ]);
+    });
+
     it('morning은 combined와 달리 진단에 연결된 스냅샷이 아니라 좌표 기준 실시간 날씨를 쓴다', async () => {
       prisma.diagnosis.findFirst.mockResolvedValue({
         id: 'diag-1',
@@ -272,6 +299,68 @@ describe('CareService', () => {
       expect(weatherService.resolveServerWeather).toHaveBeenCalledWith(37.5, 127);
       expect(weatherService.getSnapshotById).not.toHaveBeenCalled();
       expect(prisma.diagnosis.findUnique).not.toHaveBeenCalled();
+    });
+
+    describe('routineOverride — "다른 추천 보기"는 루틴을 그대로 두고 제품만 새로 생성한다', () => {
+      const fixedRoutine = [
+        {
+          phase: '아침',
+          step: '보습',
+          ingredient: '히알루론산',
+          amount: '2방울',
+          reason: '기존 루틴 그대로',
+          detail: '기존 detail 그대로',
+          evidence: null,
+        },
+      ];
+
+      it('generateCarePlan을 호출하지 않고 generateCareProducts만 호출하며, routine을 그대로 돌려준다', async () => {
+        openAiClient.generateCareProducts.mockResolvedValue([
+          { name: '새 제품', url: 'https://new.example.com', reason: 'r', evidence: null },
+        ]);
+
+        const plan = await service.generateLive(1, 'weather', {
+          careKey: 'weather:서울특별시:2026-08-14',
+          careType: 'weather',
+          lat: 37.5,
+          lon: 127,
+          routineOverride: fixedRoutine,
+          medicalDisclaimerOverride: '기존 문구 그대로',
+        });
+
+        expect(openAiClient.generateCarePlan).not.toHaveBeenCalled();
+        expect(openAiClient.generateCareProducts).toHaveBeenCalledWith(
+          'weather',
+          [{ phase: '아침', step: '보습', ingredient: '히알루론산', amount: '2방울' }],
+          null,
+          expect.objectContaining({ uvIndex: 8 }),
+          [],
+        );
+        expect(plan.routine).toEqual(fixedRoutine);
+        expect(plan.medicalDisclaimer).toBe('기존 문구 그대로');
+        expect(plan.products).toEqual([
+          { name: '새 제품', url: 'https://new.example.com', reason: 'r', evidence: null },
+        ]);
+      });
+
+      it('제품 0개로 걸러지면 같은 exclude로 1회 재요청한다', async () => {
+        redis.getJson.mockResolvedValueOnce([]); // 기존 exclude 목록
+        openAiClient.generateCareProducts
+          .mockResolvedValueOnce([{ name: '제품A', url: 'https://a.example.com', reason: 'r', evidence: null }])
+          .mockResolvedValueOnce([{ name: '제품B', url: 'https://b.example.com', reason: 'r', evidence: null }]);
+        isLinkDead.mockImplementation((url: string) => Promise.resolve(url.includes('a.example')));
+
+        const plan = await service.generateLive(1, 'weather', {
+          careKey: 'weather:서울특별시:2026-08-14',
+          careType: 'weather',
+          lat: 37.5,
+          lon: 127,
+          routineOverride: fixedRoutine,
+        });
+
+        expect(openAiClient.generateCareProducts).toHaveBeenCalledTimes(2);
+        expect(plan.products.map((p) => p.name)).toEqual(['제품B']);
+      });
     });
   });
 });

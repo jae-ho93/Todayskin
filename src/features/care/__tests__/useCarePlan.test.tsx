@@ -63,7 +63,11 @@ describe('useCarePlan', () => {
     const { result } = renderHook(() => useCarePlan({ careType: 'skin', diagnosisId: 'diag-1' }));
     await flush();
 
-    expect(api.getCareSkinFast).toHaveBeenCalledWith('diag-1', undefined);
+    expect(api.getCareSkinFast).toHaveBeenCalledWith('diag-1', {
+      refresh: undefined,
+      routine: undefined,
+      medicalDisclaimer: undefined,
+    });
     expect(result.current.state.status).toBe('success');
   });
 
@@ -71,7 +75,11 @@ describe('useCarePlan', () => {
     renderHook(() => useCarePlan({ careType: 'combined', diagnosisId: 'diag-1' }));
     await flush();
 
-    expect(api.getCareCombinedFast).toHaveBeenCalledWith('diag-1', undefined);
+    expect(api.getCareCombinedFast).toHaveBeenCalledWith('diag-1', {
+      refresh: undefined,
+      routine: undefined,
+      medicalDisclaimer: undefined,
+    });
   });
 
   it('morning은 diagnosisId 없으면 empty이고, 있으면 진단+좌표 둘 다로 요청한다', async () => {
@@ -85,6 +93,8 @@ describe('useCarePlan', () => {
     expect(api.getCareMorningFast).toHaveBeenCalledWith('diag-1', {
       coords: { latitude: 37.5, longitude: 127 },
       refresh: undefined,
+      routine: undefined,
+      medicalDisclaimer: undefined,
     });
   });
 

@@ -3347,6 +3347,10 @@
           "plan"
         ]
       },
+      "CareRoutineStepInputDto": {
+        "type": "object",
+        "properties": {}
+      },
       "CareDiagnosisRequestDto": {
         "type": "object",
         "properties": {
@@ -3357,6 +3361,18 @@
           "refresh": {
             "type": "boolean",
             "description": "직전 결과를 무시하고 새로 생성"
+          },
+          "routine": {
+            "description": "화면에 이미 떠 있는 루틴 — 있으면 routine은 재생성하지 않고 products만 새로 찾는다.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CareRoutineStepInputDto"
+            }
+          },
+          "medicalDisclaimer": {
+            "type": "object",
+            "description": "routine과 함께 그대로 유지할 의료 면책 문구",
+            "nullable": true
           }
         }
       },
@@ -3380,6 +3396,18 @@
           "refresh": {
             "type": "boolean",
             "description": "직전 결과를 무시하고 새로 생성"
+          },
+          "routine": {
+            "description": "화면에 이미 떠 있는 루틴 — 있으면 routine은 재생성하지 않고 products만 새로 찾는다.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CareRoutineStepInputDto"
+            }
+          },
+          "medicalDisclaimer": {
+            "type": "object",
+            "description": "routine과 함께 그대로 유지할 의료 면책 문구",
+            "nullable": true
           }
         }
       },

@@ -25,6 +25,7 @@ import { diagnosisToSkinInput } from './mappers/skin-analysis.mapper';
 import { fallbackCarePlan } from './content/fallback-content';
 import { isLinkDead } from './care-link-validator';
 import { CarePlanDto, CarePlanFastResponseDto, CareType } from './dto/care-plan.dto';
+import { CARE_FIXED_PHASES } from '../openai/openai.client';
 
 /** Redis exclude 세션 TTL — 하루 지나면 "최근 추천"의 의미가 옅어진다. */
 const EXCLUDE_TTL_S = 24 * 60 * 60;
@@ -39,12 +40,46 @@ function normalizeProductName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, '');
 }
 
+/** morning 케어에 잘못 섞여 들어온 밤 시간대 단계(자기 전/저녁/세안 등)를 걸러낸다. */
+function isBedtimePhase(phase: string): boolean {
+  return (
+    phase.includes('자기') ||
+    phase.includes('저녁') ||
+    phase.includes('밤') ||
+    phase.includes('취침') ||
+    phase.includes('세안')
+  );
+}
+
+/**
+ * weather/skin/combined 루틴의 phase는 "외출 후(세안 후)"/"자기 전" 두 값 고정 — 프롬프트로
+ * 지시해도 LLM이 가끔 다른 문구를 쓰므로(제품 개수 지시 때와 같은 이유), 코드에서 표준 두 값
+ * 중 하나로 정규화한다. "자기"/"취침"만 밤 시간대 신호로 본다 — "세안"은 "외출 후(세안 후)"
+ * 라벨 자체에 포함된 단어라 밤 신호로 쓰면 정상 라벨까지 오분류된다.
+ */
+function normalizeFixedPhase(phase: string): (typeof CARE_FIXED_PHASES)[number] {
+  return phase.includes('자기') || phase.includes('취침') ? CARE_FIXED_PHASES[1] : CARE_FIXED_PHASES[0];
+}
+
+interface RefreshOpts {
+  refresh?: boolean;
+  /** 화면에 이미 떠 있는 루틴 — 있으면 products만 새로 생성한다. */
+  routine?: CarePlanDto['routine'];
+  medicalDisclaimer?: string | null;
+}
+
 interface CareJobPayload {
   careKey: string;
   careType: CareType;
   diagnosisId?: string;
   lat?: number;
   lon?: number;
+  /**
+   * "다른 추천 보기" — 화면에 이미 떠 있는 루틴을 그대로 넘기면 routine은 재생성하지
+   * 않고 products만 새로 찾는다(사용자가 방금 확인한 루틴이 새로고침마다 바뀌지 않게).
+   */
+  routineOverride?: CarePlanDto['routine'];
+  medicalDisclaimerOverride?: string | null;
 }
 
 /**
@@ -86,24 +121,32 @@ export class CareService {
   async getSkinFast(
     userId: number,
     diagnosisId: string,
-    refresh?: boolean,
+    opts?: RefreshOpts,
   ): Promise<CarePlanFastResponseDto> {
     await this.assertDiagnosisOwnership(diagnosisId, userId);
     const careKey = `skin:${diagnosisId}`;
-    return this.resolveFast(userId, 'skin', careKey, refresh, () =>
-      this.enqueueCareJob(userId, 'skin', careKey, { diagnosisId }),
+    return this.resolveFast(userId, 'skin', careKey, opts?.refresh, () =>
+      this.enqueueCareJob(userId, 'skin', careKey, {
+        diagnosisId,
+        routineOverride: opts?.routine,
+        medicalDisclaimerOverride: opts?.medicalDisclaimer,
+      }),
     );
   }
 
   async getCombinedFast(
     userId: number,
     diagnosisId: string,
-    refresh?: boolean,
+    opts?: RefreshOpts,
   ): Promise<CarePlanFastResponseDto> {
     await this.assertDiagnosisOwnership(diagnosisId, userId);
     const careKey = `combined:${diagnosisId}`;
-    return this.resolveFast(userId, 'combined', careKey, refresh, () =>
-      this.enqueueCareJob(userId, 'combined', careKey, { diagnosisId }),
+    return this.resolveFast(userId, 'combined', careKey, opts?.refresh, () =>
+      this.enqueueCareJob(userId, 'combined', careKey, {
+        diagnosisId,
+        routineOverride: opts?.routine,
+        medicalDisclaimerOverride: opts?.medicalDisclaimer,
+      }),
     );
   }
 
@@ -115,7 +158,7 @@ export class CareService {
   async getMorningFast(
     userId: number,
     diagnosisId: string,
-    opts?: { lat?: number; lon?: number; refresh?: boolean },
+    opts?: { lat?: number; lon?: number } & RefreshOpts,
   ): Promise<CarePlanFastResponseDto> {
     await this.assertDiagnosisOwnership(diagnosisId, userId);
     const careKey = `morning:${diagnosisId}:${todayKst()}`;
@@ -124,6 +167,8 @@ export class CareService {
         diagnosisId,
         lat: opts?.lat,
         lon: opts?.lon,
+        routineOverride: opts?.routine,
+        medicalDisclaimerOverride: opts?.medicalDisclaimer,
       }),
     );
   }
@@ -146,6 +191,10 @@ export class CareService {
    * 겹치는 제품만 골랐거나, 링크가 전부 죽었으면) 같은 exclude로 1회만 재호출한다.
    */
   async generateLive(userId: number, careType: CareType, payload: CareJobPayload): Promise<CarePlanDto> {
+    if (payload.routineOverride && payload.routineOverride.length > 0) {
+      return this.generateProductsOnly(userId, careType, payload);
+    }
+
     const skin = careType !== 'weather' ? await this.loadSkinInput(payload.diagnosisId!, userId) : null;
     const weather =
       careType !== 'skin' ? await this.loadWeatherInput(careType, payload) : null;
@@ -169,6 +218,65 @@ export class CareService {
 
     await this.appendExcludeList(excludeKey, plan.products.map((p) => p.name));
     return plan;
+  }
+
+  /**
+   * "다른 추천 보기" 전용 경로 — routine은 payload.routineOverride를 그대로 돌려주고
+   * products만 새로 생성한다. generateLive의 재시도·exclude 로직과 같은 정책을 쓰되
+   * routine 생성 호출 자체가 없다(더 빠르고 싸다).
+   */
+  private async generateProductsOnly(
+    userId: number,
+    careType: CareType,
+    payload: CareJobPayload,
+  ): Promise<CarePlanDto> {
+    const routine = payload.routineOverride!;
+    const skin = careType !== 'weather' ? await this.loadSkinInput(payload.diagnosisId!, userId) : null;
+    const weather = careType !== 'skin' ? await this.loadWeatherInput(careType, payload) : null;
+
+    const excludeKey = this.excludeKey(userId, careType);
+    const excludeProducts = (await this.redis.getJson<string[]>(excludeKey)) ?? [];
+    const routineContext = routine.map((r) => ({
+      phase: r.phase,
+      step: r.step,
+      ingredient: r.ingredient ?? null,
+      amount: r.amount ?? null,
+    }));
+
+    let generatedProducts = await this.openAiClient.generateCareProducts(
+      careType,
+      routineContext,
+      skin,
+      weather,
+      excludeProducts,
+    );
+    let products = await this.filterAndValidateProducts(generatedProducts, excludeProducts);
+
+    if (products.length === 0 && generatedProducts.length > 0) {
+      this.logger.warn(
+        `제품 전용 재생성 후처리 후 제품 0개 — 같은 exclude로 1회 재요청 (careType=${careType})`,
+      );
+      const retryExclude = Array.from(
+        new Set([...excludeProducts, ...generatedProducts.map((p) => p.name)]),
+      );
+      generatedProducts = await this.openAiClient.generateCareProducts(
+        careType,
+        routineContext,
+        skin,
+        weather,
+        retryExclude,
+      );
+      products = await this.filterAndValidateProducts(generatedProducts, retryExclude);
+    }
+
+    await this.appendExcludeList(excludeKey, products.map((p) => p.name));
+
+    return {
+      careType,
+      routine,
+      products,
+      medicalDisclaimer: payload.medicalDisclaimerOverride ?? null,
+    };
   }
 
   private async loadSkinInput(
@@ -217,20 +325,23 @@ export class CareService {
    * 1. exclude 필터: LLM이 "다른 제품 고르라"는 지시를 무시했을 경우의 서버측 방어.
    * 2. 링크 검증: 제품은 dead면 통째로 제거, evidence는 dead면 evidence만 비운다
    *    (근거 없이도 루틴/제품 자체는 유효할 수 있다).
+   * 3. morning 전용: 프롬프트로 "자기 전 단계 넣지 마라"를 지시해도 LLM이 가끔
+   *    어긴다(제품 개수 지시와 마찬가지로 프롬프트만으로는 100% 안 지켜짐) — 코드에서
+   *    한 번 더 걸러낸다.
    */
   private async postProcess(
     generated: GeneratedCarePlan,
     careType: CareType,
     excludeProducts: string[],
   ): Promise<CarePlanDto> {
-    const excludeSet = new Set(excludeProducts.map(normalizeProductName));
-    const afterExclude = generated.products.filter(
-      (p) => !excludeSet.has(normalizeProductName(p.name)),
-    );
+    const routineSource =
+      careType === 'morning'
+        ? generated.routine.filter((r) => !isBedtimePhase(r.phase))
+        : generated.routine.map((r) => ({ ...r, phase: normalizeFixedPhase(r.phase) }));
 
     const [products, routine] = await Promise.all([
-      this.validateProducts(afterExclude),
-      this.validateRoutineEvidence(generated.routine),
+      this.filterAndValidateProducts(generated.products, excludeProducts),
+      this.validateRoutineEvidence(routineSource),
     ]);
 
     return {
@@ -239,6 +350,16 @@ export class CareService {
       products,
       medicalDisclaimer: generated.medicalDisclaimer,
     };
+  }
+
+  /** exclude 이름 필터 + 링크 검증 — 전체 재생성과 제품 전용 재생성이 공유한다. */
+  private async filterAndValidateProducts(
+    products: GeneratedCareProduct[],
+    excludeProducts: string[],
+  ): Promise<GeneratedCareProduct[]> {
+    const excludeSet = new Set(excludeProducts.map(normalizeProductName));
+    const afterExclude = products.filter((p) => !excludeSet.has(normalizeProductName(p.name)));
+    return this.validateProducts(afterExclude);
   }
 
   private async validateProducts(
@@ -332,7 +453,13 @@ export class CareService {
     userId: number,
     careType: CareType,
     careKey: string,
-    extra: { diagnosisId?: string; lat?: number; lon?: number },
+    extra: {
+      diagnosisId?: string;
+      lat?: number;
+      lon?: number;
+      routineOverride?: CarePlanDto['routine'];
+      medicalDisclaimerOverride?: string | null;
+    },
   ): Promise<string | undefined> {
     const scope = `care:${userId}:${careType}:${careKey}`;
     const reservation = await this.idempotency.acquire(scope, userId);

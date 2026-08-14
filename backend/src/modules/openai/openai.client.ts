@@ -251,7 +251,7 @@ const CARE_JSON_FORMAT_SPEC = `반드시 아래 형식의 JSON **객체 하나�
 {
   "routine": [
     {
-      "phase": "단계 이름 (예: 외출 전, 외출 중, 자기 전 등 상황에 맞게)",
+      "phase": "이 카테고리에서 시스템 프롬프트가 지정한 phase 값 중 하나 (그대로, 다른 문구로 바꾸지 말 것)",
       "step": "무엇을 하는 단계인지",
       "ingredient": "핵심 성분 (없으면 null)",
       "amount": "바르는 양, 예: 500원 동전 크기 (없으면 null)",
@@ -321,10 +321,34 @@ function careExcludeRule(excludeProducts: string[]): string {
   return `\n\n다음 제품은 최근에 이미 추천했으니 이번에는 다른 제품을 고르세요: ${excludeProducts.join(', ')}`;
 }
 
+/** weather/skin/combined 루틴의 phase는 이 두 값 고정 — CareService.normalizeFixedPhase가
+ * 코드에서도 한 번 더 이 두 값으로 정규화한다(방어적 이중화). */
+export const CARE_FIXED_PHASES = ['외출 후(세안 후)', '자기 전'] as const;
+
+const CARE_PHASE_REASON_TEMPLATE: Record<'weather' | 'skin' | 'combined', string> = {
+  weather: `"오늘 날씨가 [구체적인 날씨/대기질 수치]하니까 [구체적인 행동]해야 해요" 형태로
+시작하세요 — 오직 오늘 날씨/대기질 데이터만 근거로 삼고, 사용자의 피부 상태는 절대 언급하지
+마세요.`,
+  skin: `"사용자의 피부가 [구체적인 측정값/등급]하니까 [구체적인 행동]해야 해요" 형태로
+시작하세요 — 오직 사용자의 피부 측정값만 근거로 삼고, 오늘 날씨는 절대 언급하지 마세요.`,
+  combined: `"오늘의 날씨와 사용자의 피부가 [구체적인 날씨 수치]와 [구체적인 피부 상태]이니까
+[구체적인 행동]해야 해요" 형태로 시작하세요 — 날씨와 피부 상태를 반드시 둘 다 근거로 삼으세요.`,
+};
+
+function carePhaseRule(careType: 'weather' | 'skin' | 'combined'): string {
+  return `routine의 phase는 반드시 다음 두 값 중 하나만 정확히 그대로 쓰세요 — 다른 이름은
+절대 만들지 마세요: "${CARE_FIXED_PHASES[0]}", "${CARE_FIXED_PHASES[1]}". 각 phase마다
+최소 2단계, 최대 4단계씩 담아 전체 routine이 4~7단계가 되게 하세요.
+
+같은 phase에 속한 모든 단계는 reason을 반드시 똑같은 한 문장으로 시작하세요 — 그 phase
+전체에 공통으로 적용되는 이유이기 때문에 단계마다 달라지면 안 됩니다(그 뒤에 그 단계만의
+설명을 1문장 더 붙이는 건 괜찮습니다). 이 공통 문장은 ${CARE_PHASE_REASON_TEMPLATE[careType]}`;
+}
+
 const CARE_WEATHER_SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 날씨 기반 케어 가이드 작성자입니다.
 오늘의 날씨/대기질 데이터를 보고, 확립된 피부과학 지식(자외선-광노화, 오존/미세먼지로 인한 산화
-스트레스, 습도 저하와 피부장벽 손상 등)에 근거해 "외출 전 / 외출 중 / 귀가 후" 하루 흐름에 맞는
-케어 루틴(routine)과 실제 구매 가능한 제품(products)을 함께 제시하세요.
+스트레스, 습도 저하와 피부장벽 손상 등)에 근거해 "${CARE_FIXED_PHASES[0]}"와 "${CARE_FIXED_PHASES[1]}"
+두 시점에 맞는 케어 루틴(routine)과 실제 구매 가능한 제품(products)을 함께 제시하세요.
 
 routine에는 각 단계에서 어떤 성분(ingredient)을 얼마나(amount) 바르는지 구체적으로 담으세요.
 products는 최소 5개, web_search로 실제 존재를 확인한 제품으로 담고, 각 제품이 오늘 날씨의 어떤
@@ -336,12 +360,13 @@ products는 최소 5개, web_search로 실제 존재를 확인한 제품으로 �
 3. ${CARE_PRODUCT_RULE}
 4. ${CARE_DETAIL_RULE}
 5. ${CARE_TIP_RULE}
-6. ${CARE_JSON_FORMAT_SPEC}`;
+6. ${carePhaseRule('weather')}
+7. ${CARE_JSON_FORMAT_SPEC}`;
 
 const CARE_SKIN_SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 피부 상태 기반 케어 가이드 작성자입니다.
 사용자의 오늘 피부 측정값(부위별 상태·수분·탄력), 여드름 구역 리포트(있으면), 피부 상태 분류
-결과(있으면)를 보고, 확립된 피부과학 지식에 근거해 케어 루틴(routine)과 실제 구매 가능한
-제품(products)을 함께 제시하세요.
+결과(있으면)를 보고, 확립된 피부과학 지식에 근거해 "${CARE_FIXED_PHASES[0]}"와 "${CARE_FIXED_PHASES[1]}"
+두 시점에 맞는 케어 루틴(routine)과 실제 구매 가능한 제품(products)을 함께 제시하세요.
 
 routine에는 각 단계에서 어떤 성분(ingredient)을 얼마나(amount) 바르는지 구체적으로 담으세요.
 products는 최소 5개, web_search로 실제 존재를 확인한 제품으로 담고, 각 제품이 사용자의 오늘
@@ -360,13 +385,14 @@ products는 최소 5개, web_search로 실제 존재를 확인한 제품으로 �
 4. ${CARE_SAFETY_RULE}
 5. ${CARE_DETAIL_RULE}
 6. ${CARE_TIP_RULE}
-7. ${CARE_JSON_FORMAT_SPEC}`;
+7. ${carePhaseRule('skin')}
+8. ${CARE_JSON_FORMAT_SPEC}`;
 
 const CARE_COMBINED_SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 날씨+피부 상태 복합 케어 가이드
 작성자입니다. 사용자는 방금 외출했다 귀가해 세안하고 피부를 측정했습니다. 오늘 피부 측정값과
-오늘(외출했던 날) 날씨/대기질 데이터를 함께 보고, 두 정보를 모두 반영한 오늘 저녁~밤 케어
-루틴(routine)과 실제 구매 가능한 제품(products)을 제시하세요. 예: 오늘 자외선이 높고 피부 수분이
-낮다면 그 조합에 맞는 케어를 제안하세요.
+오늘(외출했던 날) 날씨/대기질 데이터를 함께 보고, 두 정보를 모두 반영한 "${CARE_FIXED_PHASES[0]}"와
+"${CARE_FIXED_PHASES[1]}" 두 시점의 케어 루틴(routine)과 실제 구매 가능한 제품(products)을
+제시하세요. 예: 오늘 자외선이 높고 피부 수분이 낮다면 그 조합에 맞는 케어를 제안하세요.
 
 routine에는 각 단계에서 어떤 성분(ingredient)을 얼마나(amount) 바르는지 구체적으로 담으세요.
 products는 최소 5개, web_search로 실제 존재를 확인한 제품으로 담고, 오늘 날씨와 피부 상태를
@@ -382,17 +408,23 @@ products는 최소 5개, web_search로 실제 존재를 확인한 제품으로 �
 4. ${CARE_SAFETY_RULE}
 5. ${CARE_DETAIL_RULE}
 6. ${CARE_TIP_RULE}
-7. ${CARE_JSON_FORMAT_SPEC}`;
+7. ${carePhaseRule('combined')}
+8. ${CARE_JSON_FORMAT_SPEC}`;
 
 const CARE_MORNING_SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 아침 외출 준비 케어 가이드
 작성자입니다. 사용자는 어젯밤 세안 후 피부를 측정했고, 지금은 그 다음날 아침입니다 — 아직 새로
 측정하지 않았으므로 어젯밤 피부 측정값을 그대로 쓰되, 날씨는 오늘 아침 실시간 값입니다. 이
 조합으로 오늘 "외출 전 준비"와 "외출 중 관리" 중심의 케어 루틴(routine)과 실제 구매 가능한
-제품(products)을 제시하세요 — 어젯밤 케어(자기 전 등)는 다루지 마세요.
+제품(products)을 제시하세요.
 
-routine의 phase는 "외출 전"/"외출 중"처럼 오늘 하루 흐름에 맞게 쓰고, 각 단계에서 어떤
-성분(ingredient)을 얼마나(amount) 바르는지 구체적으로 담으세요. products는 최소 5개, web_search로
-실제 존재를 확인한 제품으로 담고, 오늘 날씨와 어젯밤 피부 상태를 함께 근거로 reason에 쓰세요.
+**routine에 "자기 전"/"저녁"/"밤"/세안 관련 단계를 절대 넣지 마세요.** 이건 어젯밤에 이미 끝난
+케어입니다 — 오늘 아침에 사용자가 실제로 마주할 상황(외출 전 준비, 외출 중 관리)만 다루세요.
+routine의 모든 phase는 "외출 전" 또는 "외출 중" 둘 중 하나여야 합니다. 그 외 시간대는 다음날
+아침 케어의 범위 밖입니다.
+
+routine의 각 단계에서 어떤 성분(ingredient)을 얼마나(amount) 바르는지 구체적으로 담으세요.
+products는 최소 5개, web_search로 실제 존재를 확인한 제품으로 담고, 오늘 날씨와 어젯밤 피부
+상태를 함께 근거로 reason에 쓰세요.
 
 **피부 상태 분류 결과를 언급할 때는 반드시 완곡하게 표현하세요** ("~일 수 있어요" 등). 이 서비스는
 의료 진단을 제공하지 않으므로 medicalDisclaimer에 참고용 문구를 반드시 포함하세요.
@@ -412,6 +444,37 @@ const CARE_SYSTEM_PROMPTS: Record<CareType, string> = {
   combined: CARE_COMBINED_SYSTEM_PROMPT,
   morning: CARE_MORNING_SYSTEM_PROMPT,
 };
+
+const CARE_PRODUCTS_ONLY_JSON_FORMAT_SPEC = `반드시 아래 형식의 JSON **객체 하나만** 출력하세요.
+코드블록이나 다른 설명 문장을 앞뒤에 절대 붙이지 마세요.
+
+{
+  "products": [
+    {
+      "name": "실제 제품명",
+      "url": "web_search로 확인한 실제 구매 페이지 URL",
+      "reason": "이 제품을 고른 이유",
+      "evidence": { "sourceName": "출처명", "sourceUrl": "실제 URL", "sourceType": "WHO|FDA|식약처|AAD|PubMed" } 또는 null
+    }
+  ]
+}`;
+
+/**
+ * "다른 추천 보기"용 — 이미 확정된 routine은 절대 바꾸지 않고 products만 새로 찾는다.
+ * 사용자 메시지에 [이미 확정된 케어 루틴]이 함께 들어간다(buildCareUserContent가 이어서
+ * 오늘 날씨/피부 데이터도 붙인다).
+ */
+const CARE_PRODUCTS_ONLY_SYSTEM_PROMPT = `당신은 화장품 추천 서비스의 제품 담당자입니다. 사용자
+메시지에 있는 [이미 확정된 케어 루틴]은 이미 화면에 표시되어 있고 절대 바꿀 수 없습니다 — 그
+루틴에 맞는 실제 구매 가능한 제품만 새로 찾아주세요. 이전에 보여준 제품과 겹치지 않게 다른 제품을
+고르세요.
+
+반드시 지킬 규칙:
+1. ${CARE_TONE_RULE}
+2. ${CARE_EVIDENCE_RULE}
+3. ${CARE_PRODUCT_RULE}
+4. ${CARE_SAFETY_RULE}
+5. ${CARE_PRODUCTS_ONLY_JSON_FORMAT_SPEC}`;
 
 function buildCareUserContent(
   careType: CareType,
@@ -754,38 +817,7 @@ export class OpenAiClient {
       tools: [{ type: 'web_search' }],
     };
 
-    const callOpts = {
-      endpoint: this.responsesEndpoint,
-      timeoutMs: this.careTimeoutMs,
-      totalBudgetMs: CARE_TOTAL_BUDGET_MS,
-      parse: (res: Response) => res.json() as Promise<unknown>,
-    };
-
-    let data = await this.callOpenAi<unknown>(payload, callOpts);
-    let raw: unknown;
-    try {
-      raw = this.extractCarePlanJson(data);
-    } catch (e) {
-      this.logger.warn(
-        `케어 플랜 JSON 파싱 실패, 보정 재요청 1회: ${e instanceof Error ? e.message : String(e)}`,
-      );
-      const responseId = (data as { id?: string })?.id;
-      const correctivePayload = responseId
-        ? {
-            model: this.model,
-            previous_response_id: responseId,
-            input: [
-              {
-                role: 'user',
-                content: 'JSON 객체만 출력하세요. 코드블록이나 다른 텍스트 없이 순수 JSON만 응답하세요.',
-              },
-            ],
-          }
-        : payload;
-      data = await this.callOpenAi<unknown>(correctivePayload, callOpts);
-      raw = this.extractCarePlanJson(data);
-    }
-
+    const raw = await this.callCareResponsesJson(payload);
     const plan = normalizeGeneratedCarePlan(raw);
     if (plan.routine.length === 0 && plan.products.length === 0) {
       throw new OpenAiUnavailable('OpenAI returned an empty care plan');
@@ -806,7 +838,109 @@ export class OpenAiClient {
     return plan;
   }
 
+  /**
+   * 제품만 새로 생성 — "다른 추천 보기"가 눌렸을 때 이미 확정되어 화면에 떠 있는 루틴은
+   * 그대로 두고 products만 다시 찾는다. routine은 컨텍스트로만 넘기고 응답에도 다시
+   * 요구하지 않는다 — 매번 루틴까지 다시 만들면 사용자가 보던 루틴이 바뀌어버린다.
+   */
+  async generateCareProducts(
+    careType: CareType,
+    routine: Pick<GeneratedCareRoutineStep, 'phase' | 'step' | 'ingredient' | 'amount'>[],
+    skin: SkinInput | null,
+    weather: WeatherInput | null,
+    excludeProducts: string[] = [],
+  ): Promise<GeneratedCareProduct[]> {
+    if (this.mockEnabled) {
+      return this.mockCarePlan(careType).products;
+    }
+    if (!this.apiKey) {
+      throw new OpenAiUnavailable('OPENAI_API_KEY not configured');
+    }
+
+    const payload = {
+      model: this.model,
+      input: [
+        { role: 'system', content: CARE_PRODUCTS_ONLY_SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content:
+            `[이미 확정된 케어 루틴 — 절대 바꾸지 마세요]\n${JSON.stringify(routine)}\n\n` +
+            buildCareUserContent(careType, skin, weather, excludeProducts),
+        },
+      ],
+      tools: [{ type: 'web_search' }],
+    };
+
+    const raw = await this.callCareResponsesJson(payload);
+    const obj = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+    const rawProducts = Array.isArray(obj.products) ? obj.products : [];
+    const products = rawProducts.filter(isGeneratedCareProduct).map((item) => {
+      const itemRaw = item as unknown as Record<string, unknown>;
+      return {
+        name: item.name,
+        url: item.url,
+        reason: item.reason,
+        evidence: normalizeGeneratedCareEvidence(itemRaw.evidence),
+      };
+    });
+
+    if (products.length === 0) {
+      throw new OpenAiUnavailable('OpenAI returned no products');
+    }
+
+    const policyResult = this.evidencePolicy.validateWeatherProducts(
+      products.map((p) => ({ explanation: p.reason })),
+    );
+    if (!policyResult.ok) {
+      this.logger.warn(
+        `OpenAI evidence policy violation (care products): ${JSON.stringify(policyResult.violations)}`,
+      );
+      throw new OpenAiUnavailable('OpenAI output violated evidence policy');
+    }
+
+    return products;
+  }
+
   // ── 내부 헬퍼 ──────────────────────────────────
+
+  /**
+   * Responses API 호출 + JSON 파싱, 실패 시 같은 대화(previous_response_id)에
+   * "JSON만 출력하라" 보정 메시지로 1회만 재요청한다(도구 재호출 비용을 아끼려고
+   * 보정 요청엔 web_search를 다시 붙이지 않는다). generateCarePlan/generateCareProducts가
+   * 공유한다.
+   */
+  private async callCareResponsesJson(payload: Record<string, unknown>): Promise<unknown> {
+    const callOpts = {
+      endpoint: this.responsesEndpoint,
+      timeoutMs: this.careTimeoutMs,
+      totalBudgetMs: CARE_TOTAL_BUDGET_MS,
+      parse: (res: Response) => res.json() as Promise<unknown>,
+    };
+
+    let data = await this.callOpenAi<unknown>(payload, callOpts);
+    try {
+      return this.extractCarePlanJson(data);
+    } catch (e) {
+      this.logger.warn(
+        `케어 응답 JSON 파싱 실패, 보정 재요청 1회: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      const responseId = (data as { id?: string })?.id;
+      const correctivePayload = responseId
+        ? {
+            model: this.model,
+            previous_response_id: responseId,
+            input: [
+              {
+                role: 'user',
+                content: 'JSON 객체만 출력하세요. 코드블록이나 다른 텍스트 없이 순수 JSON만 응답하세요.',
+              },
+            ],
+          }
+        : payload;
+      data = await this.callOpenAi<unknown>(correctivePayload, callOpts);
+      return this.extractCarePlanJson(data);
+    }
+  }
 
   /**
    * R30: 429/5xx는 지수 백오프 + 지터로 재시도하고, 연속 실패가 잦으면 회로를 열어
@@ -1087,22 +1221,24 @@ export class OpenAiClient {
 
   /** 개발용 mock — web_search 호출 없이 careType별 고정 루틴+제품을 돌려준다. */
   private mockCarePlan(careType: CareType): GeneratedCarePlan {
+    const firstPhase = careType === 'morning' ? '외출 전' : CARE_FIXED_PHASES[0];
+    const secondPhase = careType === 'morning' ? '외출 중' : CARE_FIXED_PHASES[1];
     return {
       routine: [
         {
-          phase: careType === 'weather' ? '외출 전' : '아침',
+          phase: firstPhase,
           step: '보습 + 자외선 차단',
           ingredient: '나이아신아마이드',
           amount: '500원 동전 크기',
           reason:
             careType === 'weather'
-              ? '오늘 자외선지수를 고려해 외출 전 차단이 도움될 수 있어요.'
+              ? '오늘 자외선지수를 고려해 차단이 도움될 수 있어요.'
               : '오늘 측정된 피부 수분 지표를 고려해 보습이 도움될 수 있어요.',
           detail: 'mock 응답 — 실제 생성 결과가 아닙니다.',
           evidence: null,
         },
         {
-          phase: '자기 전',
+          phase: secondPhase,
           step: '진정 + 보습 마무리',
           ingredient: '센텔라',
           amount: '앰플 2~3방울',

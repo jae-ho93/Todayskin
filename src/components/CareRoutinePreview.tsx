@@ -20,7 +20,7 @@ interface CareRoutinePreviewProps {
 /**
  * 홈 화면용 케어 루틴 요약 카드 — 첫 단계만 미리 보여주고, 누르면 상세(케어 루틴+제품)
  * 화면으로 이동한다. icon/accent는 카드마다 달라서(세안 후=민트, 다음날 아침=하늘빛)
- * CareRoutineCard의 phase 팔레트와 같은 톤으로 홈 화면에서도 바로 구분이 된다.
+ * CareRoutinePhaseCard의 phase 팔레트와 같은 톤으로 홈 화면에서도 바로 구분이 된다.
  */
 export function CareRoutinePreview({ title, icon, accent, accentBg, state, onPress }: CareRoutinePreviewProps) {
   const firstStep = state.status === 'success' ? state.data.routine[0] : null;
