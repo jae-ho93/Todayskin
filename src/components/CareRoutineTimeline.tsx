@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  phaseBannerBody: { flex: 1, gap: 2 },
+  phaseBannerBody: { flex: 1, minWidth: 0, gap: 2 },
   stepDot: {
     width: 24,
     height: 24,
@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
   rail: { flex: 1, width: 1.5, minHeight: spacing.md, backgroundColor: colors.border },
   phaseLabel: { ...typography.subtitle, fontWeight: '700' },
   reason: { ...typography.bodySm, color: colors.textSecondary },
-  stepBody: { flex: 1, paddingBottom: spacing.md, gap: spacing.xs },
+  stepBody: { flex: 1, minWidth: 0, paddingBottom: spacing.md, gap: spacing.xs },
   stepText: { ...typography.subtitle, color: colors.textPrimary, fontSize: 16 },
   detailRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
   ingredientChip: {
