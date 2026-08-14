@@ -51,6 +51,7 @@ export function CareRoutineCard({ step }: CareRoutineCardProps) {
       disabled={!hasMore}
       accessibilityRole={hasMore ? 'button' : undefined}
       accessibilityLabel={hasMore ? (expanded ? '자세히 접기' : '자세히 보기') : undefined}
+      style={({ pressed }) => pressed && hasMore && styles.pressed}
     >
       <Card style={[styles.card, { borderLeftWidth: 4, borderLeftColor: phase.accent }]}>
         <View style={styles.topRow}>
@@ -102,6 +103,7 @@ export function CareRoutineCard({ step }: CareRoutineCardProps) {
 }
 
 const styles = StyleSheet.create({
+  pressed: { opacity: 0.72 },
   card: { gap: spacing.sm },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   phaseBadge: {
