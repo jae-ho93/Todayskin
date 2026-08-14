@@ -4,7 +4,9 @@ import { EvidencePolicy } from './evidence.policy';
 import { EVIDENCE_SOURCES } from '../recommendations/content/evidence-sources';
 import {
   CARE_EVIDENCE_SOURCE_TYPES,
+  CARE_PRODUCT_CATEGORIES,
   CareEvidenceSourceType,
+  CareProductCategory,
   CareType,
 } from '../care/dto/care-plan.dto';
 
@@ -111,6 +113,7 @@ export interface GeneratedCareProduct {
   name: string;
   url: string;
   reason: string;
+  category: CareProductCategory;
   evidence: GeneratedCareEvidence | null;
 }
 
@@ -265,6 +268,7 @@ const CARE_JSON_FORMAT_SPEC = `반드시 아래 형식의 JSON **객체 하나�
       "name": "실제 제품명",
       "url": "web_search로 확인한 실제 구매 페이지 URL",
       "reason": "이 제품을 고른 이유",
+      "category": "제품 종류 — ${CARE_PRODUCT_CATEGORIES.join('|')} 중 정확히 하나",
       "evidence": { "sourceName": "...", "sourceUrl": "...", "sourceType": "WHO|FDA|식약처|AAD|PubMed" } 또는 null
     }
   ],
@@ -294,7 +298,12 @@ routine과 무관하게 따로 노는 제품을 넣지 마세요. reason 첫 문
 **한국 소비자 리뷰가 많은 제품을 우선하세요.** web_search로 올리브영, 쿠팡, 네이버쇼핑, 화해 같은
 국내 채널에서 실제 구매 후기·리뷰 수가 많은 제품인지 확인하고, 그런 제품을 최우선으로 담으세요.
 리뷰가 거의 없거나 국내에서 잘 알려지지 않은 제품보다는 많은 사람이 실제로 쓰고 후기를 남긴
-제품을 고르세요.`;
+제품을 고르세요.
+
+**category는 반드시 ${CARE_PRODUCT_CATEGORIES.join('/')} 중 정확히 하나로 분류하세요** — 그 제품이
+실제로 어떤 단계에 쓰는 제품인지(클렌저/토너/에센스/앰플/로션/크림/선크림/마스크팩) 기준으로
+고르고, 어디에도 안 맞으면 "기타"로 두세요. 화면이 이 카테고리로 제품을 묶어서 보여주므로
+반드시 채워야 합니다.`;
 
 const CARE_SAFETY_RULE = `사용자의 피부 상태 분류 결과(민감한 피부 양상)가 있다면, routine과 products
 모두에서 자극이 될 수 있는 성분·제품 유형(물리적 스크럽, 고농도 AHA/BHA 필링, 향료, 알코올, 강한
@@ -459,6 +468,7 @@ const CARE_PRODUCTS_ONLY_JSON_FORMAT_SPEC = `반드시 아래 형식의 JSON **�
       "name": "실제 제품명",
       "url": "web_search로 확인한 실제 구매 페이지 URL",
       "reason": "이 제품을 고른 이유",
+      "category": "제품 종류 — ${CARE_PRODUCT_CATEGORIES.join('|')} 중 정확히 하나",
       "evidence": { "sourceName": "출처명", "sourceUrl": "실제 URL", "sourceType": "WHO|FDA|식약처|AAD|PubMed" } 또는 null
     }
   ]
@@ -525,6 +535,13 @@ function isGeneratedCareProduct(value: unknown): value is GeneratedCareProduct {
   return isNonEmptyString(item.name) && isNonEmptyString(item.url) && isNonEmptyString(item.reason);
 }
 
+/** LLM이 화이트리스트 밖 문구를 쓰거나 category를 아예 빠뜨려도 화면이 깨지지 않게 '기타'로 떨어뜨린다. */
+function normalizeCareProductCategory(value: unknown): CareProductCategory {
+  return typeof value === 'string' && (CARE_PRODUCT_CATEGORIES as readonly string[]).includes(value)
+    ? (value as CareProductCategory)
+    : '기타';
+}
+
 /**
  * LLM 출력 raw 객체 → 검증·정규화된 GeneratedCarePlan.
  * 개별 항목이 형식을 어기면(phase/step/reason 등 필수 필드 누락) 그 항목만 버린다 —
@@ -559,6 +576,7 @@ function normalizeGeneratedCarePlan(raw: unknown): GeneratedCarePlan {
         name: item.name,
         url: item.url,
         reason: item.reason,
+        category: normalizeCareProductCategory(raw.category),
         evidence: normalizeGeneratedCareEvidence(raw.evidence),
       };
     });
@@ -885,6 +903,7 @@ export class OpenAiClient {
         name: item.name,
         url: item.url,
         reason: item.reason,
+        category: normalizeCareProductCategory(itemRaw.category),
         evidence: normalizeGeneratedCareEvidence(itemRaw.evidence),
       };
     });
@@ -1257,6 +1276,7 @@ export class OpenAiClient {
           name: '(mock) 데일리 수분 로션',
           url: 'https://example.com/mock-product',
           reason: 'mock 응답 — 실제 web_search 결과가 아닙니다.',
+          category: '로션',
           evidence: null,
         },
       ],

@@ -3,11 +3,12 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { CareProductCard } from '../../src/components/CareProductCard';
+import { CareProductGridCard } from '../../src/components/CareProductGridCard';
 import { RetryButton } from '../../src/components/RetryButton';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { useCarePlan } from '../../src/features/care/useCarePlan';
 import { api } from '../../src/api/client';
+import { groupProductsByCategory } from '../../src/lib/care-products';
 import { colors, MAX_FONT_SCALE, radius, spacing, typography } from '../../src/theme';
 import type { CareType } from '../../src/types';
 
@@ -144,9 +145,16 @@ export default function ProductsScreen() {
       ) : (
         <View>
           {state.data.products.length > 0 ? (
-            <View style={styles.list}>
-              {state.data.products.map((product, i) => (
-                <CareProductCard key={`${product.name}-${i}`} product={product} />
+            <View style={styles.categoryList}>
+              {groupProductsByCategory(state.data.products).map((group) => (
+                <View key={group.category} style={styles.categorySection}>
+                  <Text style={styles.categoryTitle}>{group.category}</Text>
+                  <View style={styles.grid}>
+                    {group.products.map((product, i) => (
+                      <CareProductGridCard key={`${product.name}-${i}`} product={product} />
+                    ))}
+                  </View>
+                </View>
               ))}
             </View>
           ) : (
@@ -230,7 +238,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   captureButtonText: { ...typography.subtitle, color: colors.textInverse },
-  list: { gap: spacing.md },
+  categoryList: { gap: spacing.lg },
+  categorySection: { gap: spacing.sm },
+  categoryTitle: { ...typography.subtitle, color: colors.textPrimary, fontWeight: '700' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   disclaimer: {
     ...typography.caption,
     color: colors.textTertiary,

@@ -319,6 +319,7 @@ describe('OpenAiClient', () => {
             name: '실제 선크림',
             url: 'https://example.com/sunscreen',
             reason: '오늘 자외선지수에 적합해요.',
+            category: '선크림',
             evidence: {
               sourceName: 'WHO UV Index Guide',
               sourceUrl: 'https://www.who.int/example',
@@ -334,7 +335,23 @@ describe('OpenAiClient', () => {
       expect(plan.routine).toHaveLength(1);
       expect(plan.products).toHaveLength(1);
       expect(plan.products[0].name).toBe('실제 선크림');
+      expect(plan.products[0].category).toBe('선크림');
       expect(plan.products[0].evidence?.sourceType).toBe('WHO');
+    });
+
+    it('category가 화이트리스트 밖이거나 없으면 "기타"로 정규화된다', async () => {
+      const body = JSON.stringify({
+        routine: [],
+        products: [
+          { name: '제품A', url: 'https://a.example.com', reason: 'r', category: '알수없는분류', evidence: null },
+          { name: '제품B', url: 'https://b.example.com', reason: 'r', evidence: null },
+        ],
+        medicalDisclaimer: null,
+      });
+      stubFetchOnce([responsesEnvelope(body)]);
+
+      const plan = await makeClient().generateCarePlan('weather', null, { uvIndex: 8 }, []);
+      expect(plan.products.map((p) => p.category)).toEqual(['기타', '기타']);
     });
 
     it('화이트리스트 밖 sourceType의 evidence는 null로 걸러진다', async () => {
