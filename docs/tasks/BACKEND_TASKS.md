@@ -9,7 +9,7 @@
 
 NestJS를 메인 백엔드(BFF + 비즈니스 로직)로, FastAPI(inference-service)를 독립 AI 추론 서버로
 역할 분리한 운영 가능한 백엔드를 목표로 한다. NestJS는 Modular Monolith 구조로 auth, otp, admin,
-consent, storage, diagnosis, weather, recommendations, products, pattern, notifications, gemini, jobs,
+consent, storage, diagnosis, weather, recommendations, products, care, pattern, notifications, openai, jobs,
 idempotency 모듈로 책임을 분리하고 모든 비즈니스 로직을 담당한다. FastAPI는 AI 모델 서빙과 피부 이미지 추론만 담당하며
 추론 결과만 NestJS로 전달한다.
 

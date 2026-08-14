@@ -68,7 +68,7 @@ export interface GeneratedRecommendation {
   sourceIds: string[];
 }
 
-/** Gemini에 전달하는 실제 카탈로그 제품 요약 — id 선택용. */
+/** OpenAI에 전달하는 실제 카탈로그 제품 요약 — id 선택용. */
 export interface CatalogProduct {
   id: string;
   name: string;

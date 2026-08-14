@@ -429,12 +429,12 @@ export const api = {
   // F0/F1: 추천 빠른 경로 — CACHED|FALLBACK 즉시 + jobId로 LIVE 교체 가능
   // source: 'CACHED' → Redis SWR hit, 즉시 실제품 추천 반환
   // source: 'FALLBACK' → Redis miss, 규칙 기반 실제품 추천 즉시 반환
-  // source: 'LIVE' → Gemini 완료, 완전 AI 추천 (jobId 있으면 polling으로 교체)
+  // source: 'LIVE' → OpenAI 완료, 완전 AI 추천 (jobId 있으면 polling으로 교체)
   generateRecommendationsFast: (diagnosisId: string) =>
     safePostJson<RecommendationsFastResponse>(
       '/recommendations/generate/fast',
       { diagnosisId },
-      20000, // Gemini 추론 최대 시간 고려
+      20000, // OpenAI 생성 최대 시간 고려
     ),
 
   // F0/F6: 날씨 기반 제품 빠른 경로 — CACHED|FALLBACK 즉시 + jobId로 LIVE 교체 가능
