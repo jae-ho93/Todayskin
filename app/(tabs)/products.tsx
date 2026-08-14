@@ -14,12 +14,11 @@ import {
   View,
 } from 'react-native';
 import { CareProductCard } from '../../src/components/CareProductCard';
-import { CareRoutinePhaseCard } from '../../src/components/CareRoutinePhaseCard';
+import { CareRoutineTimeline } from '../../src/components/CareRoutineTimeline';
 import { RetryButton } from '../../src/components/RetryButton';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { useCarePlan } from '../../src/features/care/useCarePlan';
 import { api } from '../../src/api/client';
-import { groupRoutineByPhase } from '../../src/lib/care-routine';
 import { colors, MAX_FONT_SCALE, radius, spacing, typography } from '../../src/theme';
 import type { CareType } from '../../src/types';
 
@@ -210,11 +209,7 @@ export default function ProductsScreen() {
             >
               <View style={[styles.page, { width: pageWidth || undefined }]}>
                 {state.data.routine.length > 0 ? (
-                  <View style={styles.list}>
-                    {groupRoutineByPhase(state.data.routine).map((group) => (
-                      <CareRoutinePhaseCard key={group.phase} group={group} />
-                    ))}
-                  </View>
+                  <CareRoutineTimeline routine={state.data.routine} />
                 ) : (
                   <Text style={styles.emptyText}>오늘은 추천할 루틴이 없어요</Text>
                 )}
