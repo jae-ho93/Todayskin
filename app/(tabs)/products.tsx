@@ -1,20 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
-import {
-  ActivityIndicator,
-  LayoutChangeEvent,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CareProductCard } from '../../src/components/CareProductCard';
-import { CareRoutineTimeline } from '../../src/components/CareRoutineTimeline';
 import { RetryButton } from '../../src/components/RetryButton';
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { useCarePlan } from '../../src/features/care/useCarePlan';
@@ -24,24 +13,19 @@ import type { CareType } from '../../src/types';
 
 type IoniconName = ComponentProps<typeof Ionicons>['name'];
 
-const CARE_TABS: { key: CareType; label: string; icon: IoniconName }[] = [
-  { key: 'weather', label: '날씨 기반', icon: 'partly-sunny-outline' },
-  { key: 'skin', label: '피부 기반', icon: 'body-outline' },
-  { key: 'combined', label: '복합 기반', icon: 'water-outline' },
-  { key: 'morning', label: '다음날 아침', icon: 'sunny-outline' },
+// 다음날 아침 케어는 홈 화면 "오늘의 루틴"에서만 다룬다 — 여기 3개는 그때그때 골라보는
+// 추천 제품 전용 카테고리라 성격이 다르다(N32 카드형 개편).
+const CARE_TABS: { key: CareType; label: string; icon: IoniconName; bg: string; accent: string }[] = [
+  { key: 'weather', label: '날씨 기반', icon: 'partly-sunny-outline', bg: '#DCEAFB', accent: '#3F6FA6' },
+  { key: 'skin', label: '피부 기반', icon: 'body-outline', bg: '#DCEEDC', accent: '#4F8F5B' },
+  { key: 'combined', label: '날씨+피부 기반', icon: 'water-outline', bg: '#DCF1EE', accent: '#2E8F86' },
 ];
 
-const PAGE_TABS: { key: 'routine' | 'products'; label: string; icon: IoniconName }[] = [
-  { key: 'routine', label: '케어 루틴', icon: 'clipboard-outline' },
-  { key: 'products', label: '추천 제품', icon: 'bag-handle-outline' },
-];
-
-// 화면 7 개편: 케어 루틴+제품 추천 — 날씨/피부/복합/다음날 아침 4탭, 탭마다 루틴↔제품 스와이프.
 // 제품/근거 링크는 OpenAI web_search로 실시간 확인된 실제 존재하는 것만 온다(N27과 동일 원칙).
 const TAB_KEYS = CARE_TABS.map((t) => t.key);
 
 export default function ProductsScreen() {
-  // 홈 화면 케어 루틴 카드에서 ?tab=combined|morning 로 딥링크한다.
+  // 홈 화면 케어 루틴 카드에서 ?tab=combined 로 딥링크한다.
   const { tab } = useLocalSearchParams<{ tab?: string }>();
   const initialTab = TAB_KEYS.includes(tab as CareType) ? (tab as CareType) : 'weather';
   const [activeTab, setActiveTab] = useState<CareType>(initialTab);
@@ -53,9 +37,6 @@ export default function ProductsScreen() {
       setActiveTab(tab as CareType);
     }
   }, [tab]);
-  const [pageWidth, setPageWidth] = useState(0);
-  const [activePage, setActivePage] = useState(0);
-  const scrollRef = useRef<ScrollView>(null);
 
   // 피부/복합 탭은 최신 진단이 필요하다 — 촬영 전이면 촬영 유도 빈 상태를 보여준다.
   const [diagnosisId, setDiagnosisId] = useState<string | null | undefined>(undefined);
@@ -76,20 +57,6 @@ export default function ProductsScreen() {
     diagnosisId,
   });
 
-  function onPageLayout(e: LayoutChangeEvent) {
-    setPageWidth(e.nativeEvent.layout.width);
-  }
-
-  function onPageScrollEnd(e: NativeSyntheticEvent<NativeScrollEvent>) {
-    if (!pageWidth) return;
-    setActivePage(Math.round(e.nativeEvent.contentOffset.x / pageWidth));
-  }
-
-  function goToPage(i: number) {
-    setActivePage(i);
-    scrollRef.current?.scrollTo({ x: i * pageWidth, animated: true });
-  }
-
   const needsDiagnosis = activeTab !== 'weather' && diagnosisId === null;
 
   return (
@@ -99,7 +66,7 @@ export default function ProductsScreen() {
           <View style={styles.titleIconBadge}>
             <Ionicons name="sparkles-outline" size={16} color={colors.sageDark} />
           </View>
-          <Text style={styles.title}>케어 루틴 · 추천 제품</Text>
+          <Text style={styles.title}>추천 제품</Text>
         </View>
         {state.status === 'success' && (
           <Pressable
@@ -115,25 +82,28 @@ export default function ProductsScreen() {
         )}
       </View>
 
-      <View style={styles.tabRow}>
+      <View style={styles.tabGrid}>
         {CARE_TABS.map((tab) => {
           const active = tab.key === activeTab;
           return (
             <Pressable
               key={tab.key}
-              onPress={() => {
-                setActiveTab(tab.key);
-                setActivePage(0);
-                scrollRef.current?.scrollTo({ x: 0, animated: false });
-              }}
-              style={[styles.tabChip, active && styles.tabChipActive]}
+              onPress={() => setActiveTab(tab.key)}
+              accessibilityRole="button"
+              accessibilityLabel={tab.label}
+              style={[
+                styles.tabCard,
+                { backgroundColor: tab.bg },
+                active && { borderColor: tab.accent },
+              ]}
             >
-              <Ionicons
-                name={tab.icon}
-                size={14}
-                color={active ? colors.textInverse : colors.textSecondary}
-              />
-              <Text style={[styles.tabText, active && styles.tabTextActive]} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+              {active && (
+                <View style={[styles.tabCardCheck, { backgroundColor: tab.accent }]}>
+                  <Ionicons name="checkmark" size={11} color={colors.textInverse} />
+                </View>
+              )}
+              <Ionicons name={tab.icon} size={30} color={tab.accent} />
+              <Text style={[styles.tabCardText, { color: tab.accent }]} maxFontSizeMultiplier={MAX_FONT_SCALE}>
                 {tab.label}
               </Text>
             </Pressable>
@@ -173,65 +143,15 @@ export default function ProductsScreen() {
         <Text style={styles.emptyText}>먼저 피부를 촬영해주세요</Text>
       ) : (
         <View>
-          <View style={styles.pageToggleRow}>
-            {PAGE_TABS.map((p, i) => {
-              const active = activePage === i;
-              return (
-                <Pressable
-                  key={p.key}
-                  onPress={() => goToPage(i)}
-                  accessibilityRole="button"
-                  accessibilityLabel={p.label}
-                  style={[styles.pageToggle, active && styles.pageToggleActive]}
-                >
-                  <Ionicons
-                    name={p.icon}
-                    size={15}
-                    color={active ? colors.sageDark : colors.textTertiary}
-                  />
-                  <Text
-                    style={[styles.pageToggleText, active && styles.pageToggleTextActive]}
-                    maxFontSizeMultiplier={MAX_FONT_SCALE}
-                  >
-                    {p.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <View onLayout={onPageLayout}>
-            <ScrollView
-              ref={scrollRef}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onMomentumScrollEnd={onPageScrollEnd}
-            >
-              <View style={[styles.page, { width: pageWidth || undefined }]}>
-                {state.data.routine.length > 0 ? (
-                  <CareRoutineTimeline routine={state.data.routine} />
-                ) : (
-                  <Text style={styles.emptyText}>오늘은 추천할 루틴이 없어요</Text>
-                )}
-              </View>
-              <View style={[styles.page, { width: pageWidth || undefined }]}>
-                {state.data.products.length > 0 ? (
-                  <View style={styles.list}>
-                    {state.data.products.map((product, i) => (
-                      <CareProductCard key={`${product.name}-${i}`} product={product} />
-                    ))}
-                  </View>
-                ) : (
-                  <Text style={styles.emptyText}>지금 추천할 실제 제품을 찾지 못했어요</Text>
-                )}
-              </View>
-            </ScrollView>
-          </View>
-          <View style={styles.pageDots}>
-            {PAGE_TABS.map((p, i) => (
-              <View key={p.key} style={[styles.pageDot, activePage === i && styles.pageDotActive]} />
-            ))}
-          </View>
+          {state.data.products.length > 0 ? (
+            <View style={styles.list}>
+              {state.data.products.map((product, i) => (
+                <CareProductCard key={`${product.name}-${i}`} product={product} />
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.emptyText}>지금 추천할 실제 제품을 찾지 못했어요</Text>
+          )}
           {state.data.medicalDisclaimer && (
             <Text style={styles.disclaimer}>{state.data.medicalDisclaimer}</Text>
           )}
@@ -258,23 +178,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: { ...typography.displaySm, color: colors.textPrimary },
-  tabRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  tabChip: {
-    flexGrow: 1,
-    minWidth: '46%',
-    flexDirection: 'row',
+  tabGrid: { flexDirection: 'row', gap: spacing.sm },
+  tabCard: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.full,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    gap: spacing.xs,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xs,
+    borderRadius: radius.lg,
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
-  tabChipActive: { backgroundColor: colors.sage, borderColor: colors.sage },
-  tabText: { ...typography.bodySm, color: colors.textSecondary },
-  tabTextActive: { color: colors.textInverse, fontWeight: '600' },
+  tabCardCheck: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 18,
+    height: 18,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabCardText: { ...typography.bodySm, fontWeight: '700', textAlign: 'center' },
   refreshingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   refreshingLabel: { ...typography.caption, color: colors.sageDark },
   refreshButton: {
@@ -304,29 +230,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   captureButtonText: { ...typography.subtitle, color: colors.textInverse },
-  page: { gap: spacing.md, paddingRight: spacing.xs },
   list: { gap: spacing.md },
-  pageToggleRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  pageToggle: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
-    backgroundColor: colors.surfaceMuted,
-  },
-  pageToggleActive: { backgroundColor: colors.sageLight },
-  pageToggleText: { ...typography.bodySm, color: colors.textTertiary, fontWeight: '600' },
-  pageToggleTextActive: { color: colors.sageDark },
-  pageDots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: spacing.sm },
-  pageDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.gray200 },
-  pageDotActive: { backgroundColor: colors.sage, width: 16 },
   disclaimer: {
     ...typography.caption,
     color: colors.textTertiary,
