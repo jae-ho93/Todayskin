@@ -160,6 +160,20 @@ N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
 - [x] `docs/guides/SETUP.md`에 로컬 E2E 절차 문서화 (compose → migrate deploy → seed → test:e2e)
 - [x] CI(postgres service) E2E 통과로 최종 검증 (CI 복구 후 rerun으로 확인)
 
+### N62. 케어/제품 화면 — FALLBACK에 시드 카탈로그 제품 즉시 노출 (2026-08-16)
+
+브랜치: `fix/care-fallback-catalog`
+
+> **문제**: 제품 탭 카테고리 상세가 AI(OpenAI) 생성 결과만 보여줘서, 첫 진입 시 FALLBACK의
+> products가 비어 "이 카테고리엔 추천할 제품이 없어요"가 뜬다. AI job(~30초)이 끝나야
+> 제품이 보이고, AI가 그 카테고리에 제품을 만들지 않으면 계속 비어 있다. 추천(오늘의 추천)은
+> 이미 "규칙 기반 즉시 + AI 교체" 패턴인데 케어만 빈 화면이었다.
+
+- [x] care FALLBACK에 `ProductCatalogService` 주입 — 시드 카탈로그(33개, 검증된 purchaseUrl)를 제품명 키워드로 케어 카테고리(선크림/클렌저/토너/에센스/로션/크림...)에 매핑해 즉시 반환
+- [x] 구매 링크 없는 제품은 제외(가짜 링크 금지 유지), 카탈로그 로딩 실패 시 기존처럼 루틴만 반환
+- [x] 단위 테스트 추가 (카테고리 매핑·링크 없는 제품 제외) — typecheck/lint/15 tests 통과, API 실측 33개 즉시 응답
+
+
 ### N16. AWS 운영 리소스 프로비저닝·첫 배포 (미완료)
 
 브랜치: `chore/aws-production-bootstrap`

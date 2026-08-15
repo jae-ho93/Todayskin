@@ -24,9 +24,17 @@ import { toWeatherSnapshotDto } from '../weather/mappers/weather-snapshot.mapper
 import { todayKst } from '../diagnosis/calendar-date.util';
 import { notDeletedWhere } from '../../common/soft-delete/soft-delete.policy';
 import { diagnosisToSkinInput } from './mappers/skin-analysis.mapper';
+import { Product } from '@prisma/client';
+import { ProductCatalogService } from '../products/product-catalog.service';
 import { fallbackCarePlan } from './content/fallback-content';
 import { isLinkDead } from './care-link-validator';
-import { CarePlanDto, CarePlanFastResponseDto, CareType } from './dto/care-plan.dto';
+import {
+  CarePlanDto,
+  CarePlanFastResponseDto,
+  CareProductCategory,
+  CareProductDto,
+  CareType,
+} from './dto/care-plan.dto';
 
 /** Redis exclude 세션 TTL — 하루 지나면 "최근 추천"의 의미가 옅어진다. */
 const EXCLUDE_TTL_S = 24 * 60 * 60;
@@ -39,6 +47,41 @@ function sleepMs(ms: number): Promise<void> {
 
 function normalizeProductName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, '');
+}
+
+/**
+ * FALLBACK용 카테고리 매핑 — 시드 카탈로그의 category(moisture/elasticity/... 효능 기준)는
+ * 케어 화면의 사용 단계(클렌저→선크림)와 1:1이 아니어서, 제품명 키워드로 추론한다.
+ * 배열 순서가 우선순위다(예: "선크림"이 "크림"보다 먼저 매칭되어야 한다).
+ */
+const CARE_CATEGORY_RULES: ReadonlyArray<{ category: CareProductCategory; keywords: string[] }> = [
+  { category: '선크림', keywords: ['선크림', '썬크림', '선플러스', '선젤'] },
+  { category: '클렌저', keywords: ['클렌저', '클렌징', '휩', '폼', '워시'] },
+  { category: '토너', keywords: ['토너', '리파이너'] },
+  { category: '마스크팩', keywords: ['마스크', '팩'] },
+  { category: '에센스/세럼/앰플', keywords: ['에센스', '세럼', '앰플'] },
+  { category: '로션', keywords: ['로션'] },
+  { category: '크림', keywords: ['크림', '밤'] },
+];
+
+function inferCareCategory(name: string): CareProductCategory {
+  const normalized = name.toLowerCase().replace(/\s+/g, '');
+  const rule = CARE_CATEGORY_RULES.find((r) => r.keywords.some((k) => normalized.includes(k)));
+  return rule?.category ?? '기타';
+}
+
+/** 카탈로그 실제 제품 → 케어 제품 DTO. 구매 링크 없는 제품은 가짜 링크를 만들지 않기 위해 제외한다. */
+function catalogToCareProduct(p: Product): CareProductDto | null {
+  if (!p.purchaseUrl) return null;
+  const name = `${p.brand} ${p.name}`.trim();
+  return {
+    name,
+    url: p.purchaseUrl,
+    reason:
+      '검증된 실제 제품 카탈로그에서 고른 기본 추천이에요. AI가 이보다 정확한 제품을 고르면 자동으로 교체돼요.',
+    category: inferCareCategory(name),
+    evidence: null,
+  };
 }
 
 /** 만 나이. 생일이 아직 안 지났으면 1을 뺀다. */
@@ -114,8 +157,30 @@ export class CareService {
     private readonly jobService: JobService,
     private readonly jobState: JobStateService,
     private readonly idempotency: IdempotencyService,
+    private readonly catalog: ProductCatalogService,
     private readonly fastPath: FastPathCoordinator,
   ) {}
+
+  /**
+   * FALLBACK용 케어 플랜 — 시드 카탈로그의 실제 제품을 채워 첫 화면부터 제품이 보이게 한다.
+   * AI(LIVE) 생성이 끝나면 이 제품으로 자동 교체된다. 카탈로그 로딩 실패는 전체 fallback을
+   * 막지 않는다(제품 없이 루틴만 반환 — 빈 화면 금지 원칙은 유지).
+   */
+  private async fallbackPlan(careType: CareType): Promise<CarePlanDto> {
+    const plan = fallbackCarePlan(careType);
+    try {
+      const catalog = await this.catalog.load();
+      plan.products = catalog
+        .map(catalogToCareProduct)
+        .filter((p): p is CareProductDto => p !== null);
+    } catch (e) {
+      this.logger.debug(
+        `fallback 카탈로그 로딩 실패 — 루틴만 반환: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      plan.products = [];
+    }
+    return plan;
+  }
 
   // ── 빠른 경로 진입점 (컨트롤러가 호출) ──────────────────────
 
@@ -461,7 +526,7 @@ export class CareService {
         const plan = (jobResult as { plan?: CarePlanDto } | null)?.plan;
         return plan ? [plan] : [];
       },
-      loadFallback: () => [fallbackCarePlan(careType)],
+      loadFallback: async () => [await this.fallbackPlan(careType)],
       enqueue,
     });
 
@@ -469,7 +534,7 @@ export class CareService {
       source: result.source,
       jobId: result.jobId,
       generatedAt: result.generatedAt,
-      plan: result.items[0] ?? fallbackCarePlan(careType),
+      plan: result.items[0] ?? (await this.fallbackPlan(careType)),
     };
   }
 
