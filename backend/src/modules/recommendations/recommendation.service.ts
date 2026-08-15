@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -8,7 +7,6 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma, Product, Recommendation as RecommendationModel } from '@prisma/client';
-import { createHash } from 'node:crypto';
 import { OpenAiClient, OpenAiUnavailable } from '../openai/openai.client';
 import { ConsentService } from '../consent/consent.service';
 import { ConsentPurpose } from '../consent/enums/consent-purpose.enum';
@@ -46,8 +44,8 @@ import { ProductCatalogService } from '../products/product-catalog.service';
  * 설계 기준 (BACKEND_TASKS.md T7/T8 + N32/N29):
  * - 전역 A등급 템플릿과 사용자별 생성 추천을 분리한다.
  * - grade/sourceLabel은 서버가 고정하고 LLM이 결정하지 않는다.
- * - 추천 생성은 diagnosisId 중심(최종 계약)을 지원하되, 기존 프론트의
- *   skinScore+weather 직접 전송도 호환한다(contract migration 전까지).
+ * - 추천 생성은 diagnosisId만 받는다(N56) — 서버가 소유권 확인 후 DB에서
+ *   측정값/날씨를 조회하므로 클라이언트가 값을 조작할 수 없다.
  * - 동일 진단에 대한 중복 생성을 방지한다.
  * - 추천 상세 조회 시 사용자 소유권을 검사한다.
  * - OpenAI 실패 시 503을 반환하고 가짜 추천으로 대체하지 않는다 (동기 경로).
@@ -114,8 +112,8 @@ export class RecommendationService {
   /**
    * B등급 추천 생성 — 피부 측정값 + 날씨를 OpenAI에 전달.
    *
-   * 최종 계약: diagnosisId만 받아 서버가 소유권 확인 후 DB에서 측정값/날씨를 조회한다.
-   * 호환: diagnosisId 없이 skinScore+weather를 직접 받는 기존 프론트도 지원한다.
+   * N56: diagnosisId만 받아 서버가 소유권 확인 후 DB에서 측정값/날씨를 조회한다
+   * (skinScore+weather 직접 수신 제거 — 클라이언트 데이터 조작·비용 남용 창 차단).
    *
    * 동일 진단에 대해 이미 생성된 추천이 있으면 중복 생성 대신 기존 것을 반환한다.
    * N32: 성공한 LIVE 결과를 Redis SWR에 캐시해 다음 빠른 경로가 source: CACHED로
@@ -123,11 +121,7 @@ export class RecommendationService {
    */
   async generate(
     userId: number,
-    payload: {
-      diagnosisId?: string;
-      skinScore?: Record<string, unknown>;
-      weather?: object;
-    },
+    payload: { diagnosisId: string },
   ): Promise<RecommendationDto[]> {
     // N3: OpenAI 등 외부 AI로 피부/날씨 데이터를 보내려면 전송 동의 필수.
     await this.consentService.requireActive(
@@ -136,22 +130,19 @@ export class RecommendationService {
     );
 
     const { diagnosisId, skinInput, weatherInput } =
-      await this.resolveGenerateInputs(userId, payload);
+      await this.resolveGenerateInputs(userId, payload.diagnosisId);
 
-    // 동일 진단에 대한 중복 생성 방지.
-    // diagnosisId가 있고 이미 추천이 존재하면 기존 것을 반환한다.
-    if (diagnosisId) {
-      const existing = await this.repo.findByDiagnosis(userId, diagnosisId);
-      if (existing.length > 0) {
-        this.logger.debug(
-          `Recommendations already exist for diagnosis ${diagnosisId}, returning existing`,
-        );
-        return this.attachProductIds(existing);
-      }
+    // 동일 진단에 대한 중복 생성 방지 — 이미 추천이 존재하면 기존 것을 반환한다.
+    const existing = await this.repo.findByDiagnosis(userId, diagnosisId);
+    if (existing.length > 0) {
+      this.logger.debug(
+        `Recommendations already exist for diagnosis ${diagnosisId}, returning existing`,
+      );
+      return this.attachProductIds(existing);
     }
 
     const reservationScope = await this.acquireGenerateReservation(userId, diagnosisId);
-    if (reservationScope?.existing) return reservationScope.existing;
+    if (reservationScope.existing) return reservationScope.existing;
 
     try {
       const items = await this.callOpenAi(skinInput, weatherInput);
@@ -163,7 +154,7 @@ export class RecommendationService {
       const rows: GeneratedRecommendationRow[] = items.map((item) => ({
         id: `openai-${shortId()}`,
         userId,
-        diagnosisId: diagnosisId ?? null,
+        diagnosisId,
         title: item.title,
         grade: EvidenceGrade.B,
         sourceLabel: B_GRADE_SOURCE_LABEL,
@@ -186,31 +177,25 @@ export class RecommendationService {
 
       const persisted = await this.repo.createGenerated({
         userId,
-        diagnosisId: diagnosisId ?? null,
+        diagnosisId,
         rows,
         links,
         createdAt,
       });
 
       // N14: 성공 시 예약을 COMPLETED로 전환 — 이후 재시도는 동일 결과를 재반환받는다.
-      if (reservationScope) {
-        await this.idempotency.complete(reservationScope.scope);
-      }
+      await this.idempotency.complete(reservationScope.scope);
 
       // 방금 저장한 추천들에도 관련 제품 id를 채운다.
       const dtos = await this.attachProductIds(persisted);
 
       // N32: LIVE 생성 결과를 Redis SWR에 캐시한다 — 다음 빠른 경로가 source: CACHED.
-      if (diagnosisId) {
-        await this.fastPath.writeCache(this.diagnosisCacheKey(userId, diagnosisId), dtos);
-      }
+      await this.fastPath.writeCache(this.diagnosisCacheKey(userId, diagnosisId), dtos);
 
       return dtos;
     } catch (e) {
       // N14: 실패(503/저장 오류) 시 예약을 해제해 재시도가 가능하게 한다.
-      if (reservationScope) {
-        await this.idempotency.release(reservationScope.scope);
-      }
+      await this.idempotency.release(reservationScope.scope);
       throw e;
     }
   }
@@ -219,7 +204,7 @@ export class RecommendationService {
    * N32/N29: 빠른 경로 추천 — 첫 응답에 실제품이 즉시 온다.
    *
    * 응답 우선순위:
-   * 1. diagnosisId 모드에서 저장된 추천이 이미 있으면 `source: LIVE`로 즉시 반환.
+   * 1. 저장된 추천이 이미 있으면 `source: LIVE`로 즉시 반환.
    * 2. 같은 진단의 진행 중/완료 job이 있으면 그 job을 재사용 (중복 enqueue 방지).
    * 3. Redis SWR hit → `source: CACHED` (오래됐으면 재검증 job enqueue, jobId 포함).
    * 4. miss → 규칙 기반 실제품 `source: FALLBACK` 즉시 반환 + LIVE job enqueue.
@@ -229,11 +214,7 @@ export class RecommendationService {
    */
   async generateFast(
     userId: number,
-    payload: {
-      diagnosisId?: string;
-      skinScore?: Record<string, unknown>;
-      weather?: object;
-    },
+    payload: { diagnosisId: string },
   ): Promise<RecommendationFastResponseDto> {
     // N3: OpenAI 전송 동의 — LIVE job이 OpenAI를 호출하므로 동일하게 게이트한다.
     await this.consentService.requireActive(
@@ -242,31 +223,27 @@ export class RecommendationService {
     );
 
     const { diagnosisId, skinInput, weatherInput } =
-      await this.resolveGenerateInputs(userId, payload);
+      await this.resolveGenerateInputs(userId, payload.diagnosisId);
 
     // 1) DB LIVE — 완료된 추천이 있으면 가장 정확하고 빠른 결과.
-    if (diagnosisId) {
-      const existing = await this.repo.findByDiagnosis(userId, diagnosisId);
-      if (existing.length > 0) {
-        return { source: 'LIVE', recommendations: await this.attachProductIds(existing) };
-      }
+    const existing = await this.repo.findByDiagnosis(userId, diagnosisId);
+    if (existing.length > 0) {
+      return { source: 'LIVE', recommendations: await this.attachProductIds(existing) };
     }
 
     // R8: job 재사용 → Redis SWR → 규칙 fallback 순서는 FastPathCoordinator가 정한다.
-    // 호환 모드(diagnosisId 없음)는 dedupeKey가 없어 job 재사용 단계를 건너뛴다 —
-    // 이 경로의 job payload는 진단 id로 묶이지 않아 같은 대상인지 판별할 수 없다.
     const { source, jobId, generatedAt, items } =
       await this.fastPath.resolve<RecommendationDto>({
         userId,
         jobType: JobType.RECOMMENDATION_GENERATE,
-        dedupeKey: diagnosisId ? jobDedupeKeyOf('diagnosisId', diagnosisId) : undefined,
-        cacheKey: this.fastCacheKey(userId, diagnosisId, skinInput, weatherInput),
+        dedupeKey: jobDedupeKeyOf('diagnosisId', diagnosisId),
+        cacheKey: this.diagnosisCacheKey(userId, diagnosisId),
         readJobResult: (result) =>
           (result as { recommendations?: RecommendationDto[] } | null)
             ?.recommendations ?? [],
         loadFallback: async () =>
           buildRuleRecommendations(await this.catalog.load(), skinInput, weatherInput),
-        enqueue: () => this.enqueueLiveJob(userId, diagnosisId, skinInput, weatherInput),
+        enqueue: () => this.enqueueLiveJob(userId, diagnosisId),
         cacheLiveResult: true,
       });
 
@@ -307,16 +284,13 @@ export class RecommendationService {
   /**
    * N14: OpenAI 호출 전에 동시 요청을 in-flight 예약으로 가른다.
    * 같은 진단의 동시 재시도가 OpenAI를 중복 호출하지 않게 하는 핵심 경계다.
-   * (진단이 없으면 호환 모드 — 멱등 키가 없으므로 트랜잭션 락에 맡긴다)
    *
    * 이미 완료된 예약이면 동일 결과를 `existing`으로 돌려주고 생성을 건너뛴다.
    */
   private async acquireGenerateReservation(
     userId: number,
-    diagnosisId: string | undefined,
-  ): Promise<{ scope: string; existing?: RecommendationDto[] } | null> {
-    if (!diagnosisId) return null;
-
+    diagnosisId: string,
+  ): Promise<{ scope: string; existing?: RecommendationDto[] }> {
     const scope = `recommendation:${diagnosisId}`;
     const reservation = await this.idempotency.acquire(scope, userId);
     if (reservation.outcome === 'in_flight') {
@@ -388,89 +362,61 @@ export class RecommendationService {
   }
 
   /**
-   * 추천 입력 해석 — diagnosisId(최종 계약) 또는 skinScore+weather(호환)를
-   * (diagnosisId, skinInput, weatherInput)으로 정규화한다. 소유권 검사 포함.
+   * 추천 입력 해석 — diagnosisId(최종 계약)만 받는다. 서버가 소유권 확인 후
+   * DB에서 측정값/날씨를 조회해 (diagnosisId, skinInput, weatherInput)으로 정규화한다.
+   * (N56: skinScore+weather 직접 수신 제거 — 클라이언트 데이터 조작·비용 남용 창 차단)
    */
   private async resolveGenerateInputs(
     userId: number,
-    payload: {
-      diagnosisId?: string;
-      skinScore?: Record<string, unknown>;
-      weather?: object;
-    },
+    diagnosisId: string,
   ): Promise<{
-    diagnosisId: string | undefined;
+    diagnosisId: string;
     skinInput: Record<string, unknown>;
     weatherInput: Record<string, unknown>;
   }> {
-    if (!payload.diagnosisId && (!payload.skinScore || !payload.weather)) {
-      throw new BadRequestException(
-        'diagnosisId 또는 skinScore와 weather를 함께 보내야 합니다',
-      );
+    const diagnosis = await this.repo.findDiagnosisForInput(diagnosisId);
+    if (!diagnosis) {
+      throw new NotFoundException('진단을 찾을 수 없습니다');
+    }
+    if (diagnosis.userId !== userId) {
+      throw new ForbiddenException('해당 진단에 대한 접근 권한이 없습니다');
     }
 
-    if (payload.diagnosisId) {
-      // 최종 계약 — 서버가 diagnosis 소유권 확인 후 DB에서 측정값/날씨를 조회한다.
-      const diagnosis = await this.repo.findDiagnosisForInput(payload.diagnosisId);
-      if (!diagnosis) {
-        throw new NotFoundException('진단을 찾을 수 없습니다');
-      }
-      if (diagnosis.userId !== userId) {
-        throw new ForbiddenException('해당 진단에 대한 접근 권한이 없습니다');
-      }
-
-      const skinInput: Record<string, unknown> = {
-        id: diagnosis.id,
-        capturedAt: diagnosis.capturedAt,
-        overallScore: diagnosis.overallScore,
-        thumbnailUri: diagnosis.thumbnailUri,
-        parts: diagnosis.skinMetrics.map((m) => ({
-          part: m.part,
-          label: m.label,
-          grade: m.grade,
-          moisture: m.moisture,
-          elasticity: m.elasticity,
-          note: m.note,
-        })),
-      };
-      const weatherInput = diagnosis.weatherSnapshot
-        ? snapshotToInput(diagnosis.weatherSnapshot)
-        : {};
-      return { diagnosisId: payload.diagnosisId, skinInput, weatherInput };
-    }
-
-    // 호환 — 기존 프론트가 skinScore+weather를 직접 보내는 경우.
-    // diagnosisId가 없으면 진단 연결 없이 생성한다 (user에만 연결).
-    return {
-      diagnosisId: undefined,
-      skinInput: payload.skinScore ?? {},
-      weatherInput: payload.weather
-        ? { ...(payload.weather as Record<string, unknown>) }
-        : {},
+    const skinInput: Record<string, unknown> = {
+      id: diagnosis.id,
+      capturedAt: diagnosis.capturedAt,
+      overallScore: diagnosis.overallScore,
+      thumbnailUri: diagnosis.thumbnailUri,
+      parts: diagnosis.skinMetrics.map((m) => ({
+        part: m.part,
+        label: m.label,
+        grade: m.grade,
+        moisture: m.moisture,
+        elasticity: m.elasticity,
+        note: m.note,
+      })),
     };
+    const weatherInput = diagnosis.weatherSnapshot
+      ? snapshotToInput(diagnosis.weatherSnapshot)
+      : {};
+    return { diagnosisId, skinInput, weatherInput };
   }
 
   // ── 빠른 경로 헬퍼 ──────────────────────────────
 
   /**
    * FALLBACK/CACHED 응답과 함께 LIVE 교체 job을 enqueue한다. 실패해도 FALLBACK은 반환한다.
-   * diagnosisId 모드에서는 payload를 { diagnosisId }만 담아 AsyncJob.payload를 가볍게 유지한다
-   * (handler는 진단 모드에서 skinScore/weather를 무시한다).
+   * payload는 { diagnosisId }만 담아 AsyncJob.payload를 가볍게 유지한다 (N56).
    */
   private async enqueueLiveJob(
     userId: number,
-    diagnosisId: string | undefined,
-    skinInput: Record<string, unknown>,
-    weatherInput: Record<string, unknown>,
+    diagnosisId: string,
   ): Promise<string | undefined> {
     try {
-      const payload = diagnosisId
-        ? { diagnosisId }
-        : { skinScore: skinInput, weather: weatherInput };
       const { jobId } = await this.jobService.enqueue(
         userId,
         JobType.RECOMMENDATION_GENERATE,
-        payload,
+        { diagnosisId },
       );
       return jobId;
     } catch (e) {
@@ -483,21 +429,7 @@ export class RecommendationService {
     }
   }
 
-  /** Redis SWR 캐시 키 — diagnosisId가 있으면 진단 키, 없으면 (스냅샷+날씨) 지문 키. */
-  private fastCacheKey(
-    userId: number,
-    diagnosisId: string | undefined,
-    skinInput: Record<string, unknown>,
-    weatherInput: Record<string, unknown>,
-  ): string {
-    if (diagnosisId) return this.diagnosisCacheKey(userId, diagnosisId);
-    const fingerprint = createHash('sha1')
-      .update(JSON.stringify({ skinInput, weatherInput }))
-      .digest('hex')
-      .slice(0, 16);
-    return `rec:fast:${userId}:compat:${fingerprint}`;
-  }
-
+  /** Redis SWR 캐시 키 — 진단 단위로 캐시한다 (N56: diagnosisId 전용). */
   private diagnosisCacheKey(userId: number, diagnosisId: string): string {
     return `rec:fast:${userId}:${diagnosisId}`;
   }

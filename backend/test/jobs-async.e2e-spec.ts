@@ -113,15 +113,26 @@ describe('Jobs async (e2e)', () => {
     it('인증 없이 401', async () => {
       await request(app.getHttpServer())
         .post('/recommendations/generate/async')
-        .send({ skinScore: {}, weather: {} })
+        .send({ diagnosisId: 'diag-async-401' })
         .expect(401);
     });
 
     it('즉시 jobId(PENDING) 반환 후 polling으로 COMPLETED', async () => {
+      // N56: diagnosisId 전용 — job handler가 소유권 확인 후 DB에서 조회한다.
+      const diagnosis = await prisma.diagnosis.create({
+        data: {
+          id: 'diag-async-1',
+          userId,
+          capturedAt: new Date(),
+          overallScore: 70,
+          status: 'COMPLETED',
+        },
+      });
+
       const res = await request(app.getHttpServer())
         .post('/recommendations/generate/async')
         .set('Authorization', `Bearer ${accessToken}`)
-        .send({ skinScore: { overallScore: 70 }, weather: {} })
+        .send({ diagnosisId: diagnosis.id })
         .expect(202);
 
       expect(res.body.jobId).toBeDefined();
@@ -133,6 +144,8 @@ describe('Jobs async (e2e)', () => {
       expect(
         result && typeof result === 'object' && 'recommendations' in result,
       ).toBe(true);
+
+      await prisma.diagnosis.delete({ where: { id: diagnosis.id } }).catch(() => undefined);
     });
   });
 

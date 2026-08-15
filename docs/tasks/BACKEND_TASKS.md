@@ -91,7 +91,7 @@ N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
 - [x] `docs/guides/DEPLOYMENT.md` release 단계 설명 갱신 (drift 검사는 CI 전담 명시)
 - [x] `prisma.config.ts` shadow 로직은 유지 (CI·로컬 diff 검증용)
 
-### N56. 추천 생성 API diagnosisId 전용 전환 (HIGH-03) (등록 2026-08-16)
+### N56. 추천 생성 API diagnosisId 전용 전환 (HIGH-03) ✅ 2026-08-16
 
 브랜치: `refactor/recommendation-diagnosis-only`
 
@@ -100,10 +100,10 @@ N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
 > 추천을 조작·비용 소모할 수 있고, 서버 canonical 진단 데이터와 불일치할 수 있다.
 > 프론트는 이미 diagnosisId만 전송하므로 계약을 최종 형태로 고정한다.
 
-- [ ] `generate-recommendation.dto.ts` — skinScore/weather 제거, diagnosisId 필수
-- [ ] `recommendation.service.ts` — `resolveGenerateInputs` 호환 경로 제거
-- [ ] `recommendation.controller.ts` generateAsync payload·`recommendation.job-handler.ts` 정리
-- [ ] 관련 spec/테스트 갱신 + `openapi:export`/`openapi:types` 재생성 (contract-drift CI)
+- [x] `generate-recommendation.dto.ts` — skinScore/weather 제거, diagnosisId 필수
+- [x] `recommendation.service.ts` — `resolveGenerateInputs` 호환 경로 제거, generateFast/enqueueLiveJob/캐시 키 단순화
+- [x] `recommendation.controller.ts` generateAsync payload·`recommendation.job-handler.ts` 정리 (+ `requiredString` 헬퍼)
+- [x] 관련 spec/e2e 테스트 갱신 + `openapi:export`/`openapi:types` 재생성 (contract-drift CI)
 
 ### N57. 비용·보안 민감 엔드포인트 Redis 장애 시 fail-closed (HIGH-04) (등록 2026-08-16)
 

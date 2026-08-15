@@ -1,8 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { JobHandlerRegistry } from '../jobs/handlers/job-handler.registry';
 import {
-  optionalObject,
-  optionalString,
+  requiredString,
   toJobError,
 } from '../jobs/handlers/job-error';
 import { JobType } from '../jobs/enums/job-type.enum';
@@ -28,9 +27,7 @@ export class RecommendationJobHandler implements OnModuleInit {
       async (_jobId, userId, payload) => {
         try {
           const items = await this.recommendations.generate(userId, {
-            diagnosisId: optionalString(payload, 'diagnosisId'),
-            skinScore: optionalObject(payload, 'skinScore'),
-            weather: optionalObject(payload, 'weather'),
+            diagnosisId: requiredString(payload, 'diagnosisId'),
           });
           return { recommendations: items };
         } catch (e) {

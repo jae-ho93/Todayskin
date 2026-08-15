@@ -175,6 +175,7 @@ describe('API Response Contract (e2e)', () => {
 
   describe('추천 생성 503 계약 (OpenAI 실패)', () => {
     let accessToken: string;
+    let userId: number;
 
     // N32: weather-based 빠른 경로는 규칙 FALLBACK이 실제 카탈로그 제품을 골라야 하므로
     // 이 suite가 쓰는 로컬 제품 3개(규칙 fallback 3슬롯 충족)를 시드한다.
@@ -225,6 +226,7 @@ describe('API Response Contract (e2e)', () => {
       });
       expect(signupRes.status).toBe(201);
       accessToken = signupRes.body.accessToken;
+      userId = signupRes.body.id;
       // N3: OpenAI 호출 전 transfer 동의 게이트를 통과해야 503(OpenAI 실패)까지 도달한다.
       await grantRecommendationTransfer(app, accessToken);
       for (const p of localProducts) {
@@ -245,19 +247,33 @@ describe('API Response Contract (e2e)', () => {
     // N4/Inline dispatcher job polling 헬퍼 — test/helpers/job-polling.ts 공용.
 
     it('MOCK_OPENAI=false + 키 없음 시 /recommendations/generate → 503', async () => {
-      // AppModule 인스턴스는 MOCK_OPENAI 환경변수를 beforeAll에서 읽었으므로
-      // 여기서는 별도 app 인스턴스 없이 환경변수 기반 OpenAiClient 상태를 검증한다.
-      // 이미 이 app은 MOCK_OPENAI 미설정(=false) + 키 없음 상태이므로 503이어야 한다.
-      // 단, beforeAll에서 MOCK_OPENAI를 true로 설정하지 않았으므로 기본 false.
-      await request(app.getHttpServer())
-        .post('/recommendations/generate')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ skinScore: { overallScore: 70 }, weather: { uvIndex: 5 } })
-        .expect(503)
-        .then((res) => {
-          // 에러 응답에 detail 필드 포함 (FastAPI 호환)
-          expect(res.body.detail).toBeDefined();
-        });
+      // N56: diagnosisId 필수 — 소유권 확인을 통과해야 OpenAI 호출(503)까지 도달한다.
+      const diagnosis = await prisma.diagnosis.create({
+        data: {
+          id: 'acct-diag-503',
+          userId,
+          capturedAt: new Date(),
+          overallScore: 70,
+          status: 'COMPLETED',
+        },
+      });
+      try {
+        // AppModule 인스턴스는 MOCK_OPENAI 환경변수를 beforeAll에서 읽었으므로
+        // 여기서는 별도 app 인스턴스 없이 환경변수 기반 OpenAiClient 상태를 검증한다.
+        // 이미 이 app은 MOCK_OPENAI 미설정(=false) + 키 없음 상태이므로 503이어야 한다.
+        await request(app.getHttpServer())
+          .post('/recommendations/generate')
+          .set('Authorization', `Bearer ${accessToken}`)
+          .send({ diagnosisId: diagnosis.id })
+          .expect(503)
+          .then((res) => {
+            // 에러 응답에 detail 필드 포함 (FastAPI 호환)
+            expect(res.body.detail).toBeDefined();
+          });
+      } finally {
+        await prisma.recommendation.deleteMany({ where: { diagnosisId: diagnosis.id } });
+        await prisma.diagnosis.delete({ where: { id: diagnosis.id } }).catch(() => undefined);
+      }
     });
 
     it('POST /products/weather-based — 키 없어도 FALLBACK 실제품 즉시, OpenAI 실패는 job FAILED (N32)', async () => {
