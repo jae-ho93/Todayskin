@@ -81,8 +81,8 @@ openssl rand -base64 48
 # 로그인 테스트용 허용 번호 — 아무 010 번호나 넣으면 그 번호로 가입 가능
 OTP_ALLOWLIST_PHONES=01000000000
 
-# AI 추천·진단을 목업(가짜 응답)으로 대체 — 실제 API 키 없이 테스트 가능
-MOCK_GEMINI=true
+# AI 추천·케어·제품을 목업(가짜 응답)으로 대체 — 실제 API 키 없이 테스트 가능 (추천은 OpenAI 기반)
+MOCK_OPENAI=true
 MOCK_INFERENCE=true
 ```
 

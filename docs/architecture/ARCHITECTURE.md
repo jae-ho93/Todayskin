@@ -10,7 +10,8 @@
 - Modular Monolith 구조를 유지한다.
 - 모든 비즈니스 로직, 인증, 사용자 관리, 데이터 영속화를 담당한다.
 - 현재 도메인 모듈: auth, otp, admin, consent, storage, diagnosis, weather,
-  recommendations, products, pattern, notifications, gemini, jobs, idempotency.
+  recommendations, products, care, pattern, notifications, openai, jobs, idempotency.
+  (Gemini → OpenAI 전환 후 `gemini` 모듈은 `openai`로 대체, 케어 루틴·제품은 `care` 모듈 신설)
 - 진단 결과 저장, 제품 추천, 피부 변화 패턴 분석, 알림, 날씨·대기질, 동의·이미지 수명주기와 비동기 작업을 관리한다.
 
 ### FastAPI — 독립 AI 추론 서버
