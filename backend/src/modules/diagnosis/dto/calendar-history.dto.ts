@@ -270,8 +270,8 @@ export class CalendarDiagnosisDto {
   image!: CalendarImageDto | null;
 
   /**
-   * 저장 동의 + 이미지 존재 + landmarks 존재 시에만 채워짐 (N26: 이미지 없으면 미노출).
-   * 미동의면 null.
+   * 저장 동의 + 이미지 존재 + presigned URL 생성 성공 + landmarks 존재 시에만
+   * 채워짐 (N26/N58: 이미지 없거나 URL 생성 실패 시 미노출). 미동의면 null.
    */
   @ApiPropertyOptional({ type: LandmarksDto, nullable: true })
   landmarks!: LandmarksDto | null;

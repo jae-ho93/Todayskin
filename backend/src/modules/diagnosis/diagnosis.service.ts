@@ -823,16 +823,13 @@ export class DiagnosisService {
 
     if (canViewMedia) {
       const hasImage = d.image != null && d.image.deletedAt == null;
-      if (hasImage) {
-        dto.image = signedImage ? this.toCalendarImageDto(signedImage) : null;
+      if (hasImage && signedImage) {
+        dto.image = this.toCalendarImageDto(signedImage);
         // N26: 랜드마크(얼굴 기하 정보)는 저장된 이미지와 함께만 노출한다.
-        // 이미지가 없으면(저장 실패·soft delete·철회 잔재) landmarks도 노출하지 않는다.
-        // 저장 동의 계약(diagnosis_image_storage)과 영속화·노출 조건을 일치시킨다.
-        // 노출 기준은 이미지 row 존재(hasImage)다 — presigned URL 생성 실패(일시적 스토리지
-        // 장애)로 dto.image가 null이어도 row가 있으면 landmarks는 노출한다(의도된 트레이드오프).
         dto.landmarks = this.toLandmarksDto(d.landmarks);
       } else {
-        // 이미지 없음 → image/landmarks 모두 미노출.
+        // 이미지 없음(저장 실패·soft delete·철회 잔재) 또는 presigned URL 생성
+        // 실패(일시적 스토리지 장애, N58) → image/landmarks 모두 미노출.
         dto.image = null;
         dto.landmarks = null;
       }
