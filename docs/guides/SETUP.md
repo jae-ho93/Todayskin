@@ -124,6 +124,25 @@ npm run start:dev
 > 이 터미널 창은 닫지 마세요. 서버가 꺼집니다. (나중에 다시 켤 땐
 > `cd backend && docker compose up -d && npm run start:dev` 두 줄이면 됩니다.)
 
+### 2-4. E2E 테스트 돌리기 (PostgreSQL 필요, N61)
+
+백엔드 E2E(`backend/test/*.e2e-spec.ts`)는 **실제 PostgreSQL**이 필요하다.
+DB가 없으면 테스트가 `PrismaClientKnownRequestError`(연결 실패)로 전부 실패하니
+**코드 버그로 오해하지 말 것.** docker compose가 이미 `todayskin_test` DB를
+만들어 준다 (init 스크립트).
+
+```bash
+cd backend
+docker compose up -d   # PostgreSQL + Redis (todayskin_test 자동 생성)
+DATABASE_URL="postgresql://todayskin:secret@localhost:5432/todayskin_test" npx prisma migrate deploy
+DATABASE_URL="postgresql://todayskin:secret@localhost:5432/todayskin_test" npx prisma db seed
+npm run test:e2e -- --runInBand
+```
+
+> CI(`.github/workflows/ci.yml`)도 postgres service 컨테이너로 동일한
+> migrate deploy → seed → E2E를 매 PR마다 실행한다. 로컬 docker가 없으면
+> **CI 통과를 검증 기준**으로 삼으면 된다.
+
 ---
 
 ## 3. 앱(Expo) 켜기

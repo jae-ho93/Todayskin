@@ -149,7 +149,7 @@ N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
 - [x] `backend/prisma/seed-data.ts` — prod-2만 직링크 유지, 나머지 32개 `OLIVE_YOUNG_HOMEPAGE`로 통일
 - [x] typecheck·lint·unit tests 638 passed (seed-migration e2e는 CI에서 검증)
 
-### N61. DB 기반 E2E 검증 환경 정상화 (HIGH-02) (등록 2026-08-16)
+### N61. DB 기반 E2E 검증 환경 정상화 (HIGH-02) ✅ 2026-08-16
 
 브랜치: `chore/db-e2e-verification`
 
@@ -157,8 +157,8 @@ N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
 > 다수 실패한다 — 코드 버그가 아니라 환경 문제. CI는 postgres service 컨테이너로
 > migrate deploy → seed → E2E까지 실행하므로 CI 통과로 검증을 대체한다.
 
-- [ ] 로컬 docker compose(postgres/redis) 가동 + `migrate deploy` → `test:e2e` 절차 문서화
-- [ ] CI E2E 통과로 검증 완료 처리 (로컬은 docker 환경에서 재검증)
+- [x] `docs/guides/SETUP.md`에 로컬 E2E 절차 문서화 (compose → migrate deploy → seed → test:e2e)
+- [x] CI(postgres service) E2E 통과로 최종 검증 (CI 복구 후 rerun으로 확인)
 
 ### N16. AWS 운영 리소스 프로비저닝·첫 배포 (미완료)
 
