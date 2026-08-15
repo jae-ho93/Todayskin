@@ -74,12 +74,8 @@ export default function ProductCategoryScreen() {
         )}
       </View>
 
-      {liveRefreshing && categoryProducts.length > 0 && (
-        <View style={styles.refreshingRow}>
-          <ActivityIndicator size="small" color={colors.sage} />
-          <Text style={styles.refreshingLabel}>갱신 중</Text>
-        </View>
-      )}
+      {/* N62+: AI(LIVE)가 완료되면 제품이 조용히 교체된다 — "갱신 중" 스피너는 제거
+          (처음엔 캐시/카탈로그 제품을 즉시 보여주고, ~30초 후 AI 추천으로 자동 교체) */}
 
       {state.status === 'loading' ? (
         <View style={styles.centered}>
@@ -143,8 +139,6 @@ const styles = StyleSheet.create({
   },
   refreshButtonPressed: { opacity: 0.6 },
   refreshButtonText: { ...typography.caption, color: colors.sageDark, fontWeight: '600' },
-  refreshingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.sm },
-  refreshingLabel: { ...typography.caption, color: colors.sageDark },
   centered: { alignItems: 'center', justifyContent: 'center', gap: spacing.md, paddingVertical: spacing.xxl },
   bodyText: { ...typography.bodySm, color: colors.textTertiary },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
