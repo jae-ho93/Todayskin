@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { ReactNode, createContext, useCallback, useContext, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius, spacing, typography } from '../theme';
 
 // F43: 전역 토스트 — Alert 대신 성공/오류/정보 피드백을 흐름을 끊지 않고 표시한다.
@@ -38,6 +39,8 @@ const COLOR: Record<ToastType, string> = {
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  // F89: 토스트가 노치/다이내믹 아일랜드에 가려지지 않도록 상단 safe area만큼 내린다.
+  const insets = useSafeAreaInsets();
   const [toast, setToast] = useState<ToastState | null>(null);
   const opacity = useRef(new Animated.Value(0)).current;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -69,7 +72,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         <Animated.View
           key={toast.key}
           pointerEvents="none"
-          style={[styles.toast, { opacity }]}
+          style={[styles.toast, { opacity, top: insets.top + spacing.xl }]}
           accessibilityLiveRegion="polite"
         >
           <Ionicons name={ICON[toast.type]} size={18} color={COLOR[toast.type]} />
@@ -83,7 +86,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 const styles = StyleSheet.create({
   toast: {
     position: 'absolute',
-    top: spacing.xl,
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',

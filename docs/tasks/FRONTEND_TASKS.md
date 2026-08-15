@@ -1142,6 +1142,17 @@ caption(500)은 3종 제한 내 가독성 우선으로 SemiBold 매핑.
 
 완료 기준: 화면상 근거 표기가 실제 참조와 AI 생성물을 구별해 보여준다. → 충족
 
+### F89. 토스트 알림이 노치/다이내믹 아일랜드에 가려짐 (완료)
+
+브랜치: `fix/toast-safe-area`
+
+> **문제**: 실기기(iPhone 다이내믹 아일랜드)에서 상단 토스트 알림("새로고침하지 못했어요 — 기존
+> 정보를 유지합니다" 등)이 `top: 24px` 고정이라 노치에 가려져 제대로 안 보인다.
+
+- [x] `Toast.tsx` — `useSafeAreaInsets`로 상단 safe area만큼 내려 표시 (`top: insets.top + spacing.xl`)
+- [x] 검증 — typecheck/lint/181 tests 통과, 다른 상단 고정 요소 없음 확인
+
+
 ### F67. 기록 삭제 UI (완료)
 
 브랜치: `feature/diagnosis-record-deletion` (백엔드 N43과 같은 PR)
