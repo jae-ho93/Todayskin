@@ -755,6 +755,37 @@ describe('DiagnosisService', () => {
       expect(imageStorage.presignImages).not.toHaveBeenCalled();
     });
 
+    it('N58: presigned URL 생성 실패(일시적 스토리지 장애) 시 image·landmarks 모두 null', async () => {
+      consentService.hasActive.mockResolvedValue(true);
+      // 서명 대상은 있지만(이미지 row 존재) presign이 빈 배열로 돌아옴 — URL 발급 실패.
+      imageStorage.presignImages.mockResolvedValue([]);
+      prisma.diagnosis.findMany.mockResolvedValue([
+        {
+          id: 'snap-presign-fail',
+          userId: 1,
+          capturedAt: new Date('2026-08-05T16:30:00.000Z'),
+          overallScore: 81,
+          status: 'COMPLETED',
+          modelVersion: 'mock-v0.1.0',
+          landmarks: { version: 'v1', points: [[0.1, 0.2]] },
+          skinMetrics: [],
+          weatherSnapshot: null,
+          recommendations: [],
+          image: {
+            deletedAt: null,
+            s3Bucket: 'todayskin-local',
+            s3Key: 'diagnoses/1/front.jpg',
+            contentType: 'image/jpeg',
+          },
+        },
+      ]);
+
+      const result = await service.getHistoryByDate(1, '2026-08-06');
+      expect(result.diagnoses[0].image).toBeNull();
+      expect(result.diagnoses[0].landmarks).toBeNull();
+      expect(imageStorage.presignImages).toHaveBeenCalledTimes(1);
+    });
+
     it('저장 동의 시 image·landmarks를 노출', async () => {
       consentService.hasActive.mockResolvedValue(true);
       // BE-2026-08-12: memory 스토어는 dev-storage http URL을 발급한다

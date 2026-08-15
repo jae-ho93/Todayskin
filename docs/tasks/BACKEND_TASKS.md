@@ -117,7 +117,7 @@ N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
 - [x] 추천 생성·케어(weather/skin/combined/morning)·날씨 제품·진단 제출에 `@SensitiveThrottle()` 적용
 - [x] 실제 컨트롤러 핸들러 기준 라우트 등록 스펙 추가 (`cost-sensitive-routes.spec.ts`, 14 케이스)
 
-### N58. presigned URL 생성 실패 시 landmarks 미노출 (MEDIUM-07) (등록 2026-08-16)
+### N58. presigned URL 생성 실패 시 landmarks 미노출 (MEDIUM-07) ✅ 2026-08-16
 
 브랜치: `fix/landmarks-presigned-failure`
 
@@ -125,8 +125,8 @@ N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
 > landmarks가 노출된다(현재 의도된 트레이드오프 주석). 얼굴 geometry 데이터이므로
 > URL 생성 실패 시 image=null과 함께 landmarks=null로 맞춘다.
 
-- [ ] `diagnosis.service.ts` — URL 생성 실패 시 landmarks도 미노출
-- [ ] DTO 주석·관련 테스트 갱신
+- [x] `diagnosis.service.ts` — URL 생성 실패 시 landmarks도 미노출 (기존 의도된 트레이드오프 제거)
+- [x] DTO 주석·관련 테스트 갱신 (N58 케이스 추가, diagnosis.service 42 passed)
 
 ### N59. rollback 전략과 DB migration 결합 문서화 (MEDIUM-06) (등록 2026-08-16)
 
