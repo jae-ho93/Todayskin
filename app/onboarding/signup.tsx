@@ -420,10 +420,11 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.xl },
   keyboardAvoiding: { flex: 1 },
   // F62: ScrollView contentContainer — flexGrow로 하단(약관)은 자연스럽게 내려간다
-  body: { flexGrow: 1, paddingVertical: spacing.xl },
-  // F84: 입력 블록을 화면 중앙 부근으로 — flex 대신 flexGrow라 키보드로 공간이
-  // 줄어도 콘텐츠가 잘리지 않고 스크롤이 정상 동작한다 (F62 클리핑 회귀 없음).
-  middle: { flexGrow: 1, justifyContent: 'center', gap: spacing.xl },
+  body: { flexGrow: 1, paddingTop: spacing.xxxl, paddingBottom: spacing.xl },
+  // F87: 중앙 배치는 flex 재배치(justifyContent)가 아니라 고정 오프셋으로 —
+  // 키보드가 열려도 여백이 재분배되지 않아 화면이 움직이지 않고, 포커스된
+  // 필드(밑줄 색)만 변한다. flexGrow도 제거해 하단 약관까지 고정(토스 패턴).
+  middle: { marginTop: spacing.xxl, gap: spacing.xl },
   headline: { ...typography.displayLg, color: colors.textPrimary },
   subtitle: { ...typography.body, color: colors.textSecondary, marginTop: spacing.sm },
   backLink: { marginBottom: spacing.sm },
@@ -466,7 +467,7 @@ const styles = StyleSheet.create({
   smsButtonText: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },
   verifiedText: { ...typography.subtitle, color: colors.sageDark, fontWeight: '700' },
   error: { ...typography.bodySm, color: colors.coralDark },
-  footer: { gap: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.md },
+  footer: { marginTop: spacing.xxxl, gap: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.md },
   // F48: 키보드 위 완료 바
   doneBar: {
     flexDirection: 'row',
