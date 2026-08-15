@@ -67,7 +67,7 @@ services:
       start_period: 60s
 
   # T14/N5: NestJS 백엔드. 로컬 통합 환경은 development 모드로 실행해
-  # MOCK_GEMINI를 안전하게 사용할 수 있게 한다. 운영은 이 compose의
+  # MOCK_OPENAI를 안전하게 사용할 수 있게 한다. 운영은 이 compose의
   # 임시 mock 설정을 재사용하지 말고 별도 secret/config를 주입한다.
   backend:
     profiles: ["backend"]
@@ -92,7 +92,7 @@ services:
       # 로컬 통합 환경용 임시 시크릿. 운영에서는 별도 주입.
       JWT_ACCESS_SECRET: local_dev_access_secret_at_least_32_characters_long
       JWT_REFRESH_SECRET: local_dev_refresh_secret_at_least_32_characters_long
-      MOCK_GEMINI: "true"
+      MOCK_OPENAI: "true"
       # compose 통합 시 실제 inference 컨테이너를 사용한다.
       MOCK_INFERENCE: "false"
       INFERENCE_SERVICE_URL: http://inference:8000

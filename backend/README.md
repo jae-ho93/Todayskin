@@ -37,7 +37,8 @@ backend/
 | `consent` · `storage` | 목적별 동의 게이트 · 이미지 S3/Memory · reconciliation |
 | `diagnosis` | 업로드·검증 · InferenceProvider · 이력/캘린더 · landmarks |
 | `weather` | 기상·대기질 Client · 캐시 · snapshot · 스케줄 수집 |
-| `recommendations` · `products` · `gemini` | 추천/제품 · rec-fast-path(SWR·FALLBACK·LIVE job) · EvidencePolicy |
+| `recommendations` · `products` · `openai` | 추천/제품 · rec-fast-path(SWR·FALLBACK·LIVE job) · EvidencePolicy |
+| `care` | 케어 루틴·제품 — 날씨/피부 기반, AI(web_search) + 카탈로그 FALLBACK 즉시 노출, Redis SWR 캐시 |
 | `pattern` | 개인 패턴 LOCKED/READY |
 | `notifications` | 알림 선호 · `pushDeliveryAvailable` |
 | `jobs` | Inline/BullMQ dispatcher · `GET /jobs/:id` |

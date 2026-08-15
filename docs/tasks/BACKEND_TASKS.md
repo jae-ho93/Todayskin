@@ -9,8 +9,8 @@
 
 NestJS를 메인 백엔드(BFF + 비즈니스 로직)로, FastAPI(inference-service)를 독립 AI 추론 서버로
 역할 분리한 운영 가능한 백엔드를 목표로 한다. NestJS는 Modular Monolith 구조로 auth, otp, admin,
-consent, storage, diagnosis, weather, recommendations, products, pattern, notifications, gemini, jobs,
-idempotency 모듈로 책임을 분리하고 모든 비즈니스 로직을 담당한다. FastAPI는 AI 모델 서빙과 피부 이미지 추론만 담당하며
+consent, storage, diagnosis, weather, recommendations, products, care, pattern, notifications, openai,
+jobs, idempotency 모듈로 책임을 분리하고 모든 비즈니스 로직을 담당한다. FastAPI는 AI 모델 서빙과 피부 이미지 추론만 담당하며
 추론 결과만 NestJS로 전달한다.
 
 데이터는 PostgreSQL + Prisma(운영: AWS RDS), Redis(날씨 캐시·BullMQ broker),
@@ -39,6 +39,15 @@ RDS·S3·CloudWatch 연동, Pino·Helmet·JWT·Swagger·Jest를 적용한다.
 
 각 Task는 브랜치 하나 = PR 하나이며, 코드 변경이 없는 인프라 설정 작업은
 설정 근거와 확인 결과를 PR 본문 또는 이 문서에 남긴다.
+
+**데모 준비 웨이브 (2026-08-16)**: 실기기 테스트 + 배포 2일 전 마무리로 N55~N63, F84~F89를
+**전부 머지했다** (PR #210~#223). 핵심: ① N55 — ECS migrate task에서 shadow DB 없는 `migrate diff`
+제거(CRITICAL-01) ② N56 — 추천 생성 API diagnosisId 전용 전환(HIGH-03) ③ N57 — 비용 민감 라우트
+fail-closed(HIGH-04) ④ N58 — presigned 실패 시 landmarks 미노출(MEDIUM-07) ⑤ N59 — 롤백/migration
+expand-contract 문서화 ⑥ N60 — 올리브영 직링크 데모 1개만 유지 ⑦ N61 — DB E2E 절차 문서화
+⑧ N62/N63 — 케어 제품 즉시 노출 + Redis SWR 캐시·조용한 교체 ⑨ F84/F87 — 로그인 중앙 배치(회귀 수정),
+F85 측정 결과 리디자인, F86 프론트 취약점 조사(SDK 54 내 안전 수정 0건), F89 토스트 safe area.
+나머지 Open(N16·N35~N37·N50·N51)은 AWS 자격 증명 필요로 유지.
 
 ### N54. 배포 준비 마감 — 자격 증명 없이 끝낼 수 있는 전부 (Fable5 리뷰 후속) ✅ 2026-08-13
 
@@ -160,7 +169,7 @@ N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
 - [x] `docs/guides/SETUP.md`에 로컬 E2E 절차 문서화 (compose → migrate deploy → seed → test:e2e)
 - [x] CI(postgres service) E2E 통과로 최종 검증 (CI 복구 후 rerun으로 확인)
 
-### N62. 케어/제품 화면 — FALLBACK에 시드 카탈로그 제품 즉시 노출 (2026-08-16)
+### N62. 케어/제품 화면 — FALLBACK에 시드 카탈로그 제품 즉시 노출 ✅ 2026-08-16 (PR #221)
 
 브랜치: `fix/care-fallback-catalog`
 
@@ -173,7 +182,7 @@ N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
 - [x] 구매 링크 없는 제품은 제외(가짜 링크 금지 유지), 카탈로그 로딩 실패 시 기존처럼 루틴만 반환
 - [x] 단위 테스트 추가 (카테고리 매핑·링크 없는 제품 제외) — typecheck/lint/15 tests 통과, API 실측 33개 즉시 응답
 
-### N63. 케어 LIVE 결과 Redis SWR 캐시 + 프론트 "갱신 중" 스피너 제거 (2026-08-16)
+### N63. 케어 LIVE 결과 Redis SWR 캐시 + 프론트 "갱신 중" 스피너 제거 ✅ 2026-08-16 (PR #222)
 
 브랜치: `feat/care-redis-cache-silent-swap`
 
@@ -184,6 +193,19 @@ N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
 - [x] `care.service.ts` generateLive 완료 시 `care:plan:{type}:{careKey}` Redis SWR 캐시 적재(기존 fastPath.writeCache 재사용) — 같은 날 재방문은 job 없이 CACHED 즉시 응답
 - [x] `app/products/[category].tsx` — "갱신 중" 스피너/로우 제거, LIVE 완료 시 제품 목록이 조용히 교체 (useAsyncJob watch 패턴 유지, 카테고리 비어 있을 때만 "찾고 있어요" 유지)
 - [x] 검증 — 백엔드 typecheck/lint/care 15 tests, 프론트 typecheck/lint/181 tests 통과
+
+
+### N64. 문서 최신화 — 2026-08-16 데모 준비 웨이브 반영 ✅ 2026-08-16 (PR #224)
+
+브랜치: `docs/sync-2026-08-16-wave`
+
+> **문제**: N55~N63/F84~F89 머지 후 태스크 보드 완료 표시·PR 번호·웨이브 요약과
+> Gemini→OpenAI 전환 이후 남은 스테일 참조(`gemini` 모듈, `MOCK_GEMINI`)가 문서에 남아 있다.
+
+- [x] BACKEND_TASKS.md — N62/N63 ✅ + PR 번호, 목표 모듈 목록(gemini→openai·care), 2026-08-16 데모 준비 웨이브 노트
+- [x] FRONTEND_TASKS.md — F84~F89 완료 표시 + PR 번호(#217~#223), 2026-08-16 웨이브 노트
+- [x] ARCHITECTURE.md·backend/README.md — 모듈 목록/맵 gemini→openai + care 신설 반영
+- [x] SETUP.md·docker-compose.yml — MOCK_GEMINI → MOCK_OPENAI 정리 (compose YAML 유효성 검증 통과)
 
 
 ### N16. AWS 운영 리소스 프로비저닝·첫 배포 (미완료)
