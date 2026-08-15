@@ -16,6 +16,7 @@ import { WeatherBasedRequestDto } from './dto/weather-based-request.dto';
 import { WeatherProductsResponseDto } from './dto/weather-products-response.dto';
 import { ProductDto } from './dto/product.dto';
 import { ProductPageDto } from './dto/product-page.dto';
+import { SensitiveThrottle } from '../../common/rate-limit/sensitive-throttle';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../../common/strategies/jwt.strategy';
@@ -42,6 +43,8 @@ export class ProductController {
     });
   }
 
+  // N57: OpenAI 호출(비용 발생) 엔드포인트 — Redis 장애 시 fail-closed(503).
+  @SensitiveThrottle()
   @Post('weather-based')
   @ApiOperation({
     summary: '날씨 기반 제품 추천 빠른 경로 (피부 측정값 없음, N32/N29)',

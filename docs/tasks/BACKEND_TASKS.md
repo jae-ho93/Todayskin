@@ -105,7 +105,7 @@ N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
 - [x] `recommendation.controller.ts` generateAsync payload·`recommendation.job-handler.ts` 정리 (+ `requiredString` 헬퍼)
 - [x] 관련 spec/e2e 테스트 갱신 + `openapi:export`/`openapi:types` 재생성 (contract-drift CI)
 
-### N57. 비용·보안 민감 엔드포인트 Redis 장애 시 fail-closed (HIGH-04) (등록 2026-08-16)
+### N57. 비용·보안 민감 엔드포인트 Redis 장애 시 fail-closed (HIGH-04) ✅ 2026-08-16
 
 브랜치: `fix/throttle-cost-endpoints`
 
@@ -114,9 +114,8 @@ N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
 > 엔드포인트는 여전히 fail-open이라 Redis 장애 중 API abuse → Gemini/OpenAI·추론
 > 비용 증가 창이 열린다.
 
-- [ ] 추천 생성(`generate`/`generate/fast`/`generate/async`)·진단 제출(`POST /diagnosis`)에
-      `@SensitiveThrottle()` 적용
-- [ ] Redis 장애 시 503 테스트 추가 (기존 sensitive-throttle 스펙 패턴)
+- [x] 추천 생성·케어(weather/skin/combined/morning)·날씨 제품·진단 제출에 `@SensitiveThrottle()` 적용
+- [x] 실제 컨트롤러 핸들러 기준 라우트 등록 스펙 추가 (`cost-sensitive-routes.spec.ts`, 14 케이스)
 
 ### N58. presigned URL 생성 실패 시 landmarks 미노출 (MEDIUM-07) (등록 2026-08-16)
 
