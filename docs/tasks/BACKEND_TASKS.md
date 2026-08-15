@@ -65,6 +65,102 @@ builder의 `.prisma`를 함께 복사하도록 `backend/Dockerfile`을 수정하
 이 검증이 없었으면 **배포 당일 첫 rollout이 실패**했을 것이다. 상세 기록:
 `docs/guides/DEPLOYMENT.md` "로컬 검증 결과 (N54)".
 
+**배포 전 감사 후속 (2026-08-16 등록)**: 배포 2일 전 전체 감사에서 확인된 항목을
+등록한다. 우선순위: **N55(migration pipeline) → N56(추천 diagnosisId 전용) →
+N57(fail-closed) → N58(landmarks) → N59(rollback 문서) → N60(올리브영 링크) →
+N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
+
+### N55. ECS migrate task에서 shadow DB 없는 migrate diff 제거 (CRITICAL-01) (등록 2026-08-16)
+
+브랜치: `chore/ecs-migrate-no-shadow-diff`
+
+> **문제 (실측)**: production migrate task가 `prisma migrate diff --from-migrations
+> --to-schema --exit-code`를 실행하지만 task definition에는 `DATABASE_URL`만 있고
+> `SHADOW_DATABASE_URL`이 없다. 동일 명령을 로컬에서 재현하면
+> `You must set datasource.shadowDatabaseUrl ... if you want to diff a migrations directory.`
+> 로 실패한다(exit 1). 즉 **release pipeline이 migrate 단계에서 확정적으로 막힌다.**
+> CI(`ci.yml`)는 `SHADOW_DATABASE_URL`을 별도 DB로 만들어 같은 diff를 검사하므로
+> CI만 통과하고 production만 깨지는 구조다.
+> **결정**: release에서는 diff 검사를 제거하고 `prisma migrate deploy`만 실행한다
+> (방법 B). drift 검사는 CI 전담이며, release는 CI 게이트(guard job)에 묶여 있어
+> 검증된 커밋만 배포된다. shadow DB가 없는 상태에서 `migrate deploy`는 정상 동작한다.
+> (대안 A — production shadow DB 추가는 AWS 자격 증명이 필요한 N16 선행 작업이라
+> 배포 2일 전에 의존할 수 없다. 추후 hardening으로 문서에 남긴다.)
+
+- [ ] `backend/docker/ecs/migrate-task-definition.json` command → `npx prisma migrate deploy`
+- [ ] `docs/guides/DEPLOYMENT.md` release 단계 설명 갱신 (drift 검사는 CI 전담 명시)
+- [ ] `prisma.config.ts` shadow 로직은 유지 (CI·로컬 diff 검증용)
+
+### N56. 추천 생성 API diagnosisId 전용 전환 (HIGH-03) (등록 2026-08-16)
+
+브랜치: `refactor/recommendation-diagnosis-only`
+
+> **문제**: `POST /recommendations/generate*`가 diagnosisId 없이 skinScore+weather
+> 직접 수신을 허용(TODO(T8) 잔존). 클라이언트가 원하는 값을 넣어 Gemini/OpenAI
+> 추천을 조작·비용 소모할 수 있고, 서버 canonical 진단 데이터와 불일치할 수 있다.
+> 프론트는 이미 diagnosisId만 전송하므로 계약을 최종 형태로 고정한다.
+
+- [ ] `generate-recommendation.dto.ts` — skinScore/weather 제거, diagnosisId 필수
+- [ ] `recommendation.service.ts` — `resolveGenerateInputs` 호환 경로 제거
+- [ ] `recommendation.controller.ts` generateAsync payload·`recommendation.job-handler.ts` 정리
+- [ ] 관련 spec/테스트 갱신 + `openapi:export`/`openapi:types` 재생성 (contract-drift CI)
+
+### N57. 비용·보안 민감 엔드포인트 Redis 장애 시 fail-closed (HIGH-04) (등록 2026-08-16)
+
+브랜치: `fix/throttle-cost-endpoints`
+
+> **문제**: 일반 rate limit은 Redis 장애 시 fail-open(통과). 인증·OTP만
+> `@SensitiveThrottle`로 fail-closed(503)인데, 비용이 발생하는 추천 생성·진단 추론
+> 엔드포인트는 여전히 fail-open이라 Redis 장애 중 API abuse → Gemini/OpenAI·추론
+> 비용 증가 창이 열린다.
+
+- [ ] 추천 생성(`generate`/`generate/fast`/`generate/async`)·진단 제출(`POST /diagnosis`)에
+      `@SensitiveThrottle()` 적용
+- [ ] Redis 장애 시 503 테스트 추가 (기존 sensitive-throttle 스펙 패턴)
+
+### N58. presigned URL 생성 실패 시 landmarks 미노출 (MEDIUM-07) (등록 2026-08-16)
+
+브랜치: `fix/landmarks-presigned-failure`
+
+> **문제**: 저장 동의 + 이미지 row 존재 시 presigned URL 생성 실패(일시적 스토리지 장애)에도
+> landmarks가 노출된다(현재 의도된 트레이드오프 주석). 얼굴 geometry 데이터이므로
+> URL 생성 실패 시 image=null과 함께 landmarks=null로 맞춘다.
+
+- [ ] `diagnosis.service.ts` — URL 생성 실패 시 landmarks도 미노출
+- [ ] DTO 주석·관련 테스트 갱신
+
+### N59. rollback 전략과 DB migration 결합 문서화 (MEDIUM-06) (등록 2026-08-16)
+
+브랜치: `docs/rollback-migration-strategy`
+
+> **문제**: rollback은 이전 이미지 + `skip_migrate=true`인데, destructive migration
+> (컬럼 삭제·enum 변경)이 배포된 경우 이전 코드로 돌아가도 깨질 수 있다.
+> forward-fix(신규 migration으로 되돌림) 원칙과 expand/contract 가이드를 문서화한다.
+
+- [ ] `docs/guides/DEPLOYMENT.md` — destructive migration 금지 원칙 + forward-fix 절차
+
+### N60. 올리브영 링크 정리 — 데모 1개만 직링크 유지 (등록 2026-08-16)
+
+브랜치: `chore/oliveyoung-homepage-links`
+
+> **문제**: 제품 구매 링크(`purchaseUrl`)가 goodsNo 직링크/검색 URL 혼재 — 직링크는
+> 검증 전이라 깨질 수 있다. 데모에서 하나만 실제 상품으로 연결하고 나머지는
+> 올리브영 홈페이지 링크로 통일한다.
+
+- [ ] `backend/prisma/seed-data.ts` — 데모 직링크 1개 유지, 나머지 `https://www.oliveyoung.co.kr/`
+- [ ] seed-migration e2e(purchaseUrl truthy) 통과
+
+### N61. DB 기반 E2E 검증 환경 정상화 (HIGH-02) (등록 2026-08-16)
+
+브랜치: `chore/db-e2e-verification`
+
+> **문제**: 로컬에 PostgreSQL이 없어 E2E가 DB 연결 오류(P1001/PrismaClientKnownRequestError)로
+> 다수 실패한다 — 코드 버그가 아니라 환경 문제. CI는 postgres service 컨테이너로
+> migrate deploy → seed → E2E까지 실행하므로 CI 통과로 검증을 대체한다.
+
+- [ ] 로컬 docker compose(postgres/redis) 가동 + `migrate deploy` → `test:e2e` 절차 문서화
+- [ ] CI E2E 통과로 검증 완료 처리 (로컬은 docker 환경에서 재검증)
+
 ### N16. AWS 운영 리소스 프로비저닝·첫 배포 (미완료)
 
 브랜치: `chore/aws-production-bootstrap`
