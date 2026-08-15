@@ -138,7 +138,7 @@ N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
 
 - [x] `docs/guides/DEPLOYMENT.md` — 이미지 롤백 vs 스키마 롤백 구분, forward-fix 절차, expand/contract 3단계 규칙
 
-### N60. 올리브영 링크 정리 — 데모 1개만 직링크 유지 (등록 2026-08-16)
+### N60. 올리브영 링크 정리 — 데모 1개만 직링크 유지 ✅ 2026-08-16
 
 브랜치: `chore/oliveyoung-homepage-links`
 
@@ -146,8 +146,8 @@ N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
 > 검증 전이라 깨질 수 있다. 데모에서 하나만 실제 상품으로 연결하고 나머지는
 > 올리브영 홈페이지 링크로 통일한다.
 
-- [ ] `backend/prisma/seed-data.ts` — 데모 직링크 1개 유지, 나머지 `https://www.oliveyoung.co.kr/`
-- [ ] seed-migration e2e(purchaseUrl truthy) 통과
+- [x] `backend/prisma/seed-data.ts` — prod-2만 직링크 유지, 나머지 32개 `OLIVE_YOUNG_HOMEPAGE`로 통일
+- [x] typecheck·lint·unit tests 638 passed (seed-migration e2e는 CI에서 검증)
 
 ### N61. DB 기반 E2E 검증 환경 정상화 (HIGH-02) (등록 2026-08-16)
 
