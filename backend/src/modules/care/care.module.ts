@@ -3,6 +3,7 @@ import { CareController } from './care.controller';
 import { CareService } from './care.service';
 import { CareJobHandler } from './care.job-handler';
 import { OpenAiModule } from '../openai/openai.module';
+import { ProductCatalogModule } from '../products/product-catalog.module';
 import { WeatherModule } from '../weather/weather.module';
 import { JobsModule } from '../jobs/jobs.module';
 import { IdempotencyModule } from '../idempotency/idempotency.module';
@@ -14,7 +15,7 @@ import { IdempotencyModule } from '../idempotency/idempotency.module';
  * 여기서 따로 import하지 않는다.
  */
 @Module({
-  imports: [OpenAiModule, WeatherModule, JobsModule, IdempotencyModule],
+  imports: [OpenAiModule, ProductCatalogModule, WeatherModule, JobsModule, IdempotencyModule],
   controllers: [CareController],
   providers: [CareService, CareJobHandler],
   exports: [CareService],

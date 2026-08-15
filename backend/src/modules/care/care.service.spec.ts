@@ -9,6 +9,7 @@ import { JobStateService } from '../jobs/job-state.service';
 import { FastPathCoordinator } from '../jobs/fast-path.coordinator';
 import { IdempotencyService } from '../idempotency/idempotency.service';
 import { WeatherService } from '../weather/weather.service';
+import { ProductCatalogService } from '../products/product-catalog.service';
 import { WeatherSource } from '../../common/enums/weather-source.enum';
 import { JobStatus } from '../jobs/enums/job-status.enum';
 import * as linkValidator from './care-link-validator';
@@ -30,6 +31,7 @@ describe('CareService', () => {
   let redis: { getJson: jest.Mock; setJson: jest.Mock; invalidate: jest.Mock };
   let jobService: { enqueue: jest.Mock };
   let jobState: { findRecentByDedupeKey: jest.Mock };
+  let catalog: { load: jest.Mock };
   let idempotency: { acquire: jest.Mock; complete: jest.Mock; release: jest.Mock };
   let prisma: {
     diagnosis: { findFirst: jest.Mock; findUnique: jest.Mock };
@@ -77,6 +79,7 @@ describe('CareService', () => {
       enqueue: jest.fn().mockResolvedValue({ jobId: 'job-care-1', status: JobStatus.PENDING }),
     };
     jobState = { findRecentByDedupeKey: jest.fn().mockResolvedValue(null) };
+    catalog = { load: jest.fn().mockResolvedValue([]) };
     idempotency = {
       acquire: jest.fn().mockResolvedValue({ outcome: 'acquired' }),
       complete: jest.fn().mockResolvedValue(undefined),
@@ -101,6 +104,7 @@ describe('CareService', () => {
         { provide: RedisService, useValue: redis },
         { provide: JobService, useValue: jobService },
         { provide: JobStateService, useValue: jobState },
+        { provide: ProductCatalogService, useValue: catalog },
         { provide: IdempotencyService, useValue: idempotency },
         FastPathCoordinator,
       ],
@@ -127,6 +131,23 @@ describe('CareService', () => {
       expect(redis.invalidate).toHaveBeenCalled();
       // dedupeKey를 안 넘기면 FastPathCoordinator가 job 재사용 조회를 건너뛴다.
       expect(jobState.findRecentByDedupeKey).not.toHaveBeenCalled();
+    });
+
+    it('FALLBACK에 시드 카탈로그 제품이 즉시 포함된다 (빈 화면 금지)', async () => {
+      catalog.load.mockResolvedValue([
+        { id: 'prod-1', brand: '닥터지', name: '그린 마일드 업 선 플러스', purchaseUrl: 'https://a.example.com', category: 'barrier' },
+        { id: 'prod-11', brand: '라운드랩', name: '1025 독도 클렌저', purchaseUrl: 'https://b.example.com', category: 'barrier' },
+        { id: 'prod-13', brand: '토리든', name: '저분자 히알루론산 세럼', purchaseUrl: 'https://c.example.com', category: 'moisture' },
+        { id: 'prod-99', brand: '링크없음', name: '테스트 제품', purchaseUrl: null, category: 'moisture' },
+      ]);
+      const result = await service.getWeatherFast(1, { lat: 37.5, lon: 127 });
+      expect(result.source).toBe('FALLBACK');
+      const products = result.plan.products;
+      expect(products.map((p) => p.category)).toEqual(
+        expect.arrayContaining(['선크림', '클렌저', '에센스/세럼/앰플']),
+      );
+      // 구매 링크 없는 제품은 가짜 링크 방지로 제외된다.
+      expect(products.some((p) => p.name.includes('링크없음'))).toBe(false);
     });
   });
 
