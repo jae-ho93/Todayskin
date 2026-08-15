@@ -128,7 +128,7 @@ N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
 - [x] `diagnosis.service.ts` — URL 생성 실패 시 landmarks도 미노출 (기존 의도된 트레이드오프 제거)
 - [x] DTO 주석·관련 테스트 갱신 (N58 케이스 추가, diagnosis.service 42 passed)
 
-### N59. rollback 전략과 DB migration 결합 문서화 (MEDIUM-06) (등록 2026-08-16)
+### N59. rollback 전략과 DB migration 결합 문서화 (MEDIUM-06) ✅ 2026-08-16
 
 브랜치: `docs/rollback-migration-strategy`
 
@@ -136,7 +136,7 @@ N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
 > (컬럼 삭제·enum 변경)이 배포된 경우 이전 코드로 돌아가도 깨질 수 있다.
 > forward-fix(신규 migration으로 되돌림) 원칙과 expand/contract 가이드를 문서화한다.
 
-- [ ] `docs/guides/DEPLOYMENT.md` — destructive migration 금지 원칙 + forward-fix 절차
+- [x] `docs/guides/DEPLOYMENT.md` — 이미지 롤백 vs 스키마 롤백 구분, forward-fix 절차, expand/contract 3단계 규칙
 
 ### N60. 올리브영 링크 정리 — 데모 1개만 직링크 유지 (등록 2026-08-16)
 
