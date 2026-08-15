@@ -269,8 +269,9 @@ const styles = StyleSheet.create({
   keyboardAvoiding: { flex: 1 },
   // F62: ScrollView contentContainer — flexGrow로 하단(약관)은 자연스럽게 내려간다
   body: { flexGrow: 1, paddingVertical: spacing.xl },
-  // F62: 중앙 압축/겹침 제거 — 필드는 상단 1/3 근처(flex-start + 여백), 키보드는 ScrollView가 처리
-  middle: { flex: 1, justifyContent: 'flex-start', marginTop: spacing.xxl, gap: spacing.xl },
+  // F84: 입력 블록을 화면 중앙 부근으로 — flex 대신 flexGrow라 키보드로 공간이
+  // 줄어도 콘텐츠가 잘리지 않고 스크롤이 정상 동작한다 (F62 클리핑 회귀 없음).
+  middle: { flexGrow: 1, justifyContent: 'center', gap: spacing.xl },
   headline: { ...typography.displayLg, color: colors.textPrimary },
   subtitle: { ...typography.body, color: colors.textSecondary, marginTop: spacing.sm },
   field: { gap: spacing.sm },
