@@ -70,7 +70,7 @@ builder의 `.prisma`를 함께 복사하도록 `backend/Dockerfile`을 수정하
 N57(fail-closed) → N58(landmarks) → N59(rollback 문서) → N60(올리브영 링크) →
 N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
 
-### N55. ECS migrate task에서 shadow DB 없는 migrate diff 제거 (CRITICAL-01) (등록 2026-08-16)
+### N55. ECS migrate task에서 shadow DB 없는 migrate diff 제거 (CRITICAL-01) ✅ 2026-08-16
 
 브랜치: `chore/ecs-migrate-no-shadow-diff`
 
@@ -87,9 +87,9 @@ N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
 > (대안 A — production shadow DB 추가는 AWS 자격 증명이 필요한 N16 선행 작업이라
 > 배포 2일 전에 의존할 수 없다. 추후 hardening으로 문서에 남긴다.)
 
-- [ ] `backend/docker/ecs/migrate-task-definition.json` command → `npx prisma migrate deploy`
-- [ ] `docs/guides/DEPLOYMENT.md` release 단계 설명 갱신 (drift 검사는 CI 전담 명시)
-- [ ] `prisma.config.ts` shadow 로직은 유지 (CI·로컬 diff 검증용)
+- [x] `backend/docker/ecs/migrate-task-definition.json` command → `npx prisma migrate deploy`
+- [x] `docs/guides/DEPLOYMENT.md` release 단계 설명 갱신 (drift 검사는 CI 전담 명시)
+- [x] `prisma.config.ts` shadow 로직은 유지 (CI·로컬 diff 검증용)
 
 ### N56. 추천 생성 API diagnosisId 전용 전환 (HIGH-03) (등록 2026-08-16)
 
