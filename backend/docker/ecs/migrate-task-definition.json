@@ -19,7 +19,7 @@
       "command": [
         "sh",
         "-c",
-        "npx prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code && npx prisma migrate deploy"
+        "npx prisma migrate deploy"
       ],
       "environment": [
         { "name": "NODE_ENV", "value": "production" },

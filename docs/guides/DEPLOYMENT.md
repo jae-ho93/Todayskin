@@ -70,7 +70,8 @@ docker compose --profile backend up -d --build
 2. **build-and-push** (자동): NestJS / inference 이미지를 ECR에 push. tag = **commit SHA**
 3. **release** (`environment: production` 승인 게이트):
    - RDS snapshot 백업 (`RDS_INSTANCE_ID` 설정 시)
-   - migrate task: `migrate diff` + `migrate deploy` (실패 시 app rollout 중단)
+   - migrate task: `prisma migrate deploy` (실패 시 app rollout 중단)
+     (N55: drift 검사는 CI 전담 — release는 shadow DB가 필요 없는 `migrate deploy`만)
    - worker(`ECS_SERVICE_WORKER` 설정 시) → NestJS → inference 순서로
      새 task revision 등록 후 ECS service 업데이트
    - `services-stable` 대기
@@ -200,9 +201,17 @@ inference-service는 **내부망 전용** 서비스다. 무제한 이미지 처�
 운영 migration은 **단일 release job**이 app rollout **전**에 실행한다.
 
 1. RDS snapshot (가능하면)
-2. `prisma migrate diff --from-migrations --to-schema --exit-code` (불일치 시 실패)
-3. `prisma migrate deploy`
-4. 성공 시에만 NestJS / inference service 업데이트
+2. `prisma migrate deploy` (N55)
+3. 성공 시에만 NestJS / inference service 업데이트
+
+> **N55 (2026-08-16)**: release에서 `migrate diff --from-migrations` 검사를 제거했다.
+> `--from-migrations`는 shadow DB(`SHADOW_DATABASE_URL`)가 있어야 동작하는데, migrate
+> task definition에는 `DATABASE_URL`만 주입돼 있어 production에서 확정적으로 실패했다
+> (`You must set datasource.shadowDatabaseUrl ...`). drift 검사는 **CI 전담**이다 —
+> `ci.yml`이 별도 shadow DB(`todayskin_shadow`)를 만들어 동일 명령을 실행하고,
+> release는 CI 게이트(guard job)에 묶여 검증된 커밋만 배포된다.
+> `migrate deploy`는 shadow DB 없이 정상 동작한다. (대안 — production shadow DB 추가는
+> AWS 자격 증명이 필요한 N16 이후 hardening으로 검토 가능.)
 
 정책:
 
