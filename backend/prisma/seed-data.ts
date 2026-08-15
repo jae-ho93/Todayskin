@@ -5,9 +5,8 @@ import { EvidenceGrade, ProductCategory } from '@prisma/client';
  *
  * N27: 허구 브랜드(Skinlab/Greenfield) 시드를 제거하고 실제 화장품 30~50개를 큐레이션했다.
  * - 모든 제품은 실제 존재하는 국내 유통 브랜드이며, `purchaseUrl`로 구매 페이지를 연다.
- * - `purchaseUrl`은 **인간 검증용 초안**이다. 리서치로 확보한 Olive Young `goodsNo`
- *   직링크는 검증 전이므로 배포 전 사람이 최종 확인해야 하고, 나머지는 Olive Young
- *   검색 URL(안정적인 엔드포인트)을 쓴다. 크롤링 없이 수작업 큐레이션이다.
+ * - N60: 구매 링크는 데모 1개만 실제 상품 직링크를 유지하고 나머지는 올리브영
+ *   홈페이지 링크로 통일한다 (goodsNo 직링크는 검증 전 초안이라 깨질 수 있다).
  * - matchedIngredients는 `ALLOWED_INGREDIENTS`(gemini.client.ts) whitelist만 사용한다.
  *
  * seed.ts와 테스트(seed-migration e2e)가 이 파일을 단일 소스로 import한다.
@@ -45,12 +44,12 @@ export type RecommendationLinkSeed = {
   displayOrder: number;
 };
 
-/** Olive Young 검색 URL — 안정적인 엔드포인트. 상품명으로 검색 페이지를 연다. */
-export function oliveYoungSearchUrl(query: string): string {
-  return `https://www.oliveyoung.co.kr/store/search/getSearch.do?query=${encodeURIComponent(
-    query,
-  )}`;
-}
+/**
+ * N60: 구매 링크 정책 — 데모 1개(prod-2)만 실제 상품 직링크를 유지하고,
+ * 나머지는 올리브영 홈페이지 링크로 통일한다. goodsNo 직링크는 검증 전 초안이라
+ * 유지보수 비용 대비 데모 목적에는 홈페이지 링크로 충분하다.
+ */
+const OLIVE_YOUNG_HOMEPAGE = 'https://www.oliveyoung.co.kr/';
 
 export const TEMPLATES: TemplateSeed[] = [
   {
@@ -72,7 +71,7 @@ export const TEMPLATES: TemplateSeed[] = [
 
 // C 등급은 전역 seed에서 분리 — 개인 패턴 기반이므로 seed에 넣지 않는다.
 // 실제 화장품 33개 큐레이션. 허구 브랜드 없음. matchedIngredients는 whitelist만 사용.
-// goodsNo 직링크 10건은 웹 리서치 기반 초안(검증 필요), 나머지는 Olive Young 검색 URL.
+// N60: prod-2만 실제 상품 직링크(데모), 나머지는 OLIVE_YOUNG_HOMEPAGE.
 export const PRODUCTS: ProductSeed[] = [
   // ── barrier (자외선 차단·장벽 강화) ───────────────────────────
   {
@@ -80,7 +79,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '그린 마일드 업 선 플러스',
     brand: '닥터지',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('닥터지 그린 마일드 업 선 플러스'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'A',
     matchedIngredients: ['징크옥사이드', '나이아신아마이드'],
     category: 'barrier',
@@ -105,8 +104,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '구름 수분 선크림',
     brand: '뷰티 오브 조선',
     imageUri: null,
-    purchaseUrl:
-      'https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000188610',
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'A',
     matchedIngredients: ['징크옥사이드', '나이아신아마이드'],
     category: 'barrier',
@@ -118,8 +116,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '히알루론산 워터 선 젤',
     brand: '이즈니어',
     imageUri: null,
-    purchaseUrl:
-      'https://m.oliveyoung.co.kr/m/G.do?goodsNo=A000000170877',
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'B',
     matchedIngredients: ['징크옥사이드', '히알루론산'],
     category: 'barrier',
@@ -131,8 +128,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '아토베리어 365 크림',
     brand: '아토베리어',
     imageUri: null,
-    purchaseUrl:
-      'https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000198320',
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'A',
     matchedIngredients: ['세라마이드'],
     category: 'barrier',
@@ -144,7 +140,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '세라마이드 아토 로션',
     brand: '일리윤',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('일리윤 세라마이드 아토 로션'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'B',
     matchedIngredients: ['세라마이드', '시어버터'],
     category: 'barrier',
@@ -156,7 +152,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '세라마이드 아토 크림',
     brand: '일리윤',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('일리윤 세라마이드 아토 크림'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'A',
     matchedIngredients: ['세라마이드'],
     category: 'barrier',
@@ -168,8 +164,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '솔리드 인 세라마이드 크림',
     brand: '토리든',
     imageUri: null,
-    purchaseUrl:
-      'https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000228346',
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'A',
     matchedIngredients: ['세라마이드'],
     category: 'barrier',
@@ -181,8 +176,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '순정 2X 배리어 인텐시브 크림',
     brand: '에뛰드',
     imageUri: null,
-    purchaseUrl:
-      'https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000183498',
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'B',
     matchedIngredients: ['세라마이드', '판테놀'],
     category: 'barrier',
@@ -194,7 +188,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '시카플라스트 밤 B5',
     brand: '라로슈포제',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('라로슈포제 시카플라스트 밤 B5'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'B',
     matchedIngredients: ['판테놀'],
     category: 'barrier',
@@ -206,7 +200,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '1025 독도 클렌저',
     brand: '라운드랩',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('라운드랩 1025 독도 클렌저'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'B',
     matchedIngredients: ['약산성 클렌저'],
     category: 'barrier',
@@ -218,7 +212,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '순정 약산성 6.5 휩 클렌저',
     brand: '에뛰드',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('에뛰드 순정 약산성 6.5 휩 클렌저'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'B',
     matchedIngredients: ['약산성 클렌저'],
     category: 'barrier',
@@ -232,7 +226,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '다이브인 저분자 히알루론산 세럼',
     brand: '토리든',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('토리든 다이브인 히알루론산 세럼'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'A',
     matchedIngredients: ['히알루론산'],
     category: 'moisture',
@@ -244,7 +238,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '다이브인 저분자 히알루론산 토너',
     brand: '토리든',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('토리든 다이브인 히알루론산 토너'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'B',
     matchedIngredients: ['히알루론산'],
     category: 'moisture',
@@ -256,7 +250,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '1025 독도 토너',
     brand: '라운드랩',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('라운드랩 1025 독도 토너'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'B',
     matchedIngredients: ['히알루론산'],
     category: 'moisture',
@@ -268,7 +262,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '1025 독도 로션',
     brand: '라운드랩',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('라운드랩 1025 독도 로션'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'A',
     matchedIngredients: ['히알루론산', '세라마이드'],
     category: 'moisture',
@@ -280,7 +274,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '어드벤스드 스네일 96 뮤신 파워 에센스',
     brand: '코스알엑스',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('코스알엑스 스네일 96 뮤신 에센스'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'B',
     matchedIngredients: ['히알루론산'],
     category: 'moisture',
@@ -292,8 +286,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '원더 블랙라이스 히알루론산 토너',
     brand: '하루하루',
     imageUri: null,
-    purchaseUrl:
-      'https://m.oliveyoung.co.kr/m/G.do?goodsNo=A000000225919',
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'B',
     matchedIngredients: ['히알루론산'],
     category: 'moisture',
@@ -305,7 +298,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '그린티 씨드 히알루론산 세럼',
     brand: '이니스프리',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('이니스프리 그린티 씨드 세럼'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'B',
     matchedIngredients: ['히알루론산'],
     category: 'moisture',
@@ -317,8 +310,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '마데카소사이드 앰플',
     brand: '스킨1004',
     imageUri: null,
-    purchaseUrl:
-      'https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000161581',
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'A',
     matchedIngredients: ['센텔라'],
     category: 'moisture',
@@ -330,7 +322,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '하트리프 77 수딩 토너',
     brand: '아누아',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('아누아 하트리프 77 수딩 토너'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'B',
     matchedIngredients: ['센텔라'],
     category: 'moisture',
@@ -342,7 +334,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '하트리프 77 수딩 세럼',
     brand: '아누아',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('아누아 하트리프 77 수딩 세럼'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'B',
     matchedIngredients: ['센텔라'],
     category: 'moisture',
@@ -354,7 +346,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '더 리얼 시카 잎 세럼',
     brand: '셀리맥스',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('셀리맥스 더 리얼 시카 잎 세럼'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'B',
     matchedIngredients: ['센텔라'],
     category: 'moisture',
@@ -366,7 +358,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '시칼파트 크림',
     brand: '아벤느',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('아벤느 시칼파트 크림'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'B',
     matchedIngredients: ['판테놀', '센텔라'],
     category: 'moisture',
@@ -378,7 +370,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '듀얼 배리어 스킨 웨어러블 크림',
     brand: '셀리맥스',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('셀리맥스 듀얼 배리어 크림'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'B',
     matchedIngredients: ['세라마이드'],
     category: 'moisture',
@@ -392,8 +384,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '더 나이아신아마이드 15 세럼',
     brand: '코스알엑스',
     imageUri: null,
-    purchaseUrl:
-      'https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000180890',
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'A',
     matchedIngredients: ['나이아신아마이드'],
     category: 'brightening',
@@ -405,8 +396,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '글로우 세럼',
     brand: '뷰티 오브 조선',
     imageUri: null,
-    purchaseUrl:
-      'https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000188711',
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'A',
     matchedIngredients: ['나이아신아마이드'],
     category: 'brightening',
@@ -418,7 +408,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '더 비타 플레인징 세럼',
     brand: '셀리맥스',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('셀리맥스 더 비타 플레인징 세럼'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'B',
     matchedIngredients: ['나이아신아마이드'],
     category: 'brightening',
@@ -430,7 +420,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '레드 블레미쉬 클리어 수딩 크림',
     brand: '닥터지',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('닥터지 레드 블레미쉬 클리어 수딩 크림'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'A',
     matchedIngredients: ['나이아신아마이드', '센텔라'],
     category: 'brightening',
@@ -442,7 +432,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '크림스킨 리파이너',
     brand: '라네즈',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('라네즈 크림스킨 리파이너'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'B',
     matchedIngredients: ['나이아신아마이드'],
     category: 'brightening',
@@ -456,7 +446,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '더 펩타이드 콜라겐 부스팅 크림',
     brand: '코스알엑스',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('코스알엑스 펩타이드 콜라겐 크림'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'B',
     matchedIngredients: ['펩타이드'],
     category: 'elasticity',
@@ -468,7 +458,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '타임 레볼루션 더 퍼스트 트리트먼트 에센스',
     brand: '미샤',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('미샤 타임 레볼루션 퍼스트 트리트먼트 에센스'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'B',
     matchedIngredients: ['아데노신'],
     category: 'elasticity',
@@ -480,7 +470,7 @@ export const PRODUCTS: ProductSeed[] = [
     name: '화이트 트러플 퍼스트 스프레이 세럼',
     brand: '달바',
     imageUri: null,
-    purchaseUrl: oliveYoungSearchUrl('달바 화이트 트러플 퍼스트 스프레이 세럼'),
+    purchaseUrl: OLIVE_YOUNG_HOMEPAGE,
     matchedGrade: 'B',
     matchedIngredients: ['펩타이드', '히알루론산'],
     category: 'elasticity',
