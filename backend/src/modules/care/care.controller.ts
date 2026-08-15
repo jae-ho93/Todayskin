@@ -10,6 +10,7 @@ import { CarePlanFastResponseDto } from './dto/care-plan.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../../common/strategies/jwt.strategy';
+import { SensitiveThrottle } from '../../common/rate-limit/sensitive-throttle';
 
 /**
  * CareController — 케어 루틴+제품 빠른 경로(N32/N29 패턴).
@@ -20,6 +21,8 @@ import type { JwtPayload } from '../../common/strategies/jwt.strategy';
 @Controller('care')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
+// N57: 케어 루틴+제품 생성은 전부 OpenAI 호출(비용 발생) — Redis 장애 시 fail-closed(503).
+@SensitiveThrottle()
 export class CareController {
   constructor(private readonly careService: CareService) {}
 

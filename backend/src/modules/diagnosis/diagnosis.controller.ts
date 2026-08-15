@@ -38,6 +38,7 @@ import { SubmitDiagnosisQueryDto } from './dto/submit-diagnosis-query.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../../common/strategies/jwt.strategy';
+import { SensitiveThrottle } from '../../common/rate-limit/sensitive-throttle';
 import { InferenceImage } from './providers/inference-provider.interface';
 import { memoryStorage } from 'multer';
 
@@ -113,6 +114,8 @@ export class DiagnosisController {
     return this.diagnosisService.getHistoryByDate(user.sub, date);
   }
 
+  // N57: AI 추론(리소스·비용 발생) 엔드포인트 — Redis 장애 시 fail-closed(503).
+  @SensitiveThrottle()
   @Post()
   @ApiOperation({ summary: '진단 제출 — 정면 1장 이미지 업로드' })
   @ApiBearerAuth()

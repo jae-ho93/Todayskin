@@ -28,6 +28,7 @@ import { JobType } from '../jobs/enums/job-type.enum';
 import { EnqueueJobResponseDto } from '../jobs/dto/job-response.dto';
 import { RecommendationFastResponseDto } from './dto/recommendation-fast-response.dto';
 import { RecommendationPageDto } from './dto/recommendation-page.dto';
+import { SensitiveThrottle } from '../../common/rate-limit/sensitive-throttle';
 
 /**
  * RecommendationController — 기존 FastAPI /recommendations 이식.
@@ -55,6 +56,8 @@ export class RecommendationController {
     });
   }
 
+  // N57: OpenAI 호출(비용 발생) 엔드포인트 — Redis 장애 시 fail-closed(503).
+  @SensitiveThrottle()
   @Post('generate')
   @ApiOperation({
     summary: 'B등급 추천 생성 (피부 측정값 + 날씨) — sync 호환',
@@ -72,6 +75,8 @@ export class RecommendationController {
     return this.recommendationService.generate(user.sub, dto);
   }
 
+  // N57: OpenAI 호출(비용 발생) 엔드포인트 — Redis 장애 시 fail-closed(503).
+  @SensitiveThrottle()
   @Post('generate/fast')
   @ApiOperation({
     summary: 'B등급 추천 빠른 경로 (N32/N29) — 즉시 실제품 + LIVE job',
@@ -91,6 +96,8 @@ export class RecommendationController {
     return this.recommendationService.generateFast(user.sub, dto);
   }
 
+  // N57: OpenAI 호출(비용 발생) 엔드포인트 — Redis 장애 시 fail-closed(503).
+  @SensitiveThrottle()
   @Post('generate/async')
   @ApiOperation({
     summary: 'B등급 추천 생성 비동기 enqueue (N4)',
