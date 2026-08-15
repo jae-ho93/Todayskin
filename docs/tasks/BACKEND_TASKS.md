@@ -173,6 +173,18 @@ N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
 - [x] 구매 링크 없는 제품은 제외(가짜 링크 금지 유지), 카탈로그 로딩 실패 시 기존처럼 루틴만 반환
 - [x] 단위 테스트 추가 (카테고리 매핑·링크 없는 제품 제외) — typecheck/lint/15 tests 통과, API 실측 33개 즉시 응답
 
+### N63. 케어 LIVE 결과 Redis SWR 캐시 + 프론트 "갱신 중" 스피너 제거 (2026-08-16)
+
+브랜치: `feat/care-redis-cache-silent-swap`
+
+> **문제**: 제품 탭이 "카탈로그 제품 즉시 → ~30초 후 AI 교체" 구조인데, 교체 순간 화면 상단에
+> "갱신 중" 스피너가 돌아 거슬린다. 또 care LIVE 결과가 Redis에 캐시되지 않아 같은 날 재방문도
+> job을 다시 돌렸다. 목표: 처음엔 Redis/카탈로그 제품을 즉시 보여주고, AI가 끝나면 조용히 교체.
+
+- [x] `care.service.ts` generateLive 완료 시 `care:plan:{type}:{careKey}` Redis SWR 캐시 적재(기존 fastPath.writeCache 재사용) — 같은 날 재방문은 job 없이 CACHED 즉시 응답
+- [x] `app/products/[category].tsx` — "갱신 중" 스피너/로우 제거, LIVE 완료 시 제품 목록이 조용히 교체 (useAsyncJob watch 패턴 유지, 카테고리 비어 있을 때만 "찾고 있어요" 유지)
+- [x] 검증 — 백엔드 typecheck/lint/care 15 tests, 프론트 typecheck/lint/181 tests 통과
+
 
 ### N16. AWS 운영 리소스 프로비저닝·첫 배포 (미완료)
 

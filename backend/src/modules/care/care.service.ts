@@ -296,6 +296,15 @@ export class CareService {
     }
 
     await this.appendExcludeList(excludeKey, plan.products.map((p) => p.name));
+    // N62+: LIVE 결과를 Redis SWR 캐시에 적재 — 같은 날 재방문은 job 없이 즉시 CACHED.
+    // 제품 화면이 "캐시/카탈로그 제품 먼저 표시 → AI 완료 시 조용히 교체"하는 설계의 일부.
+    try {
+      await this.fastPath.writeCache(this.cacheKey(careType, payload.careKey), [plan]);
+    } catch (e) {
+      this.logger.debug(
+        `케어 플랜 캐시 적재 실패 — 다음 요청은 재생성: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
     return plan;
   }
 
