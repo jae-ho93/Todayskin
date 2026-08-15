@@ -997,6 +997,10 @@ caption(500)은 3종 제한 내 가독성 우선으로 SemiBold 매핑.
 - [x] 로그인·회원가입 — 입력 블록 `flexGrow + justifyContent: center`로 화면 중앙 부근 배치
 - [x] flexGrow(basis auto)라 키보드로 공간이 줄어도 클리핑 없이 스크롤 정상 (F62 회귀 없음) — typecheck/lint/181 tests 통과
 
+> ⚠️ **실기기 회귀 발견 (2026-08-16)**: `justifyContent: center`가 키보드가 열릴 때
+> 여백을 재분배해 **전체 폼이 위로 슬라이드**되는 문제가 확인됨 → **F87**에서 고정
+> 오프셋 방식으로 교체.
+
 ### F85. 오늘의 측정 결과 화면 리디자인 (등록 2026-08-16)
 
 브랜치: `fix/diagnosis-result-redesign`
@@ -1043,6 +1047,19 @@ caption(500)은 3종 제한 내 가독성 우선으로 SemiBold 매핑.
 **검증**: `npm audit fix --dry-run` → 안전 수정 0건 (변경 없음). `npm audit fix --force`만 유일한
 경로이며 expo@57 설치(브레이킹). **권장 후속**: 배포 후 Expo SDK 55/56 순차 업그레이드 계획을
 잡아 이 표를 비운다.
+
+### F87. 로그인/회원가입 키보드 점프 회귀 수정 (등록 2026-08-16)
+
+브랜치: `fix/auth-keyboard-jump`
+
+> **문제**: F84의 `flexGrow + justifyContent: center`는 키보드가 열리면
+> KeyboardAvoidingView가 뷰포트를 줄이는 순간 남은 공간을 다시 중앙 분배해서
+> **폼 전체가 위로 미끄러진다**. 토스/카카오는 화면이 움직이지 않고 포커스된
+> 필드(밑줄 색)만 변한다.
+
+- [x] 중앙 배치를 flex 재배치가 아닌 **고정 오프셋**(body paddingTop + middle marginTop)으로 교체
+- [x] middle/footer의 flexGrow·auto 여백 제거 — 키보드가 열려도 레이아웃 좌표 불변
+- [x] typecheck/lint/181 tests 통과, 실기기에서 키보드 열 때 폼 미이동 확인 필요
 
 ## 실기기 테스트 대응 완료 기록 (2026-08-13)
 
