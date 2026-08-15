@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { api } from '../src/api/client';
 import { EvidenceBadge } from '../src/components/EvidenceBadge';
 import { FACE_PART_PIN_POSITION, FaceIllustration } from '../src/components/FaceIllustration';
@@ -22,10 +23,11 @@ import { useAsyncJob, unwrapJobItems } from '../src/hooks/useAsyncJob';
 import { resolveScoreContext } from '../src/lib/score-context';
 import { getSession } from '../src/lib/session';
 import { gradeToColor } from '../src/lib/skinGrade';
-import { colors, radius, shadow, spacing, typography } from '../src/theme';
+import { colors, MAX_FONT_SCALE, radius, shadow, spacing, typography } from '../src/theme';
 import type {
   Gender,
   Recommendation,
+  RecommendationTiming,
   ScoreSeries,
   SkinPartMetric,
   SkinScoreSnapshot,
@@ -43,7 +45,124 @@ function clampBar(value: number): number {
   return Math.min(100, Math.max(0, value));
 }
 
-// 화면 4: 진단 결과 — 얼굴 일러스트 핀 + 종합 점수 카드 + 오늘의 추천 (F33 리디자인)
+// 6자리 hex를 흰색과 섞어 연한 톤을 만든다 (그라데이션 stop용).
+function tint(hex: string, amount: number): string {
+  const num = parseInt(hex.slice(1), 16);
+  const mix = (c: number) => Math.round(c + (255 - c) * amount);
+  return `rgb(${mix((num >> 16) & 0xff)}, ${mix((num >> 8) & 0xff)}, ${mix(num & 0xff)})`;
+}
+
+// 추천 타이밍 칩 (외출 후 / 자기 전 / 언제든)
+const TIMING_META: Record<RecommendationTiming, { icon: keyof typeof Ionicons.glyphMap; bg: string; text: string }> = {
+  '외출 후': { icon: 'sunny-outline', bg: colors.sageLight, text: colors.sageDark },
+  '자기 전': { icon: 'moon-outline', bg: colors.coralLight, text: colors.coralDark },
+  언제든: { icon: 'time-outline', bg: colors.gray100, text: colors.textSecondary },
+};
+
+function TimingChip({ timing }: { timing: RecommendationTiming }) {
+  const meta = TIMING_META[timing];
+  return (
+    <View style={[styles.timingChip, { backgroundColor: meta.bg }]}>
+      <Ionicons name={meta.icon} size={12} color={meta.text} />
+      <Text style={[styles.timingChipText, { color: meta.text }]} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+        {timing}
+      </Text>
+    </View>
+  );
+}
+
+// 히어로 — 그라데이션 스코어 링 (F85: 평면 숫자 카드를 링 게이지로 교체)
+function ScoreRing({ score, color, grade }: { score: number; color: string; grade: string }) {
+  const size = 176;
+  const strokeWidth = 16;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const clamped = Math.max(0, Math.min(100, score));
+  const dashOffset = circumference * (1 - clamped / 100);
+
+  return (
+    <View style={styles.ringWrap}>
+      <Svg width={size} height={size}>
+        <Defs>
+          <LinearGradient id="scoreRingGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <Stop offset="0%" stopColor={color} />
+            <Stop offset="100%" stopColor={tint(color, 0.5)} />
+          </LinearGradient>
+        </Defs>
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={colors.gray100}
+          strokeWidth={strokeWidth}
+          fill="none"
+        />
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="url(#scoreRingGradient)"
+          strokeWidth={strokeWidth}
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={`${circumference} ${circumference}`}
+          strokeDashoffset={dashOffset}
+          rotation="-90"
+          origin={`${size / 2}, ${size / 2}`}
+        />
+      </Svg>
+      <View style={styles.ringCenter} pointerEvents="none">
+        <View style={styles.ringScoreRow}>
+          <Text style={styles.ringScore} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+            {Math.round(clamped)}
+          </Text>
+          <Text style={styles.ringUnit} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+            점
+          </Text>
+        </View>
+        <Text style={[styles.ringGrade, { color }]} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+          {grade}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+// 얼굴 일러스트 + 부위 핀 (스와이프/단일 공용 패널)
+function FacePanel({
+  gender,
+  parts,
+  onSelectPart,
+}: {
+  gender?: Gender;
+  parts: SkinPartMetric[];
+  onSelectPart: (p: SkinPartMetric) => void;
+}) {
+  return (
+    <View style={styles.faceWrap}>
+      <FaceIllustration gender={gender} />
+      {parts.map((p) => {
+        const pos = FACE_PART_PIN_POSITION[p.part];
+        if (!pos) return null;
+        const color = gradeToColor(p.grade);
+        return (
+          <Pressable
+            key={p.part}
+            onPress={() => onSelectPart(p)}
+            hitSlop={10}
+            style={({ pressed }) => [
+              styles.pin,
+              { left: `${pos.xPct}%`, top: `${pos.yPct}%`, backgroundColor: color },
+              pressed && styles.pinPressed,
+            ]}
+          />
+        );
+      })}
+    </View>
+  );
+}
+
+// 화면 4: 진단 결과 — 얼굴 일러스트 핀 + 종합 점수 카드 + 오늘의 추천 (F33/F85 리디자인)
 export default function DiagnosisResultScreen() {
   const [skinScore, setSkinScore] = useState<SkinScoreSnapshot | null>(null);
   const [gender, setGender] = useState<Gender | undefined>(undefined);
@@ -134,6 +253,15 @@ export default function DiagnosisResultScreen() {
   const gradeColor = gradeToColor(grade);
   const hasExtraReport = labEnabled && Boolean(skinScore.acneReport || skinScore.diseaseClassification);
 
+  // 변화 배지 색 — 상승은 세이지, 하락은 코랄, 동일/없음은 그레이.
+  const changeMeta = change
+    ? change.up === null
+      ? { bg: colors.gray100, text: colors.textSecondary }
+      : change.up
+        ? { bg: colors.sageLight, text: colors.sageDark }
+        : { bg: colors.coralLight, text: colors.coralDark }
+    : null;
+
   function onFacePageLayout(e: LayoutChangeEvent) {
     setPageWidth(e.nativeEvent.layout.width);
   }
@@ -143,6 +271,8 @@ export default function DiagnosisResultScreen() {
     const page = Math.round(e.nativeEvent.contentOffset.x / pageWidth);
     setActivePage(page);
   }
+
+  const faceHintText = '표시를 눌러 부위별 상세 정보를 확인하세요';
 
   return (
     <View style={styles.flex}>
@@ -155,27 +285,24 @@ export default function DiagnosisResultScreen() {
       </SafeAreaView>
 
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-        {/* 종합 점수 카드 */}
-        <View style={styles.summaryCard}>
-          <Text style={styles.overallLabel}>종합 점수</Text>
-          <View style={styles.summaryScoreRow}>
-            <Text style={styles.overallScore}>{skinScore.overallScore}</Text>
-            <View style={[styles.gradePill, { backgroundColor: gradeColor + '22' }]}>
-              <Text style={[styles.gradePillText, { color: gradeColor }]}>{grade}</Text>
-            </View>
-          </View>
-          {change && (
-            <View style={styles.changeRow}>
+        {/* 히어로 — 종합 점수 링 + 등급 + 변화 배지 */}
+        <View style={[styles.heroCard, { backgroundColor: `${gradeColor}0D` }]}>
+          <View style={[styles.heroAccent, { backgroundColor: gradeColor }]} />
+          <Text style={styles.heroLabel}>오늘의 종합 점수</Text>
+          <ScoreRing score={skinScore.overallScore} color={gradeColor} grade={grade} />
+          {changeMeta && change && (
+            <View style={[styles.changePill, { backgroundColor: changeMeta.bg }]}>
               <Ionicons
                 name={change.up === null ? 'remove' : change.up ? 'trending-up' : 'trending-down'}
-                size={14}
-                color={change.up === null ? colors.textTertiary : change.up ? colors.statusGood : colors.coralDark}
+                size={13}
+                color={changeMeta.text}
               />
-              <Text style={[styles.changeText, { color: change.up === null ? colors.textTertiary : change.up ? colors.statusGood : colors.coralDark }]}>
+              <Text style={[styles.changePillText, { color: changeMeta.text }]} maxFontSizeMultiplier={MAX_FONT_SCALE}>
                 {change.label}
               </Text>
             </View>
           )}
+          <Text style={styles.heroCaption}>어제의 나와 비교한 오늘의 피부 상태예요</Text>
         </View>
 
         {/* F81: 첫 측정 기준점 안내 — "이 점수가 무엇 기준인지"에 대한 답 */}
@@ -199,32 +326,18 @@ export default function DiagnosisResultScreen() {
               onMomentumScrollEnd={onFacePageScrollEnd}
             >
               <View style={[styles.facePage, { width: pageWidth || undefined }]}>
-                <View style={styles.faceWrap}>
-                  <FaceIllustration gender={gender} />
-                  {skinScore.parts.map((p) => {
-                    const pos = FACE_PART_PIN_POSITION[p.part];
-                    if (!pos) return null;
-                    const color = gradeToColor(p.grade);
-                    return (
-                      <Pressable
-                        key={p.part}
-                        onPress={() => setSelectedPart(p)}
-                        hitSlop={10}
-                        style={[
-                          styles.pin,
-                          { left: `${pos.xPct}%`, top: `${pos.yPct}%`, backgroundColor: color },
-                        ]}
-                      />
-                    );
-                  })}
+                <View style={styles.faceCard}>
+                  <FacePanel gender={gender} parts={skinScore.parts} onSelectPart={setSelectedPart} />
+                  <Text style={styles.faceHint}>{faceHintText}</Text>
                 </View>
-                <Text style={styles.faceHint}>표시를 눌러 부위별 상세 정보를 확인하세요</Text>
               </View>
 
               <View style={[styles.facePage, { width: pageWidth || undefined }]}>
                 <View style={styles.reportCard}>
                   <View style={styles.reportBetaBadge}>
-                    <Text style={styles.reportBetaBadgeText}>베타 · 검증 중인 분석</Text>
+                    <Text style={styles.reportBetaBadgeText} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+                      베타 · 검증 중인 분석
+                    </Text>
                   </View>
                   <Text style={styles.reportNotice}>
                     참고용 정보예요. 의학적 진단이 아니며, 설정 &gt; 실험실에서 끌 수 있어요.
@@ -254,41 +367,27 @@ export default function DiagnosisResultScreen() {
             </View>
           </View>
         ) : (
-          <>
-            <View style={styles.faceWrap}>
-              <FaceIllustration gender={gender} />
-              {skinScore.parts.map((p) => {
-                const pos = FACE_PART_PIN_POSITION[p.part];
-                if (!pos) return null;
-                const color = gradeToColor(p.grade);
-                return (
-                  <Pressable
-                    key={p.part}
-                    onPress={() => setSelectedPart(p)}
-                    hitSlop={10}
-                    style={[
-                      styles.pin,
-                      { left: `${pos.xPct}%`, top: `${pos.yPct}%`, backgroundColor: color },
-                    ]}
-                  />
-                );
-              })}
-            </View>
-            <Text style={styles.faceHint}>표시를 눌러 부위별 상세 정보를 확인하세요</Text>
-          </>
+          <View style={styles.faceCard}>
+            <FacePanel gender={gender} parts={skinScore.parts} onSelectPart={setSelectedPart} />
+            <Text style={styles.faceHint}>{faceHintText}</Text>
+          </View>
         )}
 
-        {/* 오늘의 추천 (F33) — 기록에 있던 추천을 결과에서 바로 보여준다 */}
+        {/* 오늘의 추천 (F33/F85) — 기록에 있던 추천을 결과에서 바로 보여준다 */}
         {recommendations.length > 0 && (
           <View style={styles.recSection}>
             <Text style={styles.sectionTitle}>오늘의 추천</Text>
+            <Text style={styles.sectionCaption}>오늘의 피부 상태와 날씨를 고려한 추천이에요</Text>
             {recommendations.slice(0, 2).map((r) => (
               <Pressable
                 key={r.id}
                 onPress={() => router.push(`/recommendation/${r.id}`)}
                 style={({ pressed }) => [styles.recCard, pressed && styles.recCardPressed]}
               >
-                <EvidenceBadge grade={r.grade} />
+                <View style={styles.recBadgeCol}>
+                  <EvidenceBadge grade={r.grade} />
+                  {r.timing ? <TimingChip timing={r.timing} /> : null}
+                </View>
                 <View style={styles.recTextWrap}>
                   <Text style={styles.recTitle} numberOfLines={2}>{r.title}</Text>
                   <Text style={styles.recExplanation} numberOfLines={2}>{r.explanation}</Text>
@@ -303,7 +402,7 @@ export default function DiagnosisResultScreen() {
         <Pressable
           onPress={() => router.replace('/camera-guide')}
           hitSlop={8}
-          style={styles.retakeCta}
+          style={({ pressed }) => [styles.retakeCta, pressed && styles.retakeCtaPressed]}
         >
           <Ionicons name="camera-outline" size={16} color={colors.sageDark} />
           <Text style={styles.retakeCtaText}>다시 측정하기</Text>
@@ -339,17 +438,23 @@ export default function DiagnosisResultScreen() {
                     { backgroundColor: gradeToColor(selectedPart.grade) + '22' },
                   ]}
                 >
-                  <Text style={[styles.sheetGradeText, { color: gradeToColor(selectedPart.grade) }]}>
+                  <Text
+                    style={[styles.sheetGradeText, { color: gradeToColor(selectedPart.grade) }]}
+                    maxFontSizeMultiplier={MAX_FONT_SCALE}
+                  >
                     {selectedPart.grade}
                   </Text>
                 </View>
                 {selectedPart.note && <Text style={styles.sheetNote}>{selectedPart.note}</Text>}
                 {(typeof selectedPart.moisture === 'number' ||
                   typeof selectedPart.elasticity === 'number') && (
-                  <View style={styles.sheetMetricRow}>
+                  <View style={styles.sheetMetrics}>
                     {typeof selectedPart.moisture === 'number' && (
-                      <View style={styles.sheetMetric}>
+                      <View style={styles.sheetMetricCard}>
                         <Text style={styles.sheetMetricLabel}>수분</Text>
+                        <Text style={styles.sheetMetricValue} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+                          {selectedPart.moisture}
+                        </Text>
                         <View style={styles.sheetMetricTrack}>
                           <View
                             style={[
@@ -361,12 +466,14 @@ export default function DiagnosisResultScreen() {
                             ]}
                           />
                         </View>
-                        <Text style={styles.sheetMetricValue}>{selectedPart.moisture}</Text>
                       </View>
                     )}
                     {typeof selectedPart.elasticity === 'number' && (
-                      <View style={styles.sheetMetric}>
+                      <View style={styles.sheetMetricCard}>
                         <Text style={styles.sheetMetricLabel}>탄력</Text>
+                        <Text style={styles.sheetMetricValue} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+                          {selectedPart.elasticity}
+                        </Text>
                         <View style={styles.sheetMetricTrack}>
                           <View
                             style={[
@@ -378,7 +485,6 @@ export default function DiagnosisResultScreen() {
                             ]}
                           />
                         </View>
-                        <Text style={styles.sheetMetricValue}>{selectedPart.elasticity}</Text>
                       </View>
                     )}
                   </View>
@@ -392,7 +498,7 @@ export default function DiagnosisResultScreen() {
   );
 }
 
-const PIN_SIZE = 18;
+const PIN_SIZE = 20;
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.background },
@@ -416,25 +522,47 @@ const styles = StyleSheet.create({
   headerTitle: { ...typography.subtitle, color: colors.textPrimary },
   body: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, gap: spacing.md },
 
-  // 종합 점수 카드
-  summaryCard: {
-    backgroundColor: colors.surface,
+  // 히어로 — 종합 점수 링
+  heroCard: {
     borderRadius: radius.xl,
     padding: spacing.lg,
+    alignItems: 'center',
     gap: spacing.sm,
-    ...shadow.card,
+    overflow: 'hidden',
   },
-  overallLabel: { ...typography.bodySm, color: colors.textSecondary },
-  summaryScoreRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  overallScore: { ...typography.displayLg, color: colors.textPrimary },
-  gradePill: {
+  heroAccent: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    opacity: 0.6,
+  },
+  heroLabel: { ...typography.bodySm, color: colors.textSecondary },
+  ringWrap: { alignItems: 'center', justifyContent: 'center', marginVertical: spacing.sm },
+  ringCenter: {
+    position: 'absolute',
+    alignItems: 'center',
+  },
+  ringScoreRow: { flexDirection: 'row', alignItems: 'baseline', gap: 2 },
+  ringScore: {
+    ...typography.displayLg,
+    fontSize: 46,
+    lineHeight: 54,
+    color: colors.textPrimary,
+  },
+  ringUnit: { ...typography.subtitle, color: colors.textSecondary },
+  ringGrade: { ...typography.headline, marginTop: 2 },
+  changePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: spacing.md,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: radius.full,
   },
-  gradePillText: { ...typography.subtitle, fontWeight: '700' },
-  changeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  changeText: { ...typography.caption, fontWeight: '600' },
+  changePillText: { ...typography.bodySm, fontWeight: '700' },
+  heroCaption: { ...typography.caption, color: colors.textTertiary, marginTop: spacing.xs },
 
   // F81: 첫 측정 기준점 안내
   baselineCard: {
@@ -448,11 +576,17 @@ const styles = StyleSheet.create({
   baselineText: { ...typography.bodySm, color: colors.textPrimary, flex: 1 },
   baselineBold: { fontWeight: '700', color: colors.sageDark },
 
+  // 얼굴 카드 + 부위 핀
+  faceCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    gap: spacing.sm,
+    ...shadow.card,
+  },
   faceWrap: {
-    width: '88%',
+    width: '100%',
     aspectRatio: 150 / 200,
-    alignSelf: 'center',
-    marginTop: spacing.sm,
   },
   pin: {
     position: 'absolute',
@@ -461,10 +595,11 @@ const styles = StyleSheet.create({
     marginLeft: -PIN_SIZE / 2,
     marginTop: -PIN_SIZE / 2,
     borderRadius: PIN_SIZE / 2,
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: colors.surface,
     ...shadow.card,
   },
+  pinPressed: { transform: [{ scale: 1.25 }] },
   faceHint: {
     ...typography.caption,
     color: colors.textTertiary,
@@ -477,10 +612,6 @@ const styles = StyleSheet.create({
   pageDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.gray200 },
   pageDotActive: { backgroundColor: colors.sage },
   reportCard: {
-    width: '88%',
-    aspectRatio: 150 / 200,
-    alignSelf: 'center',
-    marginTop: spacing.sm,
     backgroundColor: colors.surface,
     borderRadius: radius.xl,
     padding: spacing.lg,
@@ -502,20 +633,31 @@ const styles = StyleSheet.create({
 
   // 오늘의 추천
   recSection: { gap: spacing.sm },
-  sectionTitle: { ...typography.subtitle, color: colors.textPrimary },
+  sectionTitle: { ...typography.headline, color: colors.textPrimary },
+  sectionCaption: { ...typography.caption, color: colors.textTertiary, marginTop: -spacing.xs },
   recCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.md,
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: spacing.md,
     ...shadow.card,
   },
-  recCardPressed: { opacity: 0.7 },
+  recCardPressed: { opacity: 0.75 },
+  recBadgeCol: { gap: spacing.xs, alignItems: 'flex-start' },
   recTextWrap: { flex: 1, gap: 2 },
   recTitle: { ...typography.bodySm, color: colors.textPrimary, fontWeight: '600' },
   recExplanation: { ...typography.caption, color: colors.textSecondary },
+  timingChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radius.full,
+  },
+  timingChipText: { ...typography.caption, fontWeight: '700' },
 
   // F81: 재측정 보조 CTA
   retakeCta: {
@@ -531,6 +673,7 @@ const styles = StyleSheet.create({
     borderColor: colors.sage,
     marginTop: spacing.sm,
   },
+  retakeCtaPressed: { backgroundColor: colors.sageLight },
   retakeCtaText: { ...typography.subtitle, color: colors.sageDark },
 
   savedHint: { ...typography.caption, color: colors.textTertiary, textAlign: 'center', marginTop: spacing.sm },
@@ -570,15 +713,21 @@ const styles = StyleSheet.create({
   },
   sheetGradeText: { ...typography.bodySm, fontWeight: '700' },
   sheetNote: { ...typography.body, color: colors.textSecondary },
-  sheetMetricRow: { flexDirection: 'row', gap: spacing.xl },
-  sheetMetric: { flex: 1, gap: spacing.xs },
+  sheetMetrics: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs },
+  sheetMetricCard: {
+    flex: 1,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    gap: spacing.xs,
+  },
   sheetMetricLabel: { ...typography.caption, color: colors.textTertiary },
+  sheetMetricValue: { ...typography.displaySm, color: colors.textPrimary },
   sheetMetricTrack: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.gray100,
+    backgroundColor: colors.gray200,
     overflow: 'hidden',
   },
   sheetMetricFill: { height: '100%', borderRadius: 4 },
-  sheetMetricValue: { ...typography.headline, color: colors.textPrimary },
 });
