@@ -1018,9 +1018,31 @@ caption(500)은 3종 제한 내 가독성 우선으로 SemiBold 매핑.
 > breaking이라 금지 — SDK 54 호환 범위 안에서 안전한 것만 정리하고 나머지는 근거를
 > 남긴다.
 
-- [ ] 취약 체인·수정 가능 범위 조사 (overrides 포함)
-- [ ] 안전한 범위만 반영, `npm run typecheck`·`npm test` 통과
-- [ ] 수정 불가 항목은 근거와 함께 이 문서에 기록
+- [x] 취약 체인·수정 가능 범위 조사 완료 (audit --json 전체 트리 + `npm audit fix --dry-run`)
+- [x] 결론: **SDK 54 안에서 안전하게 수정 가능한 항목 0건** — 변경 없음, 하단에 근거 기록
+- [x] 수정 불가 항목은 근거와 함께 아래에 기록 완료
+
+**F86 조사 결과 (2026-08-16)** — `npm audit --omit=dev` 기준 23건 (high 11 · moderate 12).
+
+모든 취약점이 **Expo CLI·Metro 툴체인(빌드/개발 머신에서만 실행)** 으로 수렴한다. 앱 번들에는
+포함되지 않고 사용자 기기에서 실행되지 않으므로, 실사용 노출은 개발·CI 머신의 공급망/개발서버
+영역에 한정된다. 수정 버전은 전부 Expo SDK 55/56/57(canary 포함) 업그레이드 경로뿐이며,
+`npm audit fix --force`는 expo@57을 설치한다(브레이킹) — 배포 2일 전에 금지.
+
+| 체인 | 경로 | 수정 버전 | 판정 | 근거 |
+|---|---|---|---|---|
+| postcss(high 2·mod 2) | expo → @expo/metro-config `~8.4.32` | 8.5.23+ | **유지** | 부모가 `~8.4.32`로 고정 — 오버라이드는 범위 밖 강제. 이 앱은 CSS 미사용(StyleSheet)이라 postcss 실행 경로 없음. 공격은 개발서버에서 공격자 제어 CSS 주석 필요 |
+| image-size(high 2) | expo → @expo/metro → metro `^1.0.2` | 2.0.3+ | **유지** | 2.x는 ESM+비동기 API로 metro 0.83의 동기 사용과 호환 불가 — 오버라이드 시 번들링 깨짐. ICNS/JXL/HEIF 파서 DoS로 개발서버 한정 |
+| uuid(mod) | expo → @expo/config-plugins → xcode `^7.0.3` | 11.1.1+ | **유지** | 7→11 메이저 점프. xcode는 v4만 사용 — 이 어드바이저리(v3/v5/v6 buffer bounds) 대상 아님. prebuild 도구 한정 |
+| xcode(mod) | expo → @expo/config-plugins | 없음(최신 3.0.1) | **유지** | 패치 버전 미존재 |
+| metro·metro-config·metro-transform-worker(high) | expo → @expo/metro | expo 업그레이드만 | **유지** | SDK 54가 metro 0.83 고정. 강제 오버라이드는 번들러 교체와 동일 |
+| @expo/cli·@expo/metro·@expo/metro-config·@expo/config·@expo/config-plugins·@expo/prebuild-config(high/mod) | expo | expo 업그레이드만 | **유지** | 전부 expo 번들 CLI — SDK 55+에서만 수정 |
+| react-native(high) | expo SDK 54 고정 0.81.5 | RN 업그레이드 | **유지** | 경유지는 @react-native/community-cli-plugin(빌드 도구). RN 단독 상향은 SDK 54와 비호환 위험 |
+| expo-auth-session·expo-constants·expo-linking·expo-notifications·expo-splash-screen·jest-expo(mod) | 직접 의존 | SDK 55/56/57 canary만 | **유지** | 안정 패치 없음 — SDK 업그레이드 시 함께 해소 |
+
+**검증**: `npm audit fix --dry-run` → 안전 수정 0건 (변경 없음). `npm audit fix --force`만 유일한
+경로이며 expo@57 설치(브레이킹). **권장 후속**: 배포 후 Expo SDK 55/56 순차 업그레이드 계획을
+잡아 이 표를 비운다.
 
 ## 실기기 테스트 대응 완료 기록 (2026-08-13)
 
