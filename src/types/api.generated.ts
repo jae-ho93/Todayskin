@@ -1306,96 +1306,9 @@ export interface components {
             /** @description 다음 페이지 커서. 없으면 null */
             nextCursor?: string | null;
         };
-        WeatherInputDto: {
-            /**
-             * @description 관측 시각(ISO8601, UTC)
-             * @example 2026-08-04T03:00:00.000Z
-             */
-            observedAt?: string;
-            /**
-             * @description 표시용 지역명(시/도)
-             * @example 서울특별시
-             */
-            regionName?: string;
-            /**
-             * @description 시/군/구 표시명 (없으면 null)
-             * @example 해운대구
-             */
-            districtName?: string | null;
-            /**
-             * @description 데이터 출처
-             * @example LIVE
-             * @enum {string}
-             */
-            source?: "LIVE" | "CACHED" | "UNAVAILABLE";
-            /** @description N42: 자외선 수집이 실패했는지. true면 값이 비어 있는 이유가 "측정값 없음"이 아니라 "수집 실패"다. */
-            uvCollectionFailed?: boolean;
-            /** @description N42: 대기질 수집이 실패했는지. */
-            airCollectionFailed?: boolean;
-            /** @description N53: 기온·습도(초단기실황) 수집이 실패했는지. */
-            nowcastCollectionFailed?: boolean;
-            /** @description 자외선 지수(현재 시점 예보) */
-            uvIndex?: number | null;
-            /**
-             * @description 자외선 등급 (기상청 5단계: 낮음·보통·높음·매우높음·위험)
-             * @enum {string|null}
-             */
-            uvStatus?: "low" | "moderate" | "high" | "veryHigh" | "danger" | null;
-            /** @description 오늘 남은 시간대 중 예상 자외선 최댓값 */
-            uvIndexPeak?: number | null;
-            /**
-             * @description 자외선 피크 등급 (기상청 5단계)
-             * @enum {string|null}
-             */
-            uvStatusPeak?: "low" | "moderate" | "high" | "veryHigh" | "danger" | null;
-            /** @description 피크 자외선이 나오는 시각(0~23시) */
-            uvIndexPeakHour?: number | null;
-            /** @description 오존(ppm) */
-            ozonePpm?: number | null;
-            /**
-             * @description 오존 등급
-             * @enum {string|null}
-             */
-            ozoneStatus?: "good" | "moderate" | "bad" | "veryBad" | null;
-            /** @description 초미세먼지(PM2.5) */
-            pm25?: number | null;
-            /**
-             * @description 초미세먼지 등급
-             * @enum {string|null}
-             */
-            pm25Status?: "good" | "moderate" | "bad" | "veryBad" | null;
-            /** @description 미세먼지(PM10) */
-            pm10?: number | null;
-            /**
-             * @description 미세먼지 등급
-             * @enum {string|null}
-             */
-            pm10Status?: "good" | "moderate" | "bad" | "veryBad" | null;
-            /** @description 통합대기환경지수(CAI) */
-            caiValue?: number | null;
-            /**
-             * @description CAI 등급
-             * @enum {string|null}
-             */
-            caiStatus?: "good" | "moderate" | "bad" | "veryBad" | null;
-            /** @description 이산화질소(NO2) */
-            no2Value?: number | null;
-            /** @description 아황산가스(SO2) */
-            so2Value?: number | null;
-            /** @description 일산화탄소(CO) */
-            coValue?: number | null;
-            /** @description N53: 기온(°C, 기상청 초단기실황 T1H) */
-            temperature?: number | null;
-            /** @description N53: 상대습도(%, 기상청 초단기실황 REH) */
-            humidity?: number | null;
-        };
         GenerateRecommendationDto: {
-            /** @description 진단 ID (최종 계약 — 서버가 소유권 확인 후 DB에서 조회) */
-            diagnosisId?: string;
-            /** @description 피부 측정값 스냅샷 (기존 프론트 호환 — diagnosisId 있으면 무시) */
-            skinScore?: Record<string, never>;
-            /** @description 날씨 스냅샷 (기존 프론트 호환 — diagnosisId 있으면 서버가 DB에서 조회) */
-            weather?: components["schemas"]["WeatherInputDto"];
+            /** @description 진단 ID — 서버가 소유권 확인 후 DB에서 조회 */
+            diagnosisId: string;
         };
         RecommendationFastResponseDto: {
             /**

@@ -198,18 +198,26 @@ describe('Recommendation & Product (e2e)', () => {
     it('인증 없이 호출 시 401', async () => {
       await request(app.getHttpServer())
         .post('/recommendations/generate')
-        .send({ skinScore: {}, weather: {} })
+        .send({ diagnosisId: 'diag-401' })
         .expect(401);
     });
 
     it('인증 + mock OpenAI로 B등급 추천 생성', async () => {
+      // N56: diagnosisId 전용 — 소유권 확인을 통과할 진단을 먼저 만든다.
+      const diagnosis = await prisma.diagnosis.create({
+        data: {
+          id: 'diag-e2e-gen',
+          userId,
+          capturedAt: new Date(),
+          overallScore: 70,
+          status: 'COMPLETED',
+        },
+      });
+
       const res = await request(app.getHttpServer())
         .post('/recommendations/generate')
         .set('Authorization', `Bearer ${accessToken}`)
-        .send({
-          skinScore: { id: 'snap-1', overallScore: 70 },
-          weather: { uvIndex: 5, pm25: 20 },
-        })
+        .send({ diagnosisId: diagnosis.id })
         .expect(200);
 
       expect(Array.isArray(res.body)).toBe(true);
@@ -220,6 +228,8 @@ describe('Recommendation & Product (e2e)', () => {
       expect(res.body[0].sourceLabel).toBe('AI 생성 · 내 진단 결과 기반');
       expect(res.body[0].sources).toEqual([]);
       expect(res.body[0].ingredientTags).toBeDefined();
+
+      await prisma.diagnosis.delete({ where: { id: diagnosis.id } }).catch(() => undefined);
     });
   });
 
@@ -398,10 +408,19 @@ describe('Recommendation & Product (e2e)', () => {
 
   describe('추천 생성 + 상세 소유권', () => {
     it('생성한 추천을 본인이 조회 성공', async () => {
+      const diagnosis = await prisma.diagnosis.create({
+        data: {
+          id: 'diag-e2e-owner',
+          userId,
+          capturedAt: new Date(),
+          overallScore: 65,
+          status: 'COMPLETED',
+        },
+      });
       const genRes = await request(app.getHttpServer())
         .post('/recommendations/generate')
         .set('Authorization', `Bearer ${accessToken}`)
-        .send({ skinScore: { id: 'snap-2', overallScore: 65 }, weather: {} })
+        .send({ diagnosisId: diagnosis.id })
         .expect(200);
 
       const createdId = genRes.body[0].id;
@@ -413,6 +432,8 @@ describe('Recommendation & Product (e2e)', () => {
 
       expect(detailRes.body.id).toBe(createdId);
       expect(detailRes.body.grade).toBe('B');
+
+      await prisma.diagnosis.delete({ where: { id: diagnosis.id } }).catch(() => undefined);
     });
 
     it('타 사용자 추천 조회 시 403', async () => {
@@ -434,11 +455,20 @@ describe('Recommendation & Product (e2e)', () => {
         otherUserId = loginRes.body.id;
       }
 
-      // 첫 사용자가 추천 생성
+      // 첫 사용자가 추천 생성 (N56: diagnosisId 전용)
+      const diagnosis = await prisma.diagnosis.create({
+        data: {
+          id: 'diag-e2e-403',
+          userId,
+          capturedAt: new Date(),
+          overallScore: 80,
+          status: 'COMPLETED',
+        },
+      });
       const genRes = await request(app.getHttpServer())
         .post('/recommendations/generate')
         .set('Authorization', `Bearer ${accessToken}`)
-        .send({ skinScore: { id: 'snap-3', overallScore: 80 }, weather: {} })
+        .send({ diagnosisId: diagnosis.id })
         .expect(200);
 
       const createdId = genRes.body[0].id;
@@ -453,6 +483,7 @@ describe('Recommendation & Product (e2e)', () => {
       await prisma.recommendation.deleteMany({ where: { userId: otherUserId } });
       await prisma.refreshSession.deleteMany({ where: { userId: otherUserId } });
       await prisma.user.deleteMany({ where: { phoneNumber: otherPhone } });
+      await prisma.diagnosis.delete({ where: { id: diagnosis.id } }).catch(() => undefined);
     });
   });
 

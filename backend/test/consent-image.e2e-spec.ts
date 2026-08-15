@@ -211,19 +211,30 @@ describe('Consent & Image Storage (e2e)', () => {
   });
 
   it('transfer 동의 없이 추천 생성 → 403', async () => {
+    // N56: diagnosisId 전용 — 동의 게이트가 먼저라 진단 존재 여부와 무관하게 403.
     await request(app.getHttpServer())
       .post('/recommendations/generate')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ skinScore: { overallScore: 70 }, weather: { uvIndex: 3 } })
+      .send({ diagnosisId: 'consent-diag-403' })
       .expect(403);
   });
 
   it('transfer 동의 후 추천 생성 → 200', async () => {
     await grantRecommendationTransfer(app, accessToken);
+    // N56: diagnosisId 전용 — 소유권 확인을 통과할 진단을 먼저 만든다.
+    const diagnosis = await prisma.diagnosis.create({
+      data: {
+        id: 'consent-diag-200',
+        userId,
+        capturedAt: new Date(),
+        overallScore: 70,
+        status: 'COMPLETED',
+      },
+    });
     const res = await request(app.getHttpServer())
       .post('/recommendations/generate')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ skinScore: { overallScore: 70 }, weather: { uvIndex: 3 } })
+      .send({ diagnosisId: diagnosis.id })
       .expect(200);
     expect(res.body.length).toBeGreaterThan(0);
   });

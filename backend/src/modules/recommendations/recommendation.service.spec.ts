@@ -182,8 +182,19 @@ describe('RecommendationService', () => {
     });
   });
 
-  describe('generate (호환 모드 — skinScore+weather)', () => {
+  describe('generate (진단 기반 생성)', () => {
+    // N56: diagnosisId 전용 — 소유권 확인 후 DB에서 측정값/날씨를 조회한다.
+    const mockDiagnosis = () => {
+      prisma.diagnosis.findFirst.mockResolvedValue({
+        id: 'diag-1', userId: 1,
+        capturedAt: new Date(), overallScore: 70, thumbnailUri: null,
+        skinMetrics: [], weatherSnapshot: null,
+      });
+      prisma.recommendation.findMany.mockResolvedValue([]); // 중복 없음
+    };
+
     it('OpenAI 응답으로 B등급 추천 생성 및 저장', async () => {
+      mockDiagnosis();
       openAiClient.generateRecommendations.mockResolvedValue([
         {
           title: '이중 세안 권장',
@@ -193,10 +204,7 @@ describe('RecommendationService', () => {
         },
       ]);
 
-      const result = await service.generate(1, {
-        skinScore: { id: 'snap-1', overallScore: 70 },
-        weather: { uvIndex: 5 },
-      });
+      const result = await service.generate(1, { diagnosisId: 'diag-1' });
 
       expect(result).toHaveLength(1);
       expect(result[0].grade).toBe(EvidenceGrade.B);
@@ -205,6 +213,7 @@ describe('RecommendationService', () => {
     });
 
     it('N20: 생성 추천의 성분 태그와 매칭되는 제품을 연결한다', async () => {
+      mockDiagnosis();
       openAiClient.generateRecommendations.mockResolvedValue([
         {
           title: '세라마이드 보습 추천',
@@ -236,10 +245,7 @@ describe('RecommendationService', () => {
         },
       );
 
-      const result = await service.generate(1, {
-        skinScore: { id: 'snap-1', overallScore: 70 },
-        weather: { uvIndex: 5 },
-      });
+      const result = await service.generate(1, { diagnosisId: 'diag-1' });
 
       // 매칭된 제품이 RecommendationProduct로 연결되고 응답에도 반영된다.
       expect(prisma.recommendationProduct.createMany).toHaveBeenCalledWith({
@@ -251,11 +257,12 @@ describe('RecommendationService', () => {
     });
 
     it('OpenAI 실패 시 503 ServiceUnavailable', async () => {
+      mockDiagnosis();
       openAiClient.generateRecommendations.mockRejectedValue(
         new OpenAiUnavailable('OPENAI_API_KEY not configured'),
       );
       await expect(
-        service.generate(1, { skinScore: {}, weather: {} }),
+        service.generate(1, { diagnosisId: 'diag-1' }),
       ).rejects.toThrow(ServiceUnavailableException);
     });
   });
@@ -407,12 +414,7 @@ describe('RecommendationService', () => {
       expect(idempotency.complete).not.toHaveBeenCalled();
     });
 
-    it('호환 모드(skinScore+weather, diagnosisId 없음)는 예약을 사용하지 않는다', async () => {
-      await service.generate(1, { skinScore: { id: 'snap-1' }, weather: { uvIndex: 5 } });
-      expect(idempotency.acquire).not.toHaveBeenCalled();
-      expect(idempotency.complete).not.toHaveBeenCalled();
-      expect(prisma.recommendation.createMany).toHaveBeenCalledTimes(1);
-    });
+
   });
 
   describe('generateFast (N32/N29 빠른 경로)', () => {

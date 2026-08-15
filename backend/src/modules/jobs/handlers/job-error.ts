@@ -42,6 +42,21 @@ export function optionalString(
   return value;
 }
 
+/**
+ * R12/N56: payload에서 필수 문자열을 읽는다. 없거나 타입이 어긋나면 명시적 실패.
+ * (추천 생성 job은 diagnosisId가 필수 — 누락된 job은 재시도가 아니라 즉시 FAILED.)
+ */
+export function requiredString(
+  payload: Record<string, unknown>,
+  key: string,
+): string {
+  const value = payload[key];
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`잡 payload에 필수 ${key}가 없습니다`);
+  }
+  return value;
+}
+
 export function optionalNumber(
   payload: Record<string, unknown>,
   key: string,

@@ -31,7 +31,7 @@ import { RecommendationPageDto } from './dto/recommendation-page.dto';
 
 /**
  * RecommendationController — 기존 FastAPI /recommendations 이식.
- * sync generate는 프론트 호환 유지, async generate는 N4 job enqueue.
+ * sync generate는 프론트 계약 유지, async generate는 N4 job enqueue. (N56: diagnosisId 전용)
  */
 @ApiTags('recommendations')
 @Controller('recommendations')
@@ -107,8 +107,6 @@ export class RecommendationController {
   ): Promise<EnqueueJobResponseDto> {
     return this.jobService.enqueue(user.sub, JobType.RECOMMENDATION_GENERATE, {
       diagnosisId: dto.diagnosisId,
-      skinScore: dto.skinScore,
-      weather: dto.weather,
     });
   }
 
