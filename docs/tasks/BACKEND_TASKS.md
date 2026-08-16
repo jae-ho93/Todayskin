@@ -58,6 +58,10 @@ Google 검증을 다중 client id 허용으로 확장(`jwt-verify` `audiences` �
 (app.json cleartext·패키지명, eas.json) — 운영 백엔드가 HTTP-only라 cleartext 허용 필요
 ③ N35 보드 완료 표시, N50·F11 보류 결정 반영 ④ 소셜 키 시크릿 항목(GOOGLE_CLIENT_ID
 쉼표 목록·KAKAO_APP_ID)을 배포 체크리스트에 추가. 남은 Open은 N36·N37·N51(운영 결정 보류).
+**소셜 키 운영 반영 (완료)**: 카카오는 커스텀 스킴 리다이렉트 거부로 보류. 구글 Android
+클라이언트 ID 발급(패키지 `com.todayskin.app` + SHA-1) 후 `GOOGLE_CLIENT_ID` 시크릿 생성
+(웹+Android 쉼표 목록, `todayskin/prod/GOOGLE_CLIENT_ID`) — backend task definition에
+시크릿 추가 (PR #235) → 재배포 예정. APK 2차(정상 env) 빌드 성공, 최종(Android ID 포함) 빌드 대기.
 
 ### N54. 배포 준비 마감 — 자격 증명 없이 끝낼 수 있는 전부 (Fable5 리뷰 후속) ✅ 2026-08-13
 

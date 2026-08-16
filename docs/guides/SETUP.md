@@ -223,8 +223,27 @@ npx eas build:download --platform android
 - 설치하는 폰에서 "출처를 알 수 없는 앱 허용"을 켜야 한다.
 - `app.json`에 이미 반영됨: `android.package=com.todayskin.app` · cleartext HTTP 허용
   (운영 백엔드가 HTTP-only라 필수) · iOS ATS 예외.
-- 시연 전 소셜 로그인을 쓰려면 `.env.example`의 카카오·구글 키 발급을 먼저 해야 한다
-  (OTP 문자 로그인은 키 없이 동작).
+- 소셜 로그인 상태 (2026-08-17): **구글** 웹+Android 클라이언트 ID 발급 완료
+  (Android는 APK 서명 SHA-1 `AE:6E:24:8D:03:13:9D:77:7F:56:97:1B:47:ED:39:51:37:F1:EE:27`
+  등록) — eas.json preview env에 주입돼 APK에서 동작. **카카오**는 커스텀 스킴
+  (`weatherskin://oauth`)을 콘솔이 리다이렉트 URI로 거부해 보류(PR #232).
+  OTP 문자 로그인은 소셜 키 없이 동작한다.
+
+### 4-2. 데모 당일 체크리스트
+
+1. **데모 계정 미리 생성 (필수)** — 운영은 실제 문자 인증(MO, 1666-3538로 코드 발송)이라
+   데모 현장에서 가입하면 SMS가 본인 부담·시간이 걸린다. **시연 폰 번호로 미리 가입해**
+   로그인 화면까지만 띄워둔다. (계정 1~2개 권장)
+2. **APK 최신 빌드 확인** — `eas build:list`로 가장 최근 preview 빌드가 Finished인지 확인.
+   env가 바뀌면 `eas.json`을 고치고 재빌드한다 (클라우드 빌드는 `.env`를 안 올림).
+3. **시연 폰 설치** — APK 전송 → "출처를 알 수 없는 앱 허용" → 설치 → 열기.
+4. **실기기 스모크 (데모 전날)** — OTP 로그인 → 촬영 측정 → 기록 → 제품 탭 → 구글 로그인
+   (Android ID 인증). 카메라·위치 권한 허용 확인.
+5. **백엔드 상태 확인** — `curl http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com/health/ready`
+   응답의 dependencies가 전부 `up`인지 (database·inference·octomo·redis).
+6. (선택) **맥북 큰 화면 시연** — Android Studio 에뮬레이터에 같은 APK 설치.
+   촬영 측정은 실제 폰이 안전.
+7. (선택) **iPhone 체험용** — Expo Go QR (개발 PC `npm start`). 설치가 아닌 체험용.
 
 ## 5. 동작 확인 (스모크 테스트)
 
