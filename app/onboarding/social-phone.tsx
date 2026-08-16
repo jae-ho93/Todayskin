@@ -1,9 +1,10 @@
 import { router } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, KeyboardAvoidingView, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useState } from 'react';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../../src/api/client';
 import { useToast } from '../../src/components/Toast';
+import { usePhoneVerification } from '../../src/features/auth/usePhoneVerification';
 import { saveSession } from '../../src/lib/session';
 import { colors, radius, spacing, typography } from '../../src/theme';
 
@@ -13,60 +14,34 @@ const displayPhone = (value: string) => value.length <= 3 ? value : value.length
 export default function SocialPhoneScreen() {
   const { showToast } = useToast();
   const [phone, setPhone] = useState('');
-  const [code, setCode] = useState('');
-  const [recipientNumber, setRecipientNumber] = useState('');
-  const [sent, setSent] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // F34: 문자 앱을 연 뒤 복귀 시에만 자동 검증한다.
-  const smsOpenedRef = useRef(false);
-  const linkPhoneRef = useRef<() => Promise<void>>(async () => {});
 
-  const sendOtp = async () => {
-    if (!validPhone(phone) || busy) return;
-    setBusy(true); setError(null);
-    try { const response = await api.sendOtp(phone, 'social_link'); setCode(response.code); setRecipientNumber(response.recipientNumber); setSent(true); }
-    catch (e) { setError(e instanceof Error ? e.message : '인증번호를 보내지 못했습니다.'); }
-    finally { setBusy(false); }
-  };
+  // R27/F63: 문자 인증 상태 머신(발송→문자앱→복귀 자동 검증)을 훅으로 통일한다.
+  // OTP 검증은 훅이 수행하고(onVerified), 여기서는 전화 연결 API만 호출한다.
+  const phoneVerification = usePhoneVerification({
+    purpose: 'social_link',
+    onError: setError,
+    onVerified: () => void linkPhone(),
+  });
 
-  const openSms = async () => {
-    try {
-      smsOpenedRef.current = true;
-      // iOS는 `?body=` 대신 `&body=`를 요구한다 — 문자 시트가 본문 채워진 채 열린다.
-      const sep = Platform.OS === 'ios' ? '&' : '?';
-      await Linking.openURL(
-        `sms:${recipientNumber}${sep}body=${encodeURIComponent(`인증코드 ${code}`)}`,
-      );
-    }
-    catch { setError('문자 앱을 열 수 없어요. 다시 시도해주세요.'); }
+  const sendOtp = () => {
+    if (!validPhone(phone) || phoneVerification.sending) return;
+    void phoneVerification.sendCode(phone);
   };
 
   const linkPhone = async () => {
-    if (code.length !== 6 || busy) return;
-    setBusy(true); setError(null);
+    if (submitting) return;
+    setSubmitting(true); setError(null);
     try {
-      await api.verifyOtp(phone, code, 'social_link');
       const user = await api.socialLinkPhone(phone);
       await saveSession(user);
       // F59: 문자앱 복귀 자동 검증 완료 피드백
       showToast('휴대폰 인증이 완료됐어요', { type: 'success' });
       router.replace('/(tabs)');
     } catch (e) { setError(e instanceof Error ? e.message : '인증을 확인하지 못했어요. 다시 시도해주세요.'); }
-    finally { setBusy(false); }
+    finally { setSubmitting(false); }
   };
-  linkPhoneRef.current = linkPhone;
-
-  // F34: 문자 앱에서 복귀하면 자동으로 인증을 확인한다.
-  useEffect(() => {
-    if (!sent || busy) return;
-    const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && smsOpenedRef.current && code.length === 6) {
-        void linkPhoneRef.current();
-      }
-    });
-    return () => subscription.remove();
-  }, [sent, busy, code]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -77,17 +52,17 @@ export default function SocialPhoneScreen() {
         </View>
         <View style={styles.field}>
           <Text style={styles.label}>휴대폰 번호 (선택)</Text>
-          <TextInput style={styles.input} keyboardType="number-pad" placeholder="010-1234-5678" placeholderTextColor={colors.gray300} value={displayPhone(phone)} onChangeText={(v) => { setPhone(v.replace(/\D/g, '').slice(0, 11)); setSent(false); setCode(''); setError(null); }} editable={!sent} />
-          <Pressable onPress={sendOtp} disabled={!validPhone(phone) || busy} style={styles.textButton}><Text style={[styles.textButtonLabel, (!validPhone(phone) || busy) && styles.muted]}>문자 인증 시작하기</Text></Pressable>
+          <TextInput style={styles.input} keyboardType="number-pad" placeholder="010-1234-5678" placeholderTextColor={colors.gray300} value={displayPhone(phone)} onChangeText={(v) => { setPhone(v.replace(/\D/g, '').slice(0, 11)); phoneVerification.reset(); setError(null); }} editable={!phoneVerification.codeIssued} />
+          <Pressable onPress={sendOtp} disabled={!validPhone(phone) || phoneVerification.sending} style={styles.textButton}><Text style={[styles.textButtonLabel, (!validPhone(phone) || phoneVerification.sending) && styles.muted]}>문자 인증 시작하기</Text></Pressable>
         </View>
-        {sent && <View style={styles.field}>
+        {phoneVerification.codeIssued && <View style={styles.field}>
           <Text style={styles.label}>인증 문자를 보내면 자동으로 확인돼요</Text>
-          <Pressable onPress={openSms} style={styles.smsButton}><Text style={styles.smsButtonText}>인증하기</Text></Pressable>
+          <Pressable onPress={() => void phoneVerification.openSms()} style={styles.smsButton}><Text style={styles.smsButtonText}>인증하기</Text></Pressable>
         </View>}
         {error && <Text style={styles.error}>{error}</Text>}
         <View style={styles.footer}>
-          {sent && <Pressable onPress={linkPhone} disabled={code.length !== 6 || busy} style={[styles.cta, (code.length !== 6 || busy) && styles.ctaDisabled]}>{busy ? <ActivityIndicator color={colors.textInverse} /> : <Text style={styles.ctaText}>인증 확인</Text>}</Pressable>}
-          <Pressable onPress={() => router.replace('/(tabs)')} disabled={busy} hitSlop={8}><Text style={styles.skip}>지금은 건너뛰기</Text></Pressable>
+          {phoneVerification.codeIssued && <Pressable onPress={() => void phoneVerification.verify()} disabled={phoneVerification.verifying || submitting} style={[styles.cta, (phoneVerification.verifying || submitting) && styles.ctaDisabled]}>{submitting || phoneVerification.verifying ? <ActivityIndicator color={colors.textInverse} /> : <Text style={styles.ctaText}>인증 확인</Text>}</Pressable>}
+          <Pressable onPress={() => router.replace('/(tabs)')} disabled={submitting} hitSlop={8}><Text style={styles.skip}>지금은 건너뛰기</Text></Pressable>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

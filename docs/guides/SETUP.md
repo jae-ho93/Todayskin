@@ -200,6 +200,30 @@ MOCK_INFERENCE=false
 
 ---
 
+## 4-1. 시연용 Android APK 빌드 (EAS — 무료 티어)
+
+해커톤 데모처럼 **다른 사람 폰에 설치**하려면 Expo Go 대신 APK 파일을 만들어 공유한다.
+스토어 제출이 아니라서 EAS 무료 티어(월 15회 빌드)로 충분하다. iOS는 Apple 개발자
+계정($99/년)이 있어야 다른 사람 폰에 설치할 수 있어 데모에서는 Android APK를 쓴다.
+
+```bash
+# ① 운영 백엔드 주소를 박은 채 빌드해야 한다 (.env — 빌드 시점에 고정됨)
+EXPO_PUBLIC_API_BASE_URL=http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com
+
+# ② Expo 계정 로그인 (무료) → APK 빌드 (preview = distribution internal + apk)
+npx eas login
+npx eas build -p android --profile preview
+
+# ③ 완료 후 APK 다운로드 → 시연 폰에 전송해 설치
+npx eas build:download --platform android
+```
+
+- 설치하는 폰에서 "출처를 알 수 없는 앱 허용"을 켜야 한다.
+- `app.json`에 이미 반영됨: `android.package=com.todayskin.app` · cleartext HTTP 허용
+  (운영 백엔드가 HTTP-only라 필수) · iOS ATS 예외.
+- 시연 전 소셜 로그인을 쓰려면 `.env.example`의 카카오·구글 키 발급을 먼저 해야 한다
+  (OTP 문자 로그인은 키 없이 동작).
+
 ## 5. 동작 확인 (스모크 테스트)
 
 앱이 열리면 순서대로 확인해보세요:

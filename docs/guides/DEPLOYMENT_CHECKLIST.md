@@ -45,6 +45,9 @@
 | 10 | `todayskin/prod/S3_BUCKET` | backend·worker | ✅ | 운영 S3 버킷명 (없으면 부팅 거부) | ☐ |
 | 11 | `todayskin/prod/INFERENCE_SERVICE_URL` | backend·worker | ✅ | `http://inference.todayskin.local:8000` — **Cloud Map DNS (고정)** — 배포 후 IP 갱신 불필요 | ☐ |
 | 12 | `todayskin/prod/INFERENCE_SHARED_SECRET` | backend·worker·inference | ✅ | backend/inference 동일 값 (랜덤) | ☐ |
+| 12-1 | `todayskin/prod/GOOGLE_CLIENT_ID` | backend | ⬜ 선택 | Google id_token aud 검증용 — 플랫폼별(웹/iOS/Android) 클라이언트를 쓰면 **쉼표 구분 목록**으로 등록 (N46 확장, 2026-08-17) | ☐ |
+| 12-2 | `todayskin/prod/KAKAO_APP_ID` | backend | ⬜ 선택 | 카카오 앱 ID(숫자) — 타 앱 발급 토큰 차단. 프론트 키(`EXPO_PUBLIC_KAKAO_REST_API_KEY`)와 함께 발급 | ☐ |
+| 12-3 | ~~`todayskin/prod/APPLE_BUNDLE_ID`~~ | backend | — | iOS 전용(유료 계정 필요) — Android 데모에선 불필요. iOS 진행 시 추가 | ☐ |
 | 13 | ~~`todayskin/prod/SENTRY_DSN`~~ | — | — | **task definition `secrets[]`에서 제거됨 (2026-08-16, PR #227)** — registry가 `optional`이라 없으면 기본값 → Sentry 비활성. **시크릿 생성 불필요** | ☐ |
 
 > ⚠️ 참고: Secrets Manager는 빈 문자열 저장이 불가하고, `"0"`을 넣으면 env 검증(`must be a valid uri`)에서
