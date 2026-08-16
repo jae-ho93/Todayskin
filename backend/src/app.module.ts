@@ -40,9 +40,16 @@ import { JobsModule } from './modules/jobs/jobs.module';
 
 @Module({
   imports: [
+    // test 환경은 .env를 읽지 않는다. @Module 데코레이터가 import 시점에
+    // forRoot()를 평가하므로 e2e 스펙의 beforeAll env 설정보다 먼저 .env가
+    // 캡처된다(ConfigService는 검증된 설정을 process.env보다 우선한다).
+    // 로컬 .env의 MOCK_*·INFERENCE_SERVICE_URL·OCTOMO_API_KEY·OPENAI_API_KEY가
+    // e2e로 새어들어 스펙이 의도한 mock 설정을 덮어쓰는 문제를 막는다. CI는
+    // .env가 없어 동일 동작이며, 개발/운영은 그대로 .env를 사용한다.
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env', '.env.local'],
+      ignoreEnvFile: process.env.NODE_ENV === 'test',
       validate: validateEnvWithRegistry,
     }),
     // N1: 구조화 로깅 — nestjs-pino JSON 로거, correlation ID, 민감정보 마스킹.

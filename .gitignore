@@ -63,6 +63,7 @@ yarn-error.*
 # backend Python (inference-service local venv/cache; legacy app/ removed)
 backend/.venv/
 backend/**/.venv/
+backend/**/.venv-*/
 backend/__pycache__/
 backend/**/__pycache__/
 backend/*.egg-info/
