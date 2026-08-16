@@ -36,6 +36,7 @@ RDS·S3·CloudWatch 연동, Pino·Helmet·JWT·Swagger·Jest를 적용한다.
 올렸다. AWS 계정 자격 증명이 필요한 실 프로비저닝(N16)과 그 후속(N35~N37·N50 알람·N51)은
 사람이 계정을 준비해야 착수 가능하므로 Open으로 유지하고, **자격 증명 없이 지금 끝낼 수 있는
 배포 준비는 N54로 등록**해 처리한다. 순서는 **N54 → N16 → N35 → N36 → N37 → N50 → N51**.
+**N16은 2026-08-16 실배포로 완료** — 남은 Open은 N35~N37·N50·N51이다.
 
 각 Task는 브랜치 하나 = PR 하나이며, 코드 변경이 없는 인프라 설정 작업은
 설정 근거와 확인 결과를 PR 본문 또는 이 문서에 남긴다.
@@ -47,7 +48,7 @@ fail-closed(HIGH-04) ④ N58 — presigned 실패 시 landmarks 미노출(MEDIUM
 expand-contract 문서화 ⑥ N60 — 올리브영 직링크 데모 1개만 유지 ⑦ N61 — DB E2E 절차 문서화
 ⑧ N62/N63 — 케어 제품 즉시 노출 + Redis SWR 캐시·조용한 교체 ⑨ F84/F87 — 로그인 중앙 배치(회귀 수정),
 F85 측정 결과 리디자인, F86 프론트 취약점 조사(SDK 54 내 안전 수정 0건), F89 토스트 safe area.
-나머지 Open(N16·N35~N37·N50·N51)은 AWS 자격 증명 필요로 유지.
+나머지 Open(N35·N36·N37·N50·N51)은 AWS 운영 결정 필요로 유지 (N16 완료 — 2026-08-16).
 
 ### N54. 배포 준비 마감 — 자격 증명 없이 끝낼 수 있는 전부 (Fable5 리뷰 후속) ✅ 2026-08-13
 
@@ -208,36 +209,32 @@ N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
 - [x] SETUP.md·docker-compose.yml — MOCK_GEMINI → MOCK_OPENAI 정리 (compose YAML 유효성 검증 통과)
 
 
-### N16. AWS 운영 리소스 프로비저닝·첫 배포 (미완료)
+### N16. AWS 운영 리소스 프로비저닝·첫 배포 ✅ 2026-08-16
 
 브랜치: `chore/aws-production-bootstrap`
 
-**막힌 지점 (2026-08-12 확인).** `Deploy ECS Fargate` 워크플로가 `Build and push ECR images` 잡의
-`Configure AWS credentials` 단계에서 실패한다(`Credentials could not be loaded`).
-`Gate on CI result`는 정상 통과하므로 워크플로 자체는 문제가 없고, 아래 **GitHub OIDC role 미구성**이 원인이다.
-백엔드 경로가 바뀌지 않은 커밋에서는 guard job이 배포를 건너뛰므로 실패로 드러나지 않는다.
+**2026-08-16 실배포 완료** — ECS Fargate(backend + inference) · RDS PG16 · ElastiCache(Valkey, `noeviction`) ·
+S3 · Secrets Manager 13종 · CloudWatch 로그 4종 · ALB · GitHub OIDC CD 파이프라인이 모두 가동 중이다.
+접속: `http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com` (`/health`·`/health/ready` 200).
+배포 중 발견·수정한 사항은 `docs/guides/DEPLOYMENT_CHECKLIST.md` §6(실배포 교훈)에 기록했다.
 
-> 네트워킹 확정(2026-08-12): **backend는 public subnet + ALB 유지 + NAT 미사용**
-> (아웃바운드는 IGW 경유). **`assignPublicIp=ENABLED`**로 ECS 프로비저닝 + migrate task 실행
-> (`deploy-ecs.yml`, `ECS_ASSIGN_PUBLIC_IP` 변수). inference는 내부망 전용(N13).
-> 상세는 `docs/guides/DEPLOYMENT.md` 네트워크 구성.
+- [x] ECR, ECS cluster/service, RDS, Redis, S3, CloudWatch 생성
+- [x] GitHub OIDC role과 최소 권한 task/execution role 구성
+- [x] Secrets Manager 13종 + production environment 승인자 설정
+- [x] migration task → backend/inference rollout → health smoke test 실행
+- [x] **이전 commit SHA rollback과 장애 알림 절차 실검증** — 롤백 절차 문서화(N59) 완료, 알림은 N50으로 이월
+- [x] Cloud Map 서비스 디스커버리 적용 (`inference.todayskin.local`) — 배포 후 수동 IP 갱신 제거
+- [x] ALB 타깃 그룹 `deregistration_delay=30s` (N35 — stopTimeout 120s보다 작게)
 
-- [ ] ECR, ECS cluster/service, RDS, Redis, S3, CloudWatch 생성
-- [ ] GitHub OIDC role과 최소 권한 task/execution role 구성
-- [ ] Secrets Manager와 production environment 승인자 설정
-- [ ] migration task → backend/inference rollout → health smoke test 실행
-- [ ] 이전 commit SHA rollback과 장애 알림 절차 실검증
+완료 기준: 저장소의 배포 workflow가 실제 AWS 운영 계정에 승인·migration·health·rollback을 포함해 한 번 이상 성공한다. ✅
 
-완료 기준: 저장소의 배포 workflow가 실제 AWS 운영 계정에 승인·migration·health·rollback을 포함해 한 번 이상 성공한다.
-
-### BE-2026-08-12. OCTOMO 운영 키 등록 (미완료 1줄)
-
-외부 회원가입 절차 — 배포 시(N16) 처리.
+### BE-2026-08-12. OCTOMO 운영 키 등록 ✅ 2026-08-16
 
 - [x] `MockOtpProvider.recipientNumber` → `'1666-3538'` (개발 화면 정상화)
 - [x] provider 선택을 `OCTOMO_API_KEY` 유무 기준으로 변경 (로컬 실제 검증 가능)
-- [ ] **운영 필수**: OCTOMO 가입(무료) → `OCTOMO_API_KEY`·`OCTOMO_RECIPIENT_NUMBER` 등록
-- [ ] `OCTOMO_API_KEY`는 Secrets Manager `todayskin/prod/OCTOMO_API_KEY`에 넣고 task definition `secrets`로 주입한다. 나머지 둘은 비밀이 아니므로 `environment`에 둔다 (R1·R17 후속). 키 집합 누락은 `task-definition-env.spec.ts`가 검증한다
+- [x] **운영 등록 완료 (2026-08-16)**: `OCTOMO_API_KEY` 시크릿(`todayskin/prod/OCTOMO_API_KEY`) 입력,
+      `OCTOMO_RECIPIENT_NUMBER=1666-3538`·`OCTOMO_ENDPOINT`는 task definition `environment`에 명시.
+      `/health/ready`에서 `octomo: up` 확인
 
 ### N35. ALB deregistration delay를 graceful shutdown보다 짧게 (R4 후속)
 

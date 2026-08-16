@@ -146,8 +146,11 @@ Task definition 템플릿:
 
 - `DATABASE_URL`, `REDIS_URL`
 - `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`
-- `KMA_API_KEY`, `AIRKOREA_API_KEY`, `OPENAI_API_KEY`
-- `ALLOWED_ORIGINS`, `S3_BUCKET`, `INFERENCE_SERVICE_URL`, `INFERENCE_SHARED_SECRET`, `SENTRY_DSN`
+- `KMA_API_KEY`(동네예보 — 온도/습도), `KMA_UV_API_KEY`(생활기상지수 — 자외선),
+  `AIRKOREA_API_KEY`, `OPENAI_API_KEY` — data.go.kr은 **API(서비스)마다 별도 키**를 발급하므로
+  UV와 실황 키가 다르다 (UV 전용 키가 없으면 `KMA_API_KEY`로 폴백)
+- `ALLOWED_ORIGINS`, `S3_BUCKET`, `INFERENCE_SERVICE_URL`, `INFERENCE_SHARED_SECRET`
+- ~~`SENTRY_DSN`~~ — task definition `secrets[]`에서 제거 (PR #227). registry가 `optional`이라 없으면 Sentry 비활성
 - `OCTOMO_API_KEY` (R17 — 누락 시 `/health/ready`가 항상 not-ready이고 신규 가입·신규 디바이스
   로그인이 막힌다. 비밀이 아닌 `OCTOMO_ENDPOINT`·`OCTOMO_RECIPIENT_NUMBER`는 task definition의
   `environment`에 명시한다.)
@@ -174,6 +177,33 @@ IAM:
   퍼블릭 IP · ALB/NLB 없음). backend와 같은 VPC 안에서만 호출. (inference도 public subnet에 두되
   퍼블릭 IP 미할당·인그레스 차단, 또는 VPC endpoint 구성은 인프라 생성 시 결정)
 - **RDS**: 퍼블릭 접근 비활성화 유지 (DB는 애플리케이션에서만 접근).
+
+### 서비스 디스커버리 (Cloud Map) — inference URL 고정 (2026-08-16)
+
+inference 태스크는 배포마다 새 사설 IP를 받는다. `INFERENCE_SERVICE_URL`을 태스크 IP로 관리하면
+배포 후 시크릿 갱신 + backend 재배포가 매번 필요하다. 이 반복 작업을 **Cloud Map 서비스 디스커버리**로 제거했다:
+
+- 네임스페이스: `todayskin.local` (`DNS_PRIVATE` — VPC 내부 전용, Route 53 프라이빗 호스팅 영역)
+- 서비스: `inference` (A 레코드, TTL 10) → DNS 이름 **`inference.todayskin.local`**
+- ECS inference 서비스에 `serviceRegistries` 연결 — 태스크 기동/종료 시 자동 등록·해제
+- `INFERENCE_SERVICE_URL` 시크릿: `http://inference.todayskin.local:8000` (**고정** — 배포 후 갱신 불필요)
+
+재구성 절차 (장애·삭제 시):
+
+1. `aws servicediscovery create-private-dns-namespace --name todayskin.local`
+2. `aws servicediscovery create-service --name inference --dns-config '...A TTL 10...'` (health check 미설정)
+3. ECS inference service에 `serviceRegistries=[{registryArn}]` 연결 (`aws ecs update-service`)
+4. 시크릿 `INFERENCE_SERVICE_URL`을 DNS 이름으로 교체 후 backend 재배포
+
+> Cloud Map 서비스에 `HealthCheckCustomConfig`를 두지 않았으므로 DNS 응답에 인스턴스가 항상 포함된다.
+> 운영 강화(인스턴스 헬스 연동)가 필요하면 그때 추가한다. VPC 내부에서만 해석되므로
+> 외부 노출 경로가 되지 않는다.
+
+### Redis (ElastiCache) — BullMQ eviction policy (2026-08-16)
+
+ElastiCache 기본 `maxmemory-policy=volatile-lru`는 BullMQ 안정성에 좋지 않다 (BullMQ는
+`noeviction`을 요구). 커스텀 파라미터 그룹 **`todayskin-redis-pg`(`maxmemory-policy=noeviction`)** 을
+만들어 복제 그룹에 적용했다. ElastiCache를 새로 만들 때마다 이 파라미터 그룹을 함께 적용한다.
 
 ### 네트워크 보안 (N13)
 
@@ -486,4 +516,5 @@ docker build --platform linux/amd64 \
 - N8: 히스토리 캘린더 기능 (완료)
 - ~~실제 SMS OTP 게이트웨이 연결~~ → OCTOMO MO 인증 적용 완료 (feature/otp-octomo-mo, 2026-08)
 - S3 객체 삭제 실패 재처리와 orphan reconciliation 운영 작업
-- 실제 AWS 계정에 ECR/ECS/RDS/Secrets/OIDC role 프로비저닝 (인프라 최초 1회)
+- ~~실제 AWS 계정에 ECR/ECS/RDS/Secrets/OIDC role 프로비저닝~~ → **완료 (2026-08-16 실배포)** —
+  `http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com`에서 서비스 중
