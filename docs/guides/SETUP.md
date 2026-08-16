@@ -207,16 +207,18 @@ MOCK_INFERENCE=false
 계정($99/년)이 있어야 다른 사람 폰에 설치할 수 있어 데모에서는 Android APK를 쓴다.
 
 ```bash
-# ① 운영 백엔드 주소를 박은 채 빌드해야 한다 (.env — 빌드 시점에 고정됨)
-EXPO_PUBLIC_API_BASE_URL=http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com
-
-# ② Expo 계정 로그인 (무료) → APK 빌드 (preview = distribution internal + apk)
+# ① Expo 계정 로그인 (무료) → APK 빌드 (preview = distribution internal + apk)
 npx eas login
 npx eas build -p android --profile preview
 
-# ③ 완료 후 APK 다운로드 → 시연 폰에 전송해 설치
+# ② 완료 후 APK 다운로드 → 시연 폰에 전송해 설치
 npx eas build:download --platform android
 ```
+
+> ⚠️ **빌드 환경변수는 `.env`가 아니라 `eas.json`의 `preview.env`에 있다.**
+> EAS 클라우드 빌드는 `.gitignore` 때문에 `.env`를 업로드하지 않는다(공식 문서).
+> `EXPO_PUBLIC_API_BASE_URL`(운영 백엔드) 등 빌드 타임 값은 `eas.json` preview
+> 프로파일의 `env`에 커밋돼 있어 그대로 빌드하면 된다. 값이 바뀌면 `eas.json`을 고친다.
 
 - 설치하는 폰에서 "출처를 알 수 없는 앱 허용"을 켜야 한다.
 - `app.json`에 이미 반영됨: `android.package=com.todayskin.app` · cleartext HTTP 허용

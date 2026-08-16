@@ -14,6 +14,10 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "947087539984-dg83ok9nt8hs29iurtn2qdsfds4cu1lb.apps.googleusercontent.com"
       }
     },
     "production": {
