@@ -479,7 +479,8 @@ export const ENV_REGISTRY: EnvVarDefinition[] = [
   {
     key: 'GOOGLE_CLIENT_ID',
     owner: 'auth',
-    description: 'Google OAuth client id (id_token aud 검증)',
+    description:
+      'Google OAuth client id (id_token aud 검증). 플랫폼별(웹/iOS/Android) 클라이언트를 쓰면 쉼표 구분 목록으로 모두 등록한다.',
     requiredIn: 'never',
     safeDefault: '',
     secret: false,

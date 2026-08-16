@@ -36,7 +36,8 @@ RDS·S3·CloudWatch 연동, Pino·Helmet·JWT·Swagger·Jest를 적용한다.
 올렸다. AWS 계정 자격 증명이 필요한 실 프로비저닝(N16)과 그 후속(N35~N37·N50 알람·N51)은
 사람이 계정을 준비해야 착수 가능하므로 Open으로 유지하고, **자격 증명 없이 지금 끝낼 수 있는
 배포 준비는 N54로 등록**해 처리한다. 순서는 **N54 → N16 → N35 → N36 → N37 → N50 → N51**.
-**N16은 2026-08-16 실배포로 완료** — 남은 Open은 N35~N37·N50·N51이다.
+**N16은 2026-08-16 실배포로 완료**, N35도 실배포에서 적용 완료. N50은 데모 기간 보류(2026-08-17),
+남은 Open은 **N36·N37·N51**이다.
 
 각 Task는 브랜치 하나 = PR 하나이며, 코드 변경이 없는 인프라 설정 작업은
 설정 근거와 확인 결과를 PR 본문 또는 이 문서에 남긴다.
@@ -48,7 +49,8 @@ fail-closed(HIGH-04) ④ N58 — presigned 실패 시 landmarks 미노출(MEDIUM
 expand-contract 문서화 ⑥ N60 — 올리브영 직링크 데모 1개만 유지 ⑦ N61 — DB E2E 절차 문서화
 ⑧ N62/N63 — 케어 제품 즉시 노출 + Redis SWR 캐시·조용한 교체 ⑨ F84/F87 — 로그인 중앙 배치(회귀 수정),
 F85 측정 결과 리디자인, F86 프론트 취약점 조사(SDK 54 내 안전 수정 0건), F89 토스트 safe area.
-나머지 Open(N35·N36·N37·N50·N51)은 AWS 운영 결정 필요로 유지 (N16 완료 — 2026-08-16).
+N35는 실배포 적용 완료. 남은 Open(N36·N37·N51)은 AWS 운영 결정 필요로 유지,
+N50(CloudWatch 알람)은 데모 1주일 기간 보류로 결정 (2026-08-17).
 
 ### N54. 배포 준비 마감 — 자격 증명 없이 끝낼 수 있는 전부 (Fable5 리뷰 후속) ✅ 2026-08-13
 
@@ -236,15 +238,15 @@ S3 · Secrets Manager 13종 · CloudWatch 로그 4종 · ALB · GitHub OIDC CD �
       `OCTOMO_RECIPIENT_NUMBER=1666-3538`·`OCTOMO_ENDPOINT`는 task definition `environment`에 명시.
       `/health/ready`에서 `octomo: up` 확인
 
-### N35. ALB deregistration delay를 graceful shutdown보다 짧게 (R4 후속)
+### N35. ALB deregistration delay를 graceful shutdown보다 짧게 (R4 후속) ✅ 2026-08-16
 
 선행: N16 · 코드 변경 없음 (인프라 설정)
 
 R4에서 SIGTERM 처리를 넣어 종료 시 진행 중인 요청을 기다린다(`stopTimeout` 120초). 그런데 ALB가
 타깃을 먼저 빼지 않으면 배포 중 새 요청이 죽는 컨테이너로 계속 들어간다. 드레인이 먼저 끝나야 한다.
 
-- [ ] 타깃 그룹 `deregistration_delay.timeout_seconds`를 `stopTimeout`(120s)보다 **작게** 설정한다
-- [ ] 배포를 한 번 돌려 롤링 교체 중 5xx가 발생하지 않는지 ALB 메트릭으로 확인한다
+- [x] 타깃 그룹 `deregistration_delay.timeout_seconds`를 `stopTimeout`(120s)보다 **작게** 설정한다 — **N16 실배포에서 적용** (`deregistration_delay=30s`)
+- [ ] 배포를 한 번 돌려 롤링 교체 중 5xx가 발생하지 않는지 ALB 메트릭으로 확인한다 (운영 배포 1회 후 확인)
 
 완료 기준: 롤링 배포 1회에서 `HTTPCode_ELB_5XX_Count` 증가가 없다.
 
@@ -274,7 +276,10 @@ R11에서 append-only 테이블에 보존 정책을 넣었다. 기본값이 `off
 
 완료 기준: dry-run 예측 건수와 실제 삭제 건수가 일치하고, 스냅샷이 확보돼 있다.
 
-### N50. CloudWatch 알람 + 장애 런북 (Fable5 리뷰 P1)
+### N50. CloudWatch 알람 + 장애 런북 (Fable5 리뷰 P1) — 보류 (2026-08-17 데모 결정)
+
+> **2026-08-17 보류**: 해커톤 데모 기간(1주일)만 서버를 열어두기로 해서 알림이 없어도
+> 데모에 영향이 없다. 서버를 장기 운영으로 전환하면 그때 재등록한다.
 
 선행: N16 · 코드 변경 없음 (인프라 설정 + 문서)
 

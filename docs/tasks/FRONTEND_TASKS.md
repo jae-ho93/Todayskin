@@ -139,9 +139,13 @@ F0 → F1 → F2 → F3 → F6 → F4 → F16 → F8 → F10 → F15 → F13 →
 
 결제·권한 범위 미정. 이번 웨이브 제외. 설정에 가짜 가격 카드 넣지 말 것.
 
-### F12 / N23. EAS 배포 — 범위 밖 (2026-08-13 해커톤 결정)
+### F12 / N23. EAS 배포 — 스토어 제출 범위 밖, 시연용 APK 빌드는 준비 (2026-08-17 갱신)
 
-스토어 배포를 하지 않기로 확정. 데모는 Expo Go/개발 빌드로 진행한다.
+스토어 배포(EAS Submit)를 하지 않기로 확정. 데모는 Expo Go/개발 빌드로 진행한다.
+
+**2026-08-17**: 데모를 위해 시연용 Android APK(EAS Build `preview` — 스토어 제출 아님) 준비를
+추가했다. `app.json`에 `android.package=com.todayskin.app`·cleartext HTTP·iOS ATS 예외,
+`eas.json`(preview=APK) 생성. 빌드 방법은 `docs/guides/SETUP.md` "시연용 APK 빌드" 참고.
 ### F13. 인증 화면 정리 (F15와 맞춤)
 
 브랜치: `fix/auth-screens-cleanup`
@@ -162,6 +166,13 @@ F0 → F1 → F2 → F3 → F6 → F4 → F16 → F8 → F10 → F15 → F13 →
 - [x] 실패/취소 UX, 목업 로그인 금지
 
 완료: 세 제공자로 로그인·가입 가능. 아이디/비번 찾기 UI 없음.
+
+**2026-08-17 설정 준비**: 소셜 키가 아직 미설정(프론트 `.env`·백엔드 시크릿 모두 없음).
+APK(네이티브)에서 구글 로그인이 동작하도록 백엔드 Google 검증을 **다중 client id 허용**으로
+확장했다(`GOOGLE_CLIENT_ID` 쉼표 구분 — jwt-verify `audiences`, 테스트 추가).
+키 발급은 각 제공자 콘솔 작업 필요: 카카오(`weatherskin://oauth` Redirect URI + REST 키 + 앱 ID),
+구글(웹/iOS/Android 클라이언트 3종 — Android는 패키지 `com.todayskin.app` + SHA-1 등록),
+애플(유료 $99/년 — Android 데모에선 불필요). 상세: `.env.example`·`docs/guides/DEPLOYMENT_CHECKLIST.md`.
 
 ### F16. 설정 전면 재구성 (N28 후, N34 권장)
 
@@ -623,7 +634,7 @@ F0 → F1 → F2 → F3 → F6 → F4 → F16 → F8 → F10 → F15 → F13 →
 
 - [x] `app/diagnosis/[id].tsx` — 연/월/일/시간 표기
 
-### F50. 캘린더 스와이프 전환이 매끄럽지 않음 (신규, 2026-08-12 실기기)
+### F50. 캘린더 스와이프 전환이 매끄럽지 않음 (신규, 2026-08-12 실기기) — 완료 (2026-08-12)
 
 > **증상**: 좌/우 스와이프로 월 이동 시 콘텐츠가 통째로 교체되며 튀는 느낌.
 > **원인(F37/F40 구조)**: `moveMonth` 후 `swipeX.setValue(0)`로 translateX를
@@ -781,17 +792,17 @@ F0 → F1 → F2 → F3 → F6 → F4 → F16 → F8 → F10 → F15 → F13 →
 - [x] `app/onboarding/login.tsx` — ScrollView + flex-start
 - [x] `app/onboarding/signup.tsx` — ScrollView + flex-start (phone/profile 두 단계)
 
-### F63. 리팩토링 B6 잔여 3건 — 보류 (2026-08-12)
+### F63. 리팩토링 B6 잔여 3건 (2026-08-12 보류 → 2026-08-17 1건 완료)
 
 리팩토링 R1~R35(묶음 B1~B6)를 마치면서 **판단해서 남긴** 프론트 항목이다. 미완성 방치가 아니라
 지금 하면 이득보다 diff가 큰 것들이다. 근거는 [`REFACTORING_BACKLOG.md`](REFACTORING_BACKLOG.md)의
 해당 R 상세에 있다. 셋 다 서로 독립이므로 필요해지는 것만 꺼내 쓴다.
 
-- [ ] `usePhoneVerification`을 `app/onboarding/login.tsx` · `social-phone.tsx`에도 적용한다. 두 화면이 가입과 같은 문자 인증 상태 클러스터를 갖고 있다. **셋 중 가장 실익이 크다** — 인증 흐름을 고칠 때 세 화면을 따로 고치지 않아도 된다 (R27 후속)
+- [x] `usePhoneVerification`을 `app/onboarding/login.tsx` · `social-phone.tsx`에도 적용한다 (2026-08-17). 두 화면이 가입과 같은 문자 인증 상태 클러스터를 갖고 있다 — 발송/검증/복귀 자동 검증 로직이 훅으로 통일되어 세 화면(login·signup·social-phone)이 같은 경로를 쓴다 (R27 후속)
 - [ ] 수기 타입(`src/types/index.ts`)을 생성 타입(`src/types/api.generated.ts`)으로 전면 재export한다. 지금은 컴파일 타임 적합성 테스트 + CI 드리프트 검사로 어긋남을 막고 있어 급하지 않다 (R28 후반)
 - [ ] `StyleSheet`를 `*.styles.ts`로 분리한다. 중복 제거가 아니라 파일 분할이라 이득이 가장 작다 (R27 3번)
 
-착수 조건: 해당 화면을 다른 이유로 열게 될 때 함께 처리한다. 이것만을 위한 PR은 만들지 않는다.
+착수 조건: 남은 2건은 해당 화면을 다른 이유로 열게 될 때 함께 처리한다. 이것만을 위한 PR은 만들지 않는다.
 
 ### F71. 모바일 크래시 리포팅 — 제외 (2026-08-13 해커톤 결정)
 

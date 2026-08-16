@@ -68,7 +68,8 @@ export async function verifyIdTokenWithJwks(
   token: string,
   options: {
     issuer: string;
-    audience: string;
+    /** 허용 aud 목록 — 클라이언트가 플랫폼별로 다른 client id를 쓰면 여러 개를 허용한다. */
+    audiences: readonly string[];
     getJwks: () => Promise<JwksKey[]>;
   },
 ): Promise<VerifiedIdToken> {
@@ -94,7 +95,7 @@ export async function verifyIdTokenWithJwks(
   if (payload.iss !== options.issuer) {
     throw new SocialProviderError('id_token 발급자가 일치하지 않습니다');
   }
-  if (payload.aud !== options.audience) {
+  if (!options.audiences.includes(payload.aud)) {
     throw new SocialProviderError('id_token 대상 앱이 일치하지 않습니다');
   }
   if (typeof payload.sub !== 'string' || payload.sub.length === 0) {

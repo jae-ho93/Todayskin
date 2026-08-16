@@ -57,7 +57,7 @@ export class AppleSocialProvider implements SocialProvider {
     try {
       payload = await verifyIdTokenWithJwks(accessToken, {
         issuer: 'https://appleid.apple.com',
-        audience: this.bundleId,
+        audiences: [this.bundleId],
         getJwks: () => this.jwks.getKeys(),
       });
     } catch (e) {

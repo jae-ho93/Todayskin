@@ -62,8 +62,14 @@ describe('verifyIdTokenWithJwks', () => {
 
   const options = {
     issuer: 'https://issuer.example.com',
-    audience: 'client-123',
+    audiences: ['client-123'],
     getJwks: async () => [jwk('test-key')],
+  };
+
+  // 다중 aud — 프론트가 플랫폼별 client id(웹/iOS/Android)를 쓰는 경우.
+  const multiAudOptions = {
+    ...options,
+    audiences: ['client-123', 'client-456.apps.googleusercontent.com'],
   };
 
   it('유효한 id_token을 검증하고 payload를 반환한다', async () => {
@@ -97,6 +103,21 @@ describe('verifyIdTokenWithJwks', () => {
   it('aud가 다르면(다른 앱용 토큰) 거부한다', async () => {
     const token = makeToken({ aud: 'other-app' });
     await expect(verifyIdTokenWithJwks(token, options)).rejects.toThrow(
+      '대상 앱',
+    );
+  });
+
+  it('허용 목록(audiences) 중 하나라도 일치하면 통과한다 (플랫폼별 client id)', async () => {
+    const payload = await verifyIdTokenWithJwks(
+      makeToken({ aud: 'client-456.apps.googleusercontent.com' }),
+      multiAudOptions,
+    );
+    expect(payload.sub).toBe('user-1');
+  });
+
+  it('허용 목록에 없는 aud는 거부한다', async () => {
+    const token = makeToken({ aud: 'client-999.apps.googleusercontent.com' });
+    await expect(verifyIdTokenWithJwks(token, multiAudOptions)).rejects.toThrow(
       '대상 앱',
     );
   });

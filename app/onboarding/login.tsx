@@ -1,12 +1,10 @@
 import { router } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  AppState,
   InputAccessoryView,
   Keyboard,
   KeyboardAvoidingView,
-  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -19,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../../src/api/client';
 import { SocialLoginButtons } from '../../src/components/SocialLoginButtons';
 import { useToast } from '../../src/components/Toast';
+import { usePhoneVerification } from '../../src/features/auth/usePhoneVerification';
 import { saveSession } from '../../src/lib/session';
 import { colors, radius, spacing, typography } from '../../src/theme';
 import type { SocialProvider } from '../../src/types';
@@ -37,66 +36,38 @@ function isValidPhoneDigits(digits: string): boolean {
 export default function LoginScreen() {
   const { showToast } = useToast();
   const [phoneDigits, setPhoneDigits] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpCode, setOtpCode] = useState('');
-  const [recipientNumber, setRecipientNumber] = useState('');
   const [focused, setFocused] = useState<'phone' | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [sendingOtp, setSendingOtp] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [busyProvider, setBusyProvider] = useState<SocialProvider | null>(null);
-  // F34: “인증하기”로 문자 앱을 연 뒤에만 복귀 시 자동 검증한다 — 실수로 백그라운드만
-  // 다녀와도 인증을 시도하지 않게 smsOpenedRef로 게이트한다.
-  const smsOpenedRef = useRef(false);
-  const submitRef = useRef<() => Promise<void>>(async () => {});
 
   const isPhoneValid = isValidPhoneDigits(phoneDigits);
-  const isOtpValid = otpCode.length === 6;
+
+  // R27/F63: 문자 인증 상태 머신(발송→문자앱→복귀 자동 검증)을 훅으로 통일한다.
+  // 검증 성공(onVerified) 후 실제 로그인(토큰 발급)만 화면이 수행한다.
+  const phoneVerification = usePhoneVerification({
+    purpose: 'login',
+    onError: setError,
+    onVerified: () => void handleLogin(),
+  });
 
   // 번호를 다시 바꾸면 이전 인증은 무효 — 새 번호로 다시 인증번호를 받아야 한다
   const handlePhoneChange = (v: string) => {
     setPhoneDigits(v.replace(/[^0-9]/g, '').slice(0, 11));
-    setOtpSent(false);
-    setOtpCode('');
-    setError(null);
+    phoneVerification.reset();
   };
 
-  const handleSendOtp = async () => {
-    if (!isPhoneValid || sendingOtp) return;
-    setSendingOtp(true);
-    setError(null);
-    try {
-      const response = await api.sendOtp(phoneDigits, 'login');
-      setOtpCode(response.code);
-      setRecipientNumber(response.recipientNumber);
-      setOtpSent(true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '인증번호 발송에 실패했습니다.');
-    } finally {
-      setSendingOtp(false);
-    }
+  const handleSendOtp = () => {
+    if (!isPhoneValid || phoneVerification.sending) return;
+    void phoneVerification.sendCode(phoneDigits);
   };
 
-  const openSms = async () => {
-    try {
-      smsOpenedRef.current = true;
-      // iOS는 `?body=` 대신 `&body=`를 요구한다 — 플랫폼별로 구분해서 문자 시트가
-      // 본문까지 채워진 채 열리게 한다 (보내고 돌아오면 AppState로 자동 검증).
-      const sep = Platform.OS === 'ios' ? '&' : '?';
-      await Linking.openURL(
-        `sms:${recipientNumber}${sep}body=${encodeURIComponent(`인증코드 ${otpCode}`)}`,
-      );
-    } catch {
-      setError('문자 앱을 열 수 없어요. 다시 시도해주세요.');
-    }
-  };
-
-  const handleSubmit = async () => {
-    if (!isOtpValid || submitting) return;
+  // OTP 검증은 훅이 수행했고(onVerified), 여기서는 로그인 API 호출만 한다.
+  const handleLogin = useCallback(async () => {
+    if (submitting) return;
     setSubmitting(true);
     setError(null);
     try {
-      await api.verifyOtp(phoneDigits, otpCode, 'login');
       const user = await api.login(phoneDigits);
       await saveSession(user);
       // F59: 문자앱에서 돌아온 자동 검증이 끝났다는 피드백을 명시한다
@@ -107,19 +78,7 @@ export default function LoginScreen() {
     } finally {
       setSubmitting(false);
     }
-  };
-  submitRef.current = handleSubmit;
-
-  // F34: 문자 앱에서 복귀하면 자동으로 인증을 확인한다 (수동 버튼 대체).
-  useEffect(() => {
-    if (!otpSent || submitting) return;
-    const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && smsOpenedRef.current && otpCode.length === 6) {
-        void submitRef.current();
-      }
-    });
-    return () => subscription.remove();
-  }, [otpSent, submitting, otpCode]);
+  }, [phoneDigits, showToast, submitting]);
 
   const handleSocialToken = useCallback(async (provider: SocialProvider, token: string, extra?: { nonce?: string }) => {
     setBusyProvider(provider);
@@ -167,20 +126,20 @@ export default function LoginScreen() {
                 onFocus={() => setFocused('phone')}
                 onBlur={() => setFocused(null)}
                 maxLength={13}
-                editable={!otpSent}
+                editable={!phoneVerification.codeIssued}
                 returnKeyType="done"
                 onSubmitEditing={() => Keyboard.dismiss()}
                 // F48: iOS number-pad는 완료 키가 없어 키보드 위에 완료 바를 띄운다
                 inputAccessoryViewID={Platform.OS === 'ios' ? 'done-bar' : undefined}
               />
-              {!otpSent && (
+              {!phoneVerification.codeIssued && (
                 <Pressable
                   onPress={handleSendOtp}
-                  disabled={!isPhoneValid || sendingOtp}
+                  disabled={!isPhoneValid || phoneVerification.sending}
                   hitSlop={8}
                   style={styles.nextButton}
                 >
-                  {sendingOtp ? (
+                  {phoneVerification.sending ? (
                     <ActivityIndicator size="small" color={colors.sageDark} />
                   ) : (
                     <Text style={[styles.nextButtonText, !isPhoneValid && styles.nextButtonTextDisabled]}>
@@ -191,13 +150,13 @@ export default function LoginScreen() {
               )}
             </View>
 
-            {otpSent && (
+            {phoneVerification.codeIssued && (
               <View style={styles.field}>
                 <Text style={styles.label}>인증 문자를 보내면 자동으로 확인돼요</Text>
-                <Pressable onPress={openSms} style={styles.smsButton}>
+                <Pressable onPress={() => void phoneVerification.openSms()} style={styles.smsButton}>
                   <Text style={styles.smsButtonText}>인증하기</Text>
                 </Pressable>
-                <Pressable onPress={handleSendOtp} disabled={sendingOtp} hitSlop={8} style={styles.nextButton}>
+                <Pressable onPress={handleSendOtp} disabled={phoneVerification.sending} hitSlop={8} style={styles.nextButton}>
                   <Text style={styles.nextButtonText}>새 코드 받기</Text>
                 </Pressable>
               </View>
@@ -207,18 +166,20 @@ export default function LoginScreen() {
 
             {/* F54: CTA를 입력 필드 직하로 (토스식) — 하단 고정 footer와 분리 */}
             <Pressable
-              onPress={handleSubmit}
-              disabled={!otpSent || submitting}
+              onPress={() => void phoneVerification.verify()}
+              disabled={!phoneVerification.codeIssued || phoneVerification.verifying || submitting}
               style={({ pressed }) => [
                 styles.cta,
-                (!otpSent || submitting) && styles.ctaDisabled,
-                pressed && otpSent && !submitting && styles.ctaPressed,
+                (!phoneVerification.codeIssued || phoneVerification.verifying || submitting) && styles.ctaDisabled,
+                pressed && phoneVerification.codeIssued && !phoneVerification.verifying && !submitting && styles.ctaPressed,
               ]}
             >
-              {submitting ? (
+              {submitting || phoneVerification.verifying ? (
                 <ActivityIndicator color={colors.textInverse} />
               ) : (
-                <Text style={styles.ctaText}>{otpSent ? (error ? '다시 시도' : '인증 확인') : '로그인'}</Text>
+                <Text style={styles.ctaText}>
+                  {phoneVerification.codeIssued ? (error ? '다시 시도' : '인증 확인') : '로그인'}
+                </Text>
               )}
             </Pressable>
 
