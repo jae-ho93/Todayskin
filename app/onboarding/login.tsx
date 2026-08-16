@@ -165,8 +165,13 @@ export default function LoginScreen() {
             {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
 
             {/* F54: CTA를 입력 필드 직하로 (토스식) — 하단 고정 footer와 분리 */}
+            {/* 검증이 끝난 뒤 로그인 API가 실패하면(네트워크 등) 재시도는 로그인만 다시 호출한다.
+                검증은 이미 통과했으므로 verify()(sent 상태 전용)는 no-op이기 때문. */}
             <Pressable
-              onPress={() => void phoneVerification.verify()}
+              onPress={() => {
+                if (phoneVerification.verified) void handleLogin();
+                else void phoneVerification.verify();
+              }}
               disabled={!phoneVerification.codeIssued || phoneVerification.verifying || submitting}
               style={({ pressed }) => [
                 styles.cta,

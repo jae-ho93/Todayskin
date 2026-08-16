@@ -35,6 +35,14 @@ export function SocialLoginButtons({ busyProvider, onToken, onError, compact = f
   const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
   const googleAndroidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
   const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+  // 구글은 플랫폼별 client id를 따로 쓴다 — 현재 플랫폼의 id가 있어야 버튼이 동작한다.
+  // 다른 플랫폼 id만 있고 현재 플랫폼 id가 없으면 눌러도 실패하므로 "설정 안 됨" 안내로 빠진다.
+  const googleConfigured =
+    Platform.OS === 'ios'
+      ? Boolean(googleIosClientId)
+      : Platform.OS === 'android'
+        ? Boolean(googleAndroidClientId)
+        : Boolean(googleWebClientId);
 
   const [kakaoRequest, kakaoResponse, promptKakao] = AuthSession.useAuthRequest(
     {
@@ -133,7 +141,7 @@ export function SocialLoginButtons({ busyProvider, onToken, onError, compact = f
         <View style={styles.divider}><View style={styles.line} /><Text style={styles.or}>소셜 계정으로 계속</Text><View style={styles.line} /></View>
         <View style={styles.iconRow}>
           <SocialIcon label="카카오로 계속하기" background="#FEE500" color="#191919" icon="chatbubble" loading={busyProvider === 'kakao'} disabled={disabled} onPress={() => kakaoClientId ? promptKakao() : showNotConfigured('카카오')} />
-          <SocialIcon label="Google로 계속하기" background={colors.surface} color={colors.textPrimary} icon="logo-google" outlined loading={busyProvider === 'google'} disabled={disabled} onPress={() => (googleIosClientId || googleAndroidClientId || googleWebClientId) ? promptGoogle() : showNotConfigured('Google')} />
+          <SocialIcon label="Google로 계속하기" background={colors.surface} color={colors.textPrimary} icon="logo-google" outlined loading={busyProvider === 'google'} disabled={disabled} onPress={() => googleConfigured ? promptGoogle() : showNotConfigured('Google')} />
           <SocialIcon label="Apple로 계속하기" background="#000000" color="#FFFFFF" icon="logo-apple" loading={busyProvider === 'apple'} disabled={disabled} onPress={handleApple} />
         </View>
       </View>
@@ -144,7 +152,7 @@ export function SocialLoginButtons({ busyProvider, onToken, onError, compact = f
     <View style={styles.container}>
       <View style={styles.divider}><View style={styles.line} /><Text style={styles.or}>소셜 계정으로 계속</Text><View style={styles.line} /></View>
       <SocialButton label="카카오로 계속하기" background="#FEE500" color="#191919" icon="chatbubble" loading={busyProvider === 'kakao'} disabled={disabled} onPress={() => kakaoClientId ? promptKakao() : showNotConfigured('카카오')} />
-      <SocialButton label="Google로 계속하기" background={colors.surface} color={colors.textPrimary} icon="logo-google" loading={busyProvider === 'google'} disabled={disabled} onPress={() => (googleIosClientId || googleAndroidClientId || googleWebClientId) ? promptGoogle() : showNotConfigured('Google')} />
+      <SocialButton label="Google로 계속하기" background={colors.surface} color={colors.textPrimary} icon="logo-google" loading={busyProvider === 'google'} disabled={disabled} onPress={() => googleConfigured ? promptGoogle() : showNotConfigured('Google')} />
       <SocialButton label="Apple로 계속하기" background="#000000" color="#FFFFFF" icon="logo-apple" loading={busyProvider === 'apple'} disabled={disabled} onPress={handleApple} />
     </View>
   );

@@ -61,7 +61,7 @@ export default function SocialPhoneScreen() {
         </View>}
         {error && <Text style={styles.error}>{error}</Text>}
         <View style={styles.footer}>
-          {phoneVerification.codeIssued && <Pressable onPress={() => void phoneVerification.verify()} disabled={phoneVerification.verifying || submitting} style={[styles.cta, (phoneVerification.verifying || submitting) && styles.ctaDisabled]}>{submitting || phoneVerification.verifying ? <ActivityIndicator color={colors.textInverse} /> : <Text style={styles.ctaText}>인증 확인</Text>}</Pressable>}
+          {phoneVerification.codeIssued && <Pressable onPress={() => { if (phoneVerification.verified) void linkPhone(); else void phoneVerification.verify(); }} disabled={phoneVerification.verifying || submitting} style={[styles.cta, (phoneVerification.verifying || submitting) && styles.ctaDisabled]}>{submitting || phoneVerification.verifying ? <ActivityIndicator color={colors.textInverse} /> : <Text style={styles.ctaText}>인증 확인</Text>}</Pressable>}
           <Pressable onPress={() => router.replace('/(tabs)')} disabled={submitting} hitSlop={8}><Text style={styles.skip}>지금은 건너뛰기</Text></Pressable>
         </View>
       </KeyboardAvoidingView>
