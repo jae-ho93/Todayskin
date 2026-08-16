@@ -176,9 +176,18 @@ F0 → F1 → F2 → F3 → F6 → F4 → F16 → F8 → F10 → F15 → F13 →
 **2026-08-17 설정 준비**: 소셜 키가 아직 미설정(프론트 `.env`·백엔드 시크릿 모두 없음).
 APK(네이티브)에서 구글 로그인이 동작하도록 백엔드 Google 검증을 **다중 client id 허용**으로
 확장했다(`GOOGLE_CLIENT_ID` 쉼표 구분 — jwt-verify `audiences`, 테스트 추가).
-키 발급은 각 제공자 콘솔 작업 필요: 카카오(`weatherskin://oauth` Redirect URI + REST 키 + 앱 ID),
-구글(웹/iOS/Android 클라이언트 3종 — Android는 패키지 `com.todayskin.app` + SHA-1 등록),
-애플(유료 $99/년 — Android 데모에선 불필요). 상세: `.env.example`·`docs/guides/DEPLOYMENT_CHECKLIST.md`.
+키 발급은 각 제공자 콘솔 작업 필요: 구글(웹/iOS/Android 클라이언트 3종 — Android는 패키지
+`com.todayskin.app` + SHA-1 등록), 애플(유료 $99/년 — Android 데모에선 불필요).
+상세: `.env.example`·`docs/guides/DEPLOYMENT_CHECKLIST.md`.
+
+**카카오 — 등록 불가 발견으로 보류 (2026-08-17)**: 앱 생성 완료(ID 1547279, REST 키
+`0d5a5fee...`·앱 ID는 `.env`에 반영). 그러나 새 카카오 콘솔의 리다이렉트 URI 필드는
+**http(s) URL만 허용** — 커스텀 스킴 `weatherskin://oauth`는 "유효하지 않은 URL"로 거부된다
+(고급 탭의 로그아웃 리다이렉트 URI도 http(s)만 받고 별개 항목). 클라이언트 시크릿은
+활성화 ON 상태. 네이티브 앱에서 카카오 로그인을 쓰려면 **네이티브 SDK 전환**
+(`@react-native-seoul/kakao-login` + `kakao{네이티브앱키}://oauth` 스킴 — 콘솔 등록 불필요,
+단 Expo Go 미지원·키해시 등록 필요)이 유일한 경로다. **2026-08-17 결정: 카카오는 보류**,
+데모 소셜은 **구글 + OTP**로 진행. 카카오 재개 시 이 기록과 REFACTORING_BACKLOG를 참고한다.
 
 ### F16. 설정 전면 재구성 (N28 후, N34 권장)
 
