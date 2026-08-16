@@ -36,7 +36,8 @@
 | 2 | `todayskin/prod/REDIS_URL` | backend·worker | ✅ | `redis://...` | ☐ |
 | 3 | `todayskin/prod/JWT_ACCESS_SECRET` | backend·worker | ✅ | 32자 이상 랜덤 | ☐ |
 | 4 | `todayskin/prod/JWT_REFRESH_SECRET` | backend·worker | ✅ | 32자 이상 랜덤 | ☐ |
-| 5 | `todayskin/prod/KMA_API_KEY` | backend·worker | ✅ | 기상청 키 | ☐ |
+| 5 | `todayskin/prod/KMA_API_KEY` | backend·worker | ✅ | 기상청 **동네예보(초단기실황)** 키 — 온도/습도 | ☐ |
+| 5-1 | `todayskin/prod/KMA_UV_API_KEY` | backend·worker | ⬜ 선택 | 기상청 **생활기상지수(자외선)** 키 — 비우면 KMA_API_KEY로 폴백 (data.go.kr은 API별 키 발급) | ☐ |
 | 6 | `todayskin/prod/AIRKOREA_API_KEY` | backend·worker | ✅ | 에어코리아 키 | ☐ |
 | 7 | `todayskin/prod/OPENAI_API_KEY` | backend·worker | ✅ | OpenAI 키 | ☐ |
 | 8 | `todayskin/prod/OCTOMO_API_KEY` | backend·worker | ✅ | octomo.octoverse.kr 키 (없으면 가입/로그인 차단) | ☐ |

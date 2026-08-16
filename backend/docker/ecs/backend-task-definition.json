@@ -57,6 +57,10 @@
           "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:ACCOUNT_ID:secret:todayskin/prod/KMA_API_KEY"
         },
         {
+          "name": "KMA_UV_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:ACCOUNT_ID:secret:todayskin/prod/KMA_UV_API_KEY"
+        },
+        {
           "name": "AIRKOREA_API_KEY",
           "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:ACCOUNT_ID:secret:todayskin/prod/AIRKOREA_API_KEY"
         },

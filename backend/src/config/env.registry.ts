@@ -387,7 +387,15 @@ export const ENV_REGISTRY: EnvVarDefinition[] = [
   {
     key: 'KMA_API_KEY',
     owner: 'weather',
-    description: 'KMA API key',
+    description: 'KMA API key (초단기실황·동네예보 — 온도/습도)',
+    requiredIn: 'never',
+    secret: true,
+    schema: Joi.string().allow('').optional(),
+  },
+  {
+    key: 'KMA_UV_API_KEY',
+    owner: 'weather',
+    description: 'KMA 생활기상지수(자외선) 전용 API key — 없으면 KMA_API_KEY로 폴백',
     requiredIn: 'never',
     secret: true,
     schema: Joi.string().allow('').optional(),
