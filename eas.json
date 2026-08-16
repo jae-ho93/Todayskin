@@ -17,7 +17,9 @@
       },
       "env": {
         "EXPO_PUBLIC_API_BASE_URL": "http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com",
-        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "947087539984-dg83ok9nt8hs29iurtn2qdsfds4cu1lb.apps.googleusercontent.com"
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "947087539984-dg83ok9nt8hs29iurtn2qdsfds4cu1lb.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "947087539984-p3f214ub14odb3fslcv71hdts67sfvb3.apps.googleusercontent.com",
+        "EXPO_PUBLIC_KAKAO_REST_API_KEY": "0d5a5fee84c6b499adc0fc979d1d6860"
       }
     },
     "production": {
