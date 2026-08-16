@@ -108,10 +108,16 @@ function safeFloat(value: unknown): number | null {
 export class KmaClient {
   private readonly logger = new Logger(KmaClient.name);
   private readonly apiKey: string;
+  private readonly uvApiKey: string;
   private readonly timeoutMs = 8000;
 
   constructor(private readonly configService: ConfigService) {
     this.apiKey = configService.get<string>('KMA_API_KEY', '');
+    // KMA 키는 data.go.kr에서 API(서비스)별로 발급된다. 초단기실황(동네예보)과
+    // 생활기상지수(자외선)는 서로 다른 키이므로, UV 전용 키가 있으면 그것을,
+    // 없으면 공통 키로 폴백한다.
+    this.uvApiKey =
+      configService.get<string>('KMA_UV_API_KEY', '') || this.apiKey;
   }
 
   /**
@@ -119,7 +125,7 @@ export class KmaClient {
    *   결과를 영구 저장하는 진단 경로만 켠다 — N42.
    */
   async fetchUvIndex(areaNo: string, retries = 0): Promise<UvForecastWithTime> {
-    if (!this.apiKey) {
+    if (!this.uvApiKey) {
       return EMPTY_FORECAST_WITH_TIME;
     }
     return withRetry(() => this.fetchOnce(areaNo), {
@@ -217,7 +223,7 @@ export class KmaClient {
     const queryTime = formatKstMidnight(now);
 
     const params = new URLSearchParams({
-      serviceKey: this.apiKey,
+      serviceKey: this.uvApiKey,
       numOfRows: '1',
       pageNo: '1',
       areaNo,
