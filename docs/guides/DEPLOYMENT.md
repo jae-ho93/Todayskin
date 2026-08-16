@@ -417,10 +417,11 @@ curl -X POST https://<api-host>/admin/products/cache/invalidate \
 - `GET /health/live` · `GET /health/ready` — N6에서 분리 완료 (ready는 DB/config 필수, Redis 선택)
 - inference: `GET /health`
 
-## 배포 당일 체크리스트 (N54)
+## 배포 당일 체크리스트 (N54) — ✅ 완료 (2026-08-16 실배포)
 
-> AWS 계정·자격 증명이 준비된 날, 이 순서대로만 진행하면 된다.
-> 코드·이미지·문서는 로컬 검증까지 끝난 상태다(아래 "로컬 검증 결과" 참고).
+> 아래 순서로 2026-08-16 실배포를 완료했다. 새 환경(계정/리전)에 배포할 때
+> 이 체크리스트를 다시 쓴다. 코드·이미지·문서는 로컬 검증까지 끝난 상태였다
+> (아래 "로컬 검증 결과" 참고).
 
 | # | 작업 | 확인 기준 | 예상 소요 |
 |---|------|-----------|-----------|
@@ -511,10 +512,13 @@ docker build --platform linux/amd64 \
 
 ## 후속 작업
 
-- N6: health live/ready 분리, Soft Delete, pagination, env registry (완료)
-- N7: 레거시 `backend/app/` FastAPI 정리 (완료) — CI는 NestJS + inference-service만 검증
-- N8: 히스토리 캘린더 기능 (완료)
+- ~~N6: health live/ready 분리, Soft Delete, pagination, env registry~~ → 완료 (ARCHIVE)
+- ~~N7: 레거시 `backend/app/` FastAPI 정리~~ → 완료 (ARCHIVE)
+- ~~N8: 히스토리 캘린더 기능~~ → 완료 (ARCHIVE)
 - ~~실제 SMS OTP 게이트웨이 연결~~ → OCTOMO MO 인증 적용 완료 (feature/otp-octomo-mo, 2026-08)
-- S3 객체 삭제 실패 재처리와 orphan reconciliation 운영 작업
+- ~~S3 객체 삭제 실패 재처리와 orphan reconciliation~~ → N10 완료 (ARCHIVE)
 - ~~실제 AWS 계정에 ECR/ECS/RDS/Secrets/OIDC role 프로비저닝~~ → **완료 (2026-08-16 실배포)** —
   `http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com`에서 서비스 중
+
+남은 운영 보류 항목(N36·N37·N51·N50)은 [`docs/tasks/BACKEND_TASKS.md`](../tasks/BACKEND_TASKS.md)에
+데모 기간 보류 사유와 함께 명시돼 있다.

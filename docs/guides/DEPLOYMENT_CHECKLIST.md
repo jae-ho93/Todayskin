@@ -1,8 +1,9 @@
-# 배포 시크릿·변수 입력 양식 (N16 진행용)
+# 배포 시크릿·변수 입력 양식 (N16 진행용) — ✅ 실배포 완료 (2026-08-16)
 
-> 이 문서는 배포 당일에 **값을 채워 넣는 양식**이다. 절차·원칙은
-> [`DEPLOYMENT.md`](DEPLOYMENT.md)가 기준이고, 여기 값들은 전부 `backend/docker/ecs/*.json`
-> task definition 템플릿과 `.github/workflows/deploy-ecs.yml`에서 추출한 **정확한 이름**이다.
+> ✅ **2026-08-16 실배포 완료** — 이 양식으로 프로비저닝했다. **새 환경/계정에 배포할 때**
+> 아래 값을 다시 채워 사용한다. 절차·원칙은 [`DEPLOYMENT.md`](DEPLOYMENT.md)가 기준이고,
+> 여기 값들은 전부 `backend/docker/ecs/*.json` task definition 템플릿과
+> `.github/workflows/deploy-ecs.yml`에서 추출한 **정확한 이름**이다.
 > 채운 뒤 task definition의 `ACCOUNT_ID` 치환값과 대조한다.
 
 ## 0. 준비 순서
