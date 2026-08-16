@@ -123,3 +123,31 @@
 - [ ] Secrets Manager 값 입력 후 **프로덕션 부팅 스모크**: `/health/live` 200 · `/health/ready` 200
       (dependencies 전부 up — `octomo`·`database`·`inference`·`migrations` 포함)
 - [ ] 실기기 스모크: OTP 가입 → 측정 → 결과 1회
+
+---
+
+## 6. 2026-08-16 실배포 교훈 (N16 완료 후 반영)
+
+실제 배포 과정에서 확인해 **양식에 반영한 사항**:
+
+1. **RDS 마스터 사용자 이름은 대소문자 구분** — 콘솔에서 `Todayskin`(대문자)으로 만들면
+   `DATABASE_URL`도 같은 대소문자를 써야 한다 (`todayskin` ≠ `Todayskin`, P1000 인증 실패).
+   **PG16 재생성 시 소문자 `todayskin`으로 통일** (로컬 docker-compose와 동일).
+2. **RDS PostgreSQL 버전은 프로젝트 기준(16)으로 생성** — 콘솔 최신(18.x)을 고르면
+   `rds.force_ssl=1` 기본값 등 동작이 달라진다. 엔진 선택 화면에서 **PostgreSQL 16.x**를 직접 고른다.
+3. **`rds.force_ssl`** — RDS PG16+는 SSL 강제가 기본. 로컬(PG16-alpine)은 SSL 미강제라
+   프로덕션에서만 `no pg_hba.conf entry ... no encryption` 오류가 난다. 해결: 커스텀 파라미터 그룹
+   (`rds.force_ssl=0`)을 만들어 적용(재부팅 필요)하거나, DATABASE_URL에 `sslmode=require&sslaccept=accept_invalid_certs`.
+   프로젝트는 VPC 내부 통신이므로 `force_ssl=0` + 평문 URL을 기본으로 한다.
+4. **SENTRY_DSN 빈 값은 Secrets Manager에 저장 불가** (최소 1자) — `""` 대신 `"0"`을 넣으면
+   env 검증(`must be a valid uri`)에서 부팅 실패. **SENTRY_DSN을 task definition `secrets[]`에서 제거**
+   하는 것이 정답 (registry가 `optional`이라 없으면 기본값 → Sentry 비활성).
+5. **시드(제품 카탈로그)는 migrate와 별도** — `prisma migrate deploy`는 스키마만. 운영 데이터는
+   `npx tsx prisma/seed.ts`가 필요. 프로덕션 이미지엔 tsx가 없으므로 Fargate 태스크로
+   `npx --yes tsx prisma/seed.ts` 실행(migrate task def에 command override).
+6. **INFERENCE_SERVICE_URL은 배포마다 갱신 필요** — inference 태스크는 배포 때마다 새 IP를 받는다.
+   배포 후 inference 태스크의 `privateIPv4Address`를 조회해
+   `todayskin/prod/INFERENCE_SERVICE_URL` 시크릿을 갱신하고 backend를 재배포한다.
+   (장기적으로는 Cloud Map 서비스 디스커버리 전환 권장)
+7. **Redis eviction policy** — ElastiCache 기본은 `volatile-lru`. BullMQ는 `noeviction`이어야
+   하므로 커스텀 파라미터 그룹(`maxmemory-policy=noeviction`) 적용을 권장.
