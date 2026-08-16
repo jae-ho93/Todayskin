@@ -83,10 +83,6 @@
         {
           "name": "INFERENCE_SHARED_SECRET",
           "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:ACCOUNT_ID:secret:todayskin/prod/INFERENCE_SHARED_SECRET"
-        },
-        {
-          "name": "SENTRY_DSN",
-          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:ACCOUNT_ID:secret:todayskin/prod/SENTRY_DSN"
         }
       ],
       "logConfiguration": {
