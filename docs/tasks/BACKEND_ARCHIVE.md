@@ -776,7 +776,7 @@ purge 경로에도 진단 삭제를 남겨 뒀다. 정상 흐름에서는 0건�
 
 ### Fable5 리뷰 대응 (2026-08-13, PR #158~#162)
 
-프로젝트 리뷰([`Fable5_ProjectReview.md`](../reviews/Fable5_ProjectReview.md))에서 등록한 코드 태스크
+프로젝트 리뷰([`ProjectReview_2026-08-13.md`](../reviews/ProjectReview_2026-08-13.md))에서 등록한 코드 태스크
 5건을 하루에 반영했다. 해커톤 재조정(같은 날)으로 N52(API 버저닝)는 제외, N50·N51은
 N16(AWS) 이후로 미뤘다.
 

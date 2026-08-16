@@ -34,7 +34,7 @@ Todayskin 문서 허브. 문서는 **역할별 폴더**로 분류한다 —
 
 | 문서 | 용도 |
 |------|------|
-| [Fable5_ProjectReview.md](reviews/Fable5_ProjectReview.md) | 2026-08-13 종합 프로젝트 리뷰 (52장) — 후속 태스크의 출처 |
+| ~~[ProjectReview_2026-08-13.md](reviews/ProjectReview_2026-08-13.md)~~ | ~~2026-08-13 종합 프로젝트 리뷰 (52장) — 후속 태스크 전부 반영 완료~~ |
 
 ## 저장소 루트 (GitHub 관례)
 

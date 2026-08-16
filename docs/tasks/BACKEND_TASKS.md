@@ -29,7 +29,7 @@ RDS·S3·CloudWatch 연동, Pino·Helmet·JWT·Swagger·Jest를 적용한다.
 > 목표는 제출일까지 데모 품질 최상화 — 코드 태스크(N46~N49, N53)를 우선한다.
 
 실기기 테스트에서 나온 버그·정책 변경(N39~N45)과 프로젝트 리뷰
-([`Fable5_ProjectReview.md`](../reviews/Fable5_ProjectReview.md))에서 나온 **코드 태스크 N46~N49·N53은
+([`ProjectReview_2026-08-13.md`](../reviews/ProjectReview_2026-08-13.md))에서 나온 **코드 태스크 N46~N49·N53은
 2026-08-13에 모두 반영했다** (PR #158~#162, 기록은 [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md)).
 
 **배포 준비 웨이브 (2026-08-13 오후)**: 목표를 "배포 버튼만 누르면 되는(deploy-ready) 상태"로
@@ -148,7 +148,7 @@ R6 1단계로 전역 락을 풀고 슬롯 수를 `INFERENCE_CONCURRENCY`(기본 
 
 > N52(API `/v1` 버저닝)는 2026-08-13 해커톤 결정(스토어 배포 없음)으로 **제외**했다.
 > 실서비스 전환이 결정되면 첫 심사 제출 전에 재등록한다 — 근거는
-> [`Fable5_ProjectReview.md`](../reviews/Fable5_ProjectReview.md) 30장.
+> [`ProjectReview_2026-08-13.md`](../reviews/ProjectReview_2026-08-13.md) 30장.
 
 ## 완료 (Done)
 

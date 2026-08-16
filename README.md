@@ -6,8 +6,8 @@
 이 저장소는 **프론트 · 백엔드 · 프로젝트 매니저(PM)** 가 한곳에서 협업하는 모노레포이며,
 **AWS에 실제 배포되어 운영 중**입니다.
 
-> 🚀 **현재 운영 중** — `http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com` (`/health`·`/health/ready`)
-> 📱 **데모** — EAS 빌드 Android APK (설치 방법: [`docs/guides/SETUP.md`](docs/guides/SETUP.md) §4-1)
+> **현재 운영 중** — `http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com` (`/health`·`/health/ready`)
+> **데모** — EAS 빌드 Android APK (설치 방법: [`docs/guides/SETUP.md`](docs/guides/SETUP.md) §4-1)
 
 <p align="center"><b>Frontend</b></p>
 <p align="center">
@@ -48,60 +48,82 @@
 
 ---
 
+## 프로젝트 하이라이트
+
+| | 내용 |
+|---|---|
+| **실서비스 수준 운영** | AWS에 실제 배포·가동 중 — ECS Fargate + RDS + ElastiCache + S3 + Secrets Manager + OIDC CI/CD. 롤백 절차·장애 런북까지 문서화 |
+| **AI 추론 서버 분리** | FastAPI가 점수·등급·랜드마크만 반환, 비즈니스 로직은 NestJS 전담 — 확장 가능한 2-tier 아키텍처 |
+| **실제 화장품만 추천** | 허구 상품·목업 결과 금지. 시드 카탈로그 33개 실제품 + 검증된 구매 링크 + 근거 출처 레지스트리 |
+| **프라이버시 우선 설계** | 얼굴 이미지는 동의 시에만 암호화 저장, 미동의 시 추론 후 즉시 폐기. 감사 로그·동의 게이트 |
+| **테스트 문화** | 프론트 181 + 백엔드 641 테스트. 계약 드리프트·취약점(npm audit)·보안 경계값을 CI가 강제 |
+| **UX 완성도** | SSE 실시간 job 상태, 캐시 즉시 응답 + AI 갱신, 품질 게이트(흐림/어두움 거부), 오프라인 대응 |
+
+---
+
 ## 기술 스택
 
-### Frontend (앱)
+### Frontend — Expo/React Native 앱
 
-| | |
+| 영역 | 사용 기술 |
 |---|---|
-| 런타임 | **Expo SDK 54** · React Native 0.81 · React 19 |
-| 라우팅 · UI | Expo Router 6 · Reanimated · SVG · Safe Area |
-| 디바이스 | Camera · Image Picker · Location · AsyncStorage · Linking |
-| 언어 | TypeScript |
+| 런타임 | **Expo SDK 54** · **React Native 0.81** · **React 19** · **TypeScript** |
+| 라우팅 · UI | **Expo Router 6** · React Navigation(네이티브 스택/탭) · **Reanimated 4** + Worklets · react-native-svg · Safe Area Context · Screens · Splash Screen · System UI · Status Bar |
+| 디바이스 | expo-camera(촬영) · expo-image-picker(사진첩) · **expo-image-manipulator**(업로드 전 리사이즈) · expo-location(날씨 좌표) · expo-notifications(로컬 리마인더) · expo-network · expo-linking · expo-web-browser |
+| 인증 · 저장 | expo-auth-session(소셜 OAuth) · expo-crypto(Apple nonce) · expo-apple-authentication · **expo-secure-store**(토큰, 웹 AsyncStorage 폴백) · AsyncStorage |
+| 아이콘 · 폰트 | @expo/vector-icons · expo-font · **Pretendard**(브랜드 폰트) |
+| 웹 | react-native-web · react-dom (Expo 웹 빌드 가능) |
+| 빌드 · 배포 | **EAS Build** (시연용 APK, `preview` 프로파일) |
 
-경로: `app/` (화면) · `src/` (API client · 컴포넌트 · 훅 · 타입 · 테마)
+경로: `app/` (화면 — Expo Router 파일 기반) · `src/` (API client · 컴포넌트 · 훅 · 타입 · 테마)
 
-### Backend (API · BFF)
+### Backend — NestJS Modular Monolith (BFF + 비즈니스 로직)
 
-| | |
+| 영역 | 사용 기술 |
 |---|---|
-| 서버 | **NestJS 11** Modular Monolith |
-| 데이터 | **PostgreSQL** · **Prisma 7** |
-| 캐시 · 큐 | **Redis** · **BullMQ** (없으면 Inline fallback) |
-| 인증 | JWT access/refresh · OTP(SMS/MO) · 소셜 토큰 검증 |
+| 서버 | **NestJS 11** · Express · Modular Monolith(auth·otp·diagnosis·recommendation·care·weather·pattern·consent·storage·jobs·idempotency…) |
+| 데이터 | **PostgreSQL 16** · **Prisma 7** (`@prisma/adapter-pg`) · `pg` |
+| 캐시 · 큐 | **Redis** (ioredis) · **BullMQ** (+ `@nestjs/bullmq`) — Redis 없으면 Inline dispatcher 폴백 |
+| 인증 | **JWT** access/refresh(회전·재사용 탐지·해시 저장) · **Passport** · **OTP**(OCTOMO MO 문자 수신 검증) · 소셜(Kakao/Google/Apple) 토큰 검증 |
+| 검증 · 보안 | class-validator · class-transformer · **Helmet** · **Throttler**(Redis 분산 rate limit, 민감 라우트 fail-closed) · Joi env 검증 |
 | AI 연동 | **OpenAI** — Chat Completions(strict json_schema, 추천/제품) · Responses API + `web_search`(케어 루틴/제품, 근거 검증) |
-| 전송 | REST · **SSE** (job 상태 실시간 — `GET /jobs/:id/events`) |
-| 저장소 | **S3** (동의 이미지) · 감사·동의 게이트 |
-| 관측 | Pino(구조화 로그) · Helmet · Throttler · correlationId |
+| 실시간 | REST · **SSE** (`GET /jobs/:id/events` — BullMQ job 상태 실시간) |
+| 저장소 | **AWS S3** (`@aws-sdk/client-s3` · presigner) — 동의 이미지 암호화 저장 |
+| 관측 | **Pino**(nestjs-pino, 구조화 JSON 로그) · correlationId · 민감정보 redact · Sentry(선택) |
+| API 문서 | **Swagger/OpenAPI** (@nestjs/swagger) — 계약 드리프트 CI 검사 + 프론트 타입 자동 생성 |
+| 좌표 변환 | proj4 (위경도→기상청 격자) |
 
 경로: `backend/src/` — 구조 지도는 [`backend/README.md`](backend/README.md)
 
-### AI (추론만)
+### AI — FastAPI 독립 추론 서버
 
-| | |
+| 영역 | 사용 기술 |
 |---|---|
-| 서버 | **FastAPI** (`backend/inference-service/`) |
-| 모델 | MobileNetV3 + MediaPipe landmarks |
+| 서버 | **FastAPI** · Uvicorn · python-multipart (`backend/inference-service/`) |
+| 모델 | **PyTorch 2.9** · TorchVision — MobileNetV3(피부 점수) · **Ultralytics YOLO**(여드름 병변) · **MediaPipe**(랜드마크) |
+| 이미지 | OpenCV(headless) · Pillow · NumPy |
+| 품질 게이트 | 최소 해상도·휘도·Laplacian blur 검사 → 422 + 사유 코드 (N49) |
 | 경계 | 점수·등급·랜드마크만 반환 · **DB/인증/비즈니스 로직 없음** |
 
 NestJS가 호출하고 결과를 영속화합니다. 원칙: [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md)
 
-### 테스트 (로컬)
+### 테스트
 
-| | |
+| 영역 | 내용 |
 |---|---|
-| 실행 | Expo + NestJS + Docker Compose |
-| DB · 캐시 | 로컬 PostgreSQL · Redis |
-| 추론 | `MOCK_INFERENCE` 또는 Compose `inference` profile |
-| 가이드 | [`docs/guides/SETUP.md`](docs/guides/SETUP.md) |
+| 프론트 | Jest + React Native Testing Library · **181 tests** (typecheck + lint 포함) |
+| 백엔드 | Jest (unit + e2e) · **641 tests** — 계약·보안·소유권·경계값 커버 |
+| CI | GitHub Actions — PR마다 typecheck·lint·test·E2E(PostgreSQL) · `npm audit`(high 이상 차단) · OpenAPI drift 검사 |
 
-### 실배포 (AWS)
+### 인프라 — AWS 실배포 (2026-08-16)
 
-| | |
+| 영역 | 사용 기술 |
 |---|---|
-| 컴퓨팅 | **ECS Fargate** (NestJS · FastAPI 각각) |
-| 데이터 · 스토리지 | RDS · ElastiCache(Redis) · S3 |
-| CI/CD · 시크릿 | GitHub Actions → ECR · Secrets Manager · CloudWatch |
+| 컴퓨팅 | **ECS Fargate** (NestJS + FastAPI 각각) · 비-root 실행 · graceful shutdown |
+| 네트워크 | **ALB** · VPC · Security Groups(내부망 inference) · **Cloud Map** 서비스 디스커버리(`inference.todayskin.local`) |
+| 데이터 | **RDS PostgreSQL 16** · **ElastiCache Redis**(`noeviction` 파라미터 그룹) · **S3** |
+| 시크릿 · 관측 | **Secrets Manager**(13종) · **CloudWatch** 로그 그룹 · 장애 런북 |
+| CI/CD | **GitHub Actions OIDC** → ECR → 승인 게이트 → migrate → rollout · 롤백 절차 |
 | 가이드 | [`docs/guides/DEPLOYMENT.md`](docs/guides/DEPLOYMENT.md) |
 
 ---
@@ -110,20 +132,20 @@ NestJS가 호출하고 결과를 영속화합니다. 원칙: [`docs/architecture
 
 ```mermaid
 flowchart TB
-  subgraph Client["Frontend"]
+  subgraph Client["Frontend — Expo / React Native"]
     APP["Mobile App<br/>촬영 · 홈 · 추천 · 기록 · 설정"]
   end
-  subgraph Server["Backend"]
-    API["NestJS<br/>인증 · 동의 · 진단 · 추천 · 날씨"]
-    PG[("PostgreSQL")]
-    REDIS[("Redis / BullMQ")]
+  subgraph Server["Backend — NestJS (BFF)"]
+    API["NestJS<br/>인증 · 동의 · 측정 · 추천 · 날씨 · 케어"]
+    PG[("PostgreSQL 16 — RDS")]
+    REDIS[("Redis / BullMQ — ElastiCache")]
     S3[("S3 — 동의 이미지")]
   end
-  subgraph AI["Inference"]
-    INF["FastAPI<br/>MobileNetV3"]
+  subgraph AI["Inference — FastAPI (내부망)"]
+    INF["MobileNetV3 + YOLO<br/>+ MediaPipe"]
   end
-  OPENAI["OpenAI<br/>추천 · 케어 루틴/제품"]
-  APP -->|REST + JWT| API
+  OPENAI["OpenAI<br/>추천 · 케어 루틴/제품 + web_search"]
+  APP -->|REST + JWT + SSE| API
   API --> PG
   API --> REDIS
   API -->|동의 시| S3
@@ -187,7 +209,7 @@ Todayskin/
 │  ├─ architecture/                # ARCHITECTURE.md (시스템 원칙)
 │  ├─ guides/                      # SETUP.md · DEPLOYMENT.md
 │  ├─ tasks/                       # FRONTEND_TASKS · BACKEND_TASKS · BACKEND_ARCHIVE · REFACTORING_BACKLOG
-│  └─ reviews/                     # Fable5_ProjectReview.md
+│  └─ reviews/                     # ProjectReview_2026-08-13.md (완료)
 ├─ backend/                        # NestJS + inference-service
 │  ├─ README.md                    # 모듈·디렉터리 구조 지도
 │  ├─ src/ · prisma/ · test/
