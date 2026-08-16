@@ -43,12 +43,12 @@
 | 8 | `todayskin/prod/OCTOMO_API_KEY` | backend·worker | ✅ | octomo.octoverse.kr 키 (없으면 가입/로그인 차단) | ☐ |
 | 9 | `todayskin/prod/ALLOWED_ORIGINS` | backend·worker | ✅ | 앱 웹 오리진 (없으면 빈 값) | ☐ |
 | 10 | `todayskin/prod/S3_BUCKET` | backend·worker | ✅ | 운영 S3 버킷명 (없으면 부팅 거부) | ☐ |
-| 11 | `todayskin/prod/INFERENCE_SERVICE_URL` | backend·worker | ✅ | `http://<inference-task-ip>:8000` (내부망) | ☐ |
+| 11 | `todayskin/prod/INFERENCE_SERVICE_URL` | backend·worker | ✅ | `http://inference.todayskin.local:8000` — **Cloud Map DNS (고정)** — 배포 후 IP 갱신 불필요 | ☐ |
 | 12 | `todayskin/prod/INFERENCE_SHARED_SECRET` | backend·worker·inference | ✅ | backend/inference 동일 값 (랜덤) | ☐ |
-| 13 | `todayskin/prod/SENTRY_DSN` | backend·worker | ⬜ 선택 | 비우면 Sentry 비활성 | ☐ |
+| 13 | ~~`todayskin/prod/SENTRY_DSN`~~ | — | — | **task definition `secrets[]`에서 제거됨 (2026-08-16, PR #227)** — registry가 `optional`이라 없으면 기본값 → Sentry 비활성. **시크릿 생성 불필요** | ☐ |
 
-> ⚠️ **SENTRY_DSN은 빈 문자열도 시크릿으로 생성**해야 한다 — `secrets[]`에 있으므로
-> 키가 없으면 부팅 시 Config registry error. 비활성화하려면 값을 `""`로 둔다.
+> ⚠️ 참고: Secrets Manager는 빈 문자열 저장이 불가하고, `"0"`을 넣으면 env 검증(`must be a valid uri`)에서
+> 부팅 실패한다. 그래서 **SENTRY_DSN은 task definition에서 제거하는 것이 정답**이다(아래 6-4번).
 
 **비밀이 아닌 값은 task definition `environment`에 이미 하드코딩** — 입력 불필요:
 `NODE_ENV=production` · `PORT` · `AWS_REGION=ap-northeast-2` · `RUN_MIGRATIONS_ON_START=false` ·
@@ -95,7 +95,7 @@
 | Security Group — inference | **backend SG로만** `:8000` 인그레스 (SG reference) | | ☐ |
 | ECR 2개 | `todayskin-backend` · `todayskin-inference` | | ☐ |
 | RDS PostgreSQL | 퍼블릭 접근 OFF · 자동 백업 ON | | ☐ |
-| ElastiCache Redis | 백엔드가 접근 가능한 VPC 내 | | ☐ |
+| ElastiCache Redis | 백엔드가 접근 가능한 VPC 내 · 파라미터 그룹 `todayskin-redis-pg`(`maxmemory-policy=noeviction`, BullMQ) | | ☐ |
 | S3 | SSE-S3(또는 KMS) — 동의 이미지 | | ☐ |
 | CloudWatch Logs | `/ecs/todayskin-backend` · `-worker` · `-inference` · `-migrate` | | ☐ |
 | IAM — OIDC role | `AWS_ROLE_ARN` (ECR push·ECS update·RDS snapshot) | | ☐ |
@@ -159,9 +159,20 @@
 5. **시드(제품 카탈로그)는 migrate와 별도** — `prisma migrate deploy`는 스키마만. 운영 데이터는
    `npx tsx prisma/seed.ts`가 필요. 프로덕션 이미지엔 tsx가 없으므로 Fargate 태스크로
    `npx --yes tsx prisma/seed.ts` 실행(migrate task def에 command override).
-6. **INFERENCE_SERVICE_URL은 배포마다 갱신 필요** — inference 태스크는 배포 때마다 새 IP를 받는다.
-   배포 후 inference 태스크의 `privateIPv4Address`를 조회해
-   `todayskin/prod/INFERENCE_SERVICE_URL` 시크릿을 갱신하고 backend를 재배포한다.
-   (장기적으로는 Cloud Map 서비스 디스커버리 전환 권장)
-7. **Redis eviction policy** — ElastiCache 기본은 `volatile-lru`. BullMQ는 `noeviction`이어야
-   하므로 커스텀 파라미터 그룹(`maxmemory-policy=noeviction`) 적용을 권장.
+6. ~~**INFERENCE_SERVICE_URL은 배포마다 갱신 필요**~~ — **해결 (2026-08-16): Cloud Map 서비스 디스커버리 적용.**
+   네임스페이스 `todayskin.local` + 서비스 `inference`(A 레코드)를 만들고 ECS inference 서비스에
+   `serviceRegistries`를 연결했다. 시크릿 값은 고정 `http://inference.todayskin.local:8000` —
+   배포 후 IP 조회·시크릿 갱신·backend 재배포가 **더 이상 필요 없다** (아래 8번).
+7. **Redis eviction policy** — ElastiCache 기본은 `volatile-lru`. **해결 (2026-08-16): 커스텀 파라미터
+   그룹 `todayskin-redis-pg`(`maxmemory-policy=noeviction`) 생성·복제 그룹에 적용 완료**.
+8. **Cloud Map 서비스 디스커버리 적용 (N13 후속)** — inference 태스크 IP가 배포마다 바뀌는 문제를
+   DNS 이름(`inference.todayskin.local`)으로 고정해 해결. 절차는 `docs/guides/DEPLOYMENT.md`
+   "서비스 디스커버리 (Cloud Map)" 절 참고. 네임스페이스·서비스 생성 → ECS `serviceRegistries` 연결 →
+   시크릿을 DNS 이름으로 교체 → backend 재배포 순서다.
+9. **GitHub OIDC 신뢰 정책의 `sub` 클레임 형식** — GitHub가 최근 `sub`를
+   `repo:owner@owner_id/repo@repo_id:ref:refs/heads/main` 형태로 보낸다 (레거시
+   `repo:owner/repo:ref:...` 아님). OIDC role 신뢰 정책의 `StringLike` 조건을 이 형식에 맞추지
+   않으면 `AssumeRoleWithWebIdentity`가 `Not authorized`로 거부된다. 실제 토큰 형식은 임시
+   디버그 워크플로(`ACTIONS_ID_TOKEN_REQUEST_URL`로 토큰을 받아 `sub` 클레임을 출력)로 확인한다.
+10. **ECR push 정책 오타** — IAM 정책의 ECR 액션은 `ecr:UploadLayerPart`다
+    (`ecr:UploadPart` 아님). 오타가 있으면 push 단계에서 AccessDenied.

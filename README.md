@@ -141,7 +141,7 @@ flowchart TB
 | Fable5 리뷰 대응 — 보안·품질 게이트·기온/습도 (F72~F78 · N46~N49 · N53) | **완료** (2026-08-13) |
 | 배포 준비 웨이브 — 실험실 옵트인·주간 요약·측정 신뢰·상태 완성도·Pretendard·배포 스모크 (F79~F83 · N54) | **완료** (2026-08-13) |
 | LLM 프로바이더 전환(Gemini→OpenAI) · 케어 루틴/제품 카테고리 신설(`care` 모듈, 카테고리별 그리드 UI) | **완료** (2026-08-14) |
-| AWS 첫 배포 (N16) | 계정·시크릿 준비 후 별도 — 이미지 빌드·부팅 스모크 실측 완료, 체크리스트·런북 문서화 |
+| AWS 실배포 (N16, 2026-08-16) | **완료** — ECS Fargate(backend+inference)·RDS PG16·ElastiCache·S3·Secrets Manager·OIDC CD 가동 중. 접속: `http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com` |
 | EAS 스토어 · 구독 결제 · Sentry | 보류 (해커톤 범위 밖) |
 
 ---
