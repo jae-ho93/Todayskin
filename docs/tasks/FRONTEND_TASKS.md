@@ -15,6 +15,12 @@ Expo SDK 54 기준. 백엔드 규칙은 `docs/tasks/BACKEND_TASKS.md`, 협업은
   Prisma client 누락)를 배포 전에 발견·수정**했다. 프론트 전체 스위트 170 passed.
   이번 웨이브에서도 계속 제외: 최소 애널리틱스(외부 서비스 — Sentry 제외와 같은 근거),
   Maestro 모바일 E2E(수동 워크스루로 대체), 공용 Button 컴포넌트·다크모드(보류 — diff 대비 이득 없음).
+- **데모 준비 웨이브 (2026-08-17) — 진행 중**: 시연 배포 준비 — ① 시연용 Android APK
+  빌드 설정(`app.json` 패키지 `com.todayskin.app`·cleartext HTTP·iOS ATS 예외, `eas.json`
+  preview=APK) ② 소셜 로그인 네이티브 대비 — 백엔드 Google 다중 client id(audiences) 허용
+  (APK 구글 로그인 필수) ③ F63 — login/social-phone OTP 상태 머신을 `usePhoneVerification`
+  훅으로 통일 (인증 3화면 동일 경로). 검증: 프론트 181·백엔드 641 tests 통과.
+  소셜 키(카카오/구글) 발급은 외부 콘솔 작업으로 남음 — 절차는 `.env.example`·SETUP.md 참고.
 - **데모 준비 웨이브 (2026-08-16) — 완료**: 실기기 테스트 후속으로 F84~F89를 **전부 머지했다**
   (PR #217~#223). F84/F87 로그인·회원가입 중앙 배치(키보드 점프 회귀를 고정 오프셋으로 교체),
   F85 측정 결과 화면 리디자인(그라데이션 스코어 링·부위 핀·바텀시트 메트릭·타이밍 칩),

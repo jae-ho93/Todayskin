@@ -52,6 +52,13 @@ F85 측정 결과 리디자인, F86 프론트 취약점 조사(SDK 54 내 안전
 N35는 실배포 적용 완료. 남은 Open(N36·N37·N51)은 AWS 운영 결정 필요로 유지,
 N50(CloudWatch 알람)은 데모 1주일 기간 보류로 결정 (2026-08-17).
 
+**데모 준비 웨이브 (2026-08-17) — 진행 중**: 시연 배포 준비 — ① 소셜 로그인 네이티브 대비:
+Google 검증을 다중 client id 허용으로 확장(`jwt-verify` `audiences` — APK의 구글 로그인이
+플랫폼별 aud를 내려보내므로 필수, 테스트 2건 추가) ② 시연용 Android APK 빌드 설정
+(app.json cleartext·패키지명, eas.json) — 운영 백엔드가 HTTP-only라 cleartext 허용 필요
+③ N35 보드 완료 표시, N50·F11 보류 결정 반영 ④ 소셜 키 시크릿 항목(GOOGLE_CLIENT_ID
+쉼표 목록·KAKAO_APP_ID)을 배포 체크리스트에 추가. 남은 Open은 N36·N37·N51(운영 결정 보류).
+
 ### N54. 배포 준비 마감 — 자격 증명 없이 끝낼 수 있는 전부 (Fable5 리뷰 후속) ✅ 2026-08-13
 
 브랜치: `chore/n54-deploy-readiness`
