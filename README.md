@@ -24,6 +24,7 @@
 </p>
 <p align="center">
   <a href="https://redis.io/"><img src="https://img.shields.io/badge/Redis-cache-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis"></a>
+  <a href="https://valkey.io/"><img src="https://img.shields.io/badge/Valkey-ElastiCache-2D3748?style=for-the-badge&logo=valkey&logoColor=white" alt="Valkey (ElastiCache)"></a>
   <a href="https://docs.bullmq.io/"><img src="https://img.shields.io/badge/BullMQ-queue-e6484c?style=for-the-badge" alt="BullMQ"></a>
   <a href="https://aws.amazon.com/ko/fargate/"><img src="https://img.shields.io/badge/AWS-ECS%20Fargate-FF9900?style=for-the-badge&logo=amazonaws&logoColor=white" alt="AWS ECS Fargate"></a>
   <a href="https://github.com/features/actions"><img src="https://img.shields.io/badge/GitHub%20Actions-CI%2FCD-2088FF?style=for-the-badge&logo=githubactions&logoColor=white" alt="GitHub Actions"></a>
@@ -83,7 +84,7 @@
 |---|---|
 | 서버 | **NestJS 11** · Express · Modular Monolith(auth·otp·diagnosis·recommendation·care·weather·pattern·consent·storage·jobs·idempotency…) |
 | 데이터 | **PostgreSQL 16** · **Prisma 7** (`@prisma/adapter-pg`) · `pg` |
-| 캐시 · 큐 | **Redis** (ioredis) · **BullMQ** (+ `@nestjs/bullmq`) — Redis 없으면 Inline dispatcher 폴백 |
+| 캐시 · 큐 | **Redis**(프로토콜) · **Valkey**(운영 ElastiCache, Redis 호환) — ioredis · **BullMQ** (+ `@nestjs/bullmq`) — Redis 없으면 Inline dispatcher 폴백 |
 | 인증 | **JWT** access/refresh(회전·재사용 탐지·해시 저장) · **Passport** · **OTP**(OCTOMO MO 문자 수신 검증) · 소셜(Kakao/Google/Apple) 토큰 검증 |
 | 검증 · 보안 | class-validator · class-transformer · **Helmet** · **Throttler**(Redis 분산 rate limit, 민감 라우트 fail-closed) · Joi env 검증 |
 | AI 연동 | **OpenAI** — Chat Completions(strict json_schema, 추천/제품) · Responses API + `web_search`(케어 루틴/제품, 근거 검증) |
@@ -121,7 +122,7 @@ NestJS가 호출하고 결과를 영속화합니다. 원칙: [`docs/architecture
 |---|---|
 | 컴퓨팅 | **ECS Fargate** (NestJS + FastAPI 각각) · 비-root 실행 · graceful shutdown |
 | 네트워크 | **ALB** · VPC · Security Groups(내부망 inference) · **Cloud Map** 서비스 디스커버리(`inference.todayskin.local`) |
-| 데이터 | **RDS PostgreSQL 16** · **ElastiCache Redis**(`noeviction` 파라미터 그룹) · **S3** |
+| 데이터 | **RDS PostgreSQL 16** · **ElastiCache Valkey**(Redis 호환, `noeviction` 파라미터 그룹) · **S3** |
 | 시크릿 · 관측 | **Secrets Manager**(13종) · **CloudWatch** 로그 그룹 · 장애 런북 |
 | CI/CD | **GitHub Actions OIDC** → ECR → 승인 게이트 → migrate → rollout · 롤백 절차 |
 | 가이드 | [`docs/guides/DEPLOYMENT.md`](docs/guides/DEPLOYMENT.md) |
@@ -138,7 +139,7 @@ flowchart TB
   subgraph Server["Backend — NestJS (BFF)"]
     API["NestJS<br/>인증 · 동의 · 측정 · 추천 · 날씨 · 케어"]
     PG[("PostgreSQL 16 — RDS")]
-    REDIS[("Redis / BullMQ — ElastiCache")]
+    REDIS[("Valkey(Redis) / BullMQ — ElastiCache")]
     S3[("S3 — 동의 이미지")]
   end
   subgraph AI["Inference — FastAPI (내부망)"]

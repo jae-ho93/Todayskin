@@ -42,8 +42,8 @@
   - 데이터 모델링, Migration, Transaction, Index 설계, Query 최적화 역량 보존.
   - 운영: AWS RDS PostgreSQL.
   - 스키마: backend/prisma/schema.prisma.
-- Redis
-  - 날씨 캐시와 BullMQ broker로 사용한다.
+- Redis / Valkey
+  - 날씨 캐시와 BullMQ broker로 사용한다. (운영은 AWS ElastiCache **Valkey** — Redis 프로토콜 호환, `noeviction` 파라미터 그룹)
   - Refresh Token은 PostgreSQL에 해시로 저장한다. HTTP Rate Limit은 N11부터 Redis 분산 저장소를 사용한다.
 - BullMQ
   - 추천 생성, 피부 패턴 분석, 알림 발송 등 긴 작업을 비동기 처리한다.
