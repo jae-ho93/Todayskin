@@ -19,6 +19,7 @@ Todayskin 문서 허브. 문서는 **역할별 폴더**로 분류한다 —
 |------|------|
 | [SETUP.md](guides/SETUP.md) | 로컬 개발 환경 (앱 + API + DB) — 처음 온 사람은 여기부터 |
 | [DEPLOYMENT.md](guides/DEPLOYMENT.md) | AWS ECS 실배포 · CI/CD · 롤백 · 배포 체크리스트 · 장애 런북 |
+| [DEPLOYMENT_CHECKLIST.md](guides/DEPLOYMENT_CHECKLIST.md) | 배포 시크릿·변수·리소스 **입력 양식** (N16 진행용 — 채워서 쓰는 표) |
 
 ## tasks/ — 작업 보드와 이력
 
