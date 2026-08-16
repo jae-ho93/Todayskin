@@ -26,7 +26,7 @@ Todayskin 문서 허브. 문서는 **역할별 폴더**로 분류한다 —
 | 문서 | 용도 |
 |------|------|
 | [FRONTEND_TASKS.md](tasks/FRONTEND_TASKS.md) | **프론트 작업 보드** (Open + 완료, 작업 절차·계약 포함) |
-| [BACKEND_TASKS.md](tasks/BACKEND_TASKS.md) | **백엔드·배포 작업 보드** (N16 실배포 완료 — Open: N35~N37·N50·N51) |
+| [BACKEND_TASKS.md](tasks/BACKEND_TASKS.md) | **백엔드·배포 작업 보드** (N16 실배포 완료 — 데모 기간 보류: N36·N37·N50·N51) |
 | [BACKEND_ARCHIVE.md](tasks/BACKEND_ARCHIVE.md) | 백엔드 완료 기록 (T/N/P 체크리스트 + 판단 근거) |
 | [REFACTORING_BACKLOG.md](tasks/REFACTORING_BACKLOG.md) | 리팩토링 R1~R35 실행 기록 — **완료.** 문제 진단·해법·하지 않기로 한 것의 근거 |
 
@@ -34,7 +34,7 @@ Todayskin 문서 허브. 문서는 **역할별 폴더**로 분류한다 —
 
 | 문서 | 용도 |
 |------|------|
-| [Fable5_ProjectReview.md](reviews/Fable5_ProjectReview.md) | 2026-08-13 종합 프로젝트 리뷰 (52장) — 후속 태스크의 출처 |
+| ~~[ProjectReview_2026-08-13.md](reviews/ProjectReview_2026-08-13.md)~~ | ~~2026-08-13 종합 프로젝트 리뷰 (52장) — 후속 태스크 전부 반영 완료~~ |
 
 ## 저장소 루트 (GitHub 관례)
 

@@ -20,7 +20,11 @@ Expo SDK 54 기준. 백엔드 규칙은 `docs/tasks/BACKEND_TASKS.md`, 협업은
   preview=APK) ② 소셜 로그인 네이티브 대비 — 백엔드 Google 다중 client id(audiences) 허용
   (APK 구글 로그인 필수) ③ F63 — login/social-phone OTP 상태 머신을 `usePhoneVerification`
   훅으로 통일 (인증 3화면 동일 경로). 검증: 프론트 181·백엔드 641 tests 통과.
-  소셜 키(카카오/구글) 발급은 외부 콘솔 작업으로 남음 — 절차는 `.env.example`·SETUP.md 참고.
+  **소셜 키 발급 후속 (완료)**: 카카오는 콘솔이 커스텀 스킴(`weatherskin://oauth`)을
+  리다이렉트 URI로 거부해 **보류 확정** (PR #232). 구글은 웹·Android 클라이언트 ID 발급 완료
+  — Android는 APK 서명 SHA-1(`AE:6E:24:8D:...:EE:27`)을 콘솔에 등록.
+  eas.json preview env에 운영 URL·구글 웹/Android ID·카카오 키 주입 (PR #233·#235),
+  APK 빌드는 EAS preview로 진행 중 — 2차(정상 env) 빌드 성공, 최종(Android ID 포함) 빌드 대기.
 - **데모 준비 웨이브 (2026-08-16) — 완료**: 실기기 테스트 후속으로 F84~F89를 **전부 머지했다**
   (PR #217~#223). F84/F87 로그인·회원가입 중앙 배치(키보드 점프 회귀를 고정 오프셋으로 교체),
   F85 측정 결과 화면 리디자인(그라데이션 스코어 링·부위 핀·바텀시트 메트릭·타이밍 칩),

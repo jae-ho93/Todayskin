@@ -42,8 +42,8 @@
   - 데이터 모델링, Migration, Transaction, Index 설계, Query 최적화 역량 보존.
   - 운영: AWS RDS PostgreSQL.
   - 스키마: backend/prisma/schema.prisma.
-- Redis
-  - 날씨 캐시와 BullMQ broker로 사용한다.
+- Redis / Valkey
+  - 날씨 캐시와 BullMQ broker로 사용한다. (운영은 AWS ElastiCache **Valkey** — Redis 프로토콜 호환, `noeviction` 파라미터 그룹)
   - Refresh Token은 PostgreSQL에 해시로 저장한다. HTTP Rate Limit은 N11부터 Redis 분산 저장소를 사용한다.
 - BullMQ
   - 추천 생성, 피부 패턴 분석, 알림 발송 등 긴 작업을 비동기 처리한다.
@@ -69,8 +69,7 @@
 - SSE(`GET /jobs/:id/events`, NestJS `@Sse`) — BullMQ job 상태를 실시간 전달.
   프론트는 SSE 우선 소비, 실패 시 `GET /jobs/:id` 폴링으로 폴백한다 (2026-08-12).
 - Jest Unit/E2E 테스트 (backend/test/*.e2e-spec.ts).
-- Pino Logger.
-- Sentry.
+- Pino Logger. (크래시 리포팅/Sentry는 2026-08-13 해커톤 결정으로 도입하지 않는다 — 스토어 배포 범위 밖)
 - JWT Access Token + Refresh Token 인증과 OTP 검증 흐름.
 - Helmet, Validation, Rate Limit(N11부터 Redis 분산 저장소 — `THROTTLE_STORAGE=redis`/auto).
 - 운영 OTP는 OCTOMO MO 인증으로 전환했다(2026-08): 서비스가 문자를 발송하지 않고, 사용자가 안내된 수신 번호(1666-3538)로 인증코드를 문자 발송하면 수신 여부를 API로 검증한다(발송 비용 0원, 사업자등록증 불필요). 번호별 일일 발송 한도와 코드 해시 저장은 N22에서 강화했다.

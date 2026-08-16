@@ -29,7 +29,7 @@ RDS·S3·CloudWatch 연동, Pino·Helmet·JWT·Swagger·Jest를 적용한다.
 > 목표는 제출일까지 데모 품질 최상화 — 코드 태스크(N46~N49, N53)를 우선한다.
 
 실기기 테스트에서 나온 버그·정책 변경(N39~N45)과 프로젝트 리뷰
-([`Fable5_ProjectReview.md`](../reviews/Fable5_ProjectReview.md))에서 나온 **코드 태스크 N46~N49·N53은
+([`ProjectReview_2026-08-13.md`](../reviews/ProjectReview_2026-08-13.md))에서 나온 **코드 태스크 N46~N49·N53은
 2026-08-13에 모두 반영했다** (PR #158~#162, 기록은 [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md)).
 
 **배포 준비 웨이브 (2026-08-13 오후)**: 목표를 "배포 버튼만 누르면 되는(deploy-ready) 상태"로
@@ -58,206 +58,17 @@ Google 검증을 다중 client id 허용으로 확장(`jwt-verify` `audiences` �
 (app.json cleartext·패키지명, eas.json) — 운영 백엔드가 HTTP-only라 cleartext 허용 필요
 ③ N35 보드 완료 표시, N50·F11 보류 결정 반영 ④ 소셜 키 시크릿 항목(GOOGLE_CLIENT_ID
 쉼표 목록·KAKAO_APP_ID)을 배포 체크리스트에 추가. 남은 Open은 N36·N37·N51(운영 결정 보류).
-
-### N54. 배포 준비 마감 — 자격 증명 없이 끝낼 수 있는 전부 (Fable5 리뷰 후속) ✅ 2026-08-13
-
-브랜치: `chore/n54-deploy-readiness`
-
-> **목표**: AWS 계정이 준비되는 순간 N16을 바로 실행할 수 있도록, 로컬에서 검증
-> 가능한 배포 준비를 전부 끝낸다. "코드는 완성"이라는 주장을 실측으로 바꾼다.
-
-- [x] backend·inference **프로덕션 Docker 이미지 로컬 빌드 성공** 검증 (`linux/amd64` — backend 206MB, inference 710MB)
-- [x] **프로덕션 모드 부팅 스모크**: `NODE_ENV=production` + 필수 env로 backend 컨테이너 기동 →
-      `/health/live`·`/health/ready` 200 확인 (mock 거부·env 검증이 실제로 작동하는지 실측)
-- [x] `docs/guides/DEPLOYMENT.md`에 **배포 당일 체크리스트**(순서·확인 항목·예상 소요) 추가
-- [x] `docs/guides/DEPLOYMENT.md`에 **장애 런북 1페이지** 추가 (N50의 문서 파트 선반영 — 증상 → 확인 순서 → 롤백 판단)
-- [x] ~~`.github/dependabot.yml` 추가~~ → **되돌림 (같은 날 팀 결정)**: 첫 스캔이 PR 19개를
-      쏟아냈고, 해커톤(1주) 프로젝트에는 CI의 `npm audit`(high 이상 머지 차단)로 충분하다고
-      판단해 제거했다. 장기 운영으로 전환하면 그때 다시 추가한다.
-
-완료 기준: 이미지 2종이 로컬에서 빌드·기동되고, 문서만 보고 배포 당일 작업을 수행할 수 있다. ✅
-
-**실측 성과**: 스모크 테스트가 실제 배포 차단 버그를 찾았다 — 프로덕션 이미지에 생성된
-Prisma client(`node_modules/.prisma`)가 누락되어 부팅 즉시 `MODULE_NOT_FOUND`로 크래시
-(prod-deps 스테이지가 `--omit=dev`라 generate 불가능한데 runner가 그 node_modules만 복사).
-builder의 `.prisma`를 함께 복사하도록 `backend/Dockerfile`을 수정하고 재검증했다.
-이 검증이 없었으면 **배포 당일 첫 rollout이 실패**했을 것이다. 상세 기록:
-`docs/guides/DEPLOYMENT.md` "로컬 검증 결과 (N54)".
-
-**배포 전 감사 후속 (2026-08-16 등록)**: 배포 2일 전 전체 감사에서 확인된 항목을
-등록한다. 우선순위: **N55(migration pipeline) → N56(추천 diagnosisId 전용) →
-N57(fail-closed) → N58(landmarks) → N59(rollback 문서) → N60(올리브영 링크) →
-N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
-
-### N55. ECS migrate task에서 shadow DB 없는 migrate diff 제거 (CRITICAL-01) ✅ 2026-08-16
-
-브랜치: `chore/ecs-migrate-no-shadow-diff`
-
-> **문제 (실측)**: production migrate task가 `prisma migrate diff --from-migrations
-> --to-schema --exit-code`를 실행하지만 task definition에는 `DATABASE_URL`만 있고
-> `SHADOW_DATABASE_URL`이 없다. 동일 명령을 로컬에서 재현하면
-> `You must set datasource.shadowDatabaseUrl ... if you want to diff a migrations directory.`
-> 로 실패한다(exit 1). 즉 **release pipeline이 migrate 단계에서 확정적으로 막힌다.**
-> CI(`ci.yml`)는 `SHADOW_DATABASE_URL`을 별도 DB로 만들어 같은 diff를 검사하므로
-> CI만 통과하고 production만 깨지는 구조다.
-> **결정**: release에서는 diff 검사를 제거하고 `prisma migrate deploy`만 실행한다
-> (방법 B). drift 검사는 CI 전담이며, release는 CI 게이트(guard job)에 묶여 있어
-> 검증된 커밋만 배포된다. shadow DB가 없는 상태에서 `migrate deploy`는 정상 동작한다.
-> (대안 A — production shadow DB 추가는 AWS 자격 증명이 필요한 N16 선행 작업이라
-> 배포 2일 전에 의존할 수 없다. 추후 hardening으로 문서에 남긴다.)
-
-- [x] `backend/docker/ecs/migrate-task-definition.json` command → `npx prisma migrate deploy`
-- [x] `docs/guides/DEPLOYMENT.md` release 단계 설명 갱신 (drift 검사는 CI 전담 명시)
-- [x] `prisma.config.ts` shadow 로직은 유지 (CI·로컬 diff 검증용)
-
-### N56. 추천 생성 API diagnosisId 전용 전환 (HIGH-03) ✅ 2026-08-16
-
-브랜치: `refactor/recommendation-diagnosis-only`
-
-> **문제**: `POST /recommendations/generate*`가 diagnosisId 없이 skinScore+weather
-> 직접 수신을 허용(TODO(T8) 잔존). 클라이언트가 원하는 값을 넣어 Gemini/OpenAI
-> 추천을 조작·비용 소모할 수 있고, 서버 canonical 진단 데이터와 불일치할 수 있다.
-> 프론트는 이미 diagnosisId만 전송하므로 계약을 최종 형태로 고정한다.
-
-- [x] `generate-recommendation.dto.ts` — skinScore/weather 제거, diagnosisId 필수
-- [x] `recommendation.service.ts` — `resolveGenerateInputs` 호환 경로 제거, generateFast/enqueueLiveJob/캐시 키 단순화
-- [x] `recommendation.controller.ts` generateAsync payload·`recommendation.job-handler.ts` 정리 (+ `requiredString` 헬퍼)
-- [x] 관련 spec/e2e 테스트 갱신 + `openapi:export`/`openapi:types` 재생성 (contract-drift CI)
-
-### N57. 비용·보안 민감 엔드포인트 Redis 장애 시 fail-closed (HIGH-04) ✅ 2026-08-16
-
-브랜치: `fix/throttle-cost-endpoints`
-
-> **문제**: 일반 rate limit은 Redis 장애 시 fail-open(통과). 인증·OTP만
-> `@SensitiveThrottle`로 fail-closed(503)인데, 비용이 발생하는 추천 생성·진단 추론
-> 엔드포인트는 여전히 fail-open이라 Redis 장애 중 API abuse → Gemini/OpenAI·추론
-> 비용 증가 창이 열린다.
-
-- [x] 추천 생성·케어(weather/skin/combined/morning)·날씨 제품·진단 제출에 `@SensitiveThrottle()` 적용
-- [x] 실제 컨트롤러 핸들러 기준 라우트 등록 스펙 추가 (`cost-sensitive-routes.spec.ts`, 14 케이스)
-
-### N58. presigned URL 생성 실패 시 landmarks 미노출 (MEDIUM-07) ✅ 2026-08-16
-
-브랜치: `fix/landmarks-presigned-failure`
-
-> **문제**: 저장 동의 + 이미지 row 존재 시 presigned URL 생성 실패(일시적 스토리지 장애)에도
-> landmarks가 노출된다(현재 의도된 트레이드오프 주석). 얼굴 geometry 데이터이므로
-> URL 생성 실패 시 image=null과 함께 landmarks=null로 맞춘다.
-
-- [x] `diagnosis.service.ts` — URL 생성 실패 시 landmarks도 미노출 (기존 의도된 트레이드오프 제거)
-- [x] DTO 주석·관련 테스트 갱신 (N58 케이스 추가, diagnosis.service 42 passed)
-
-### N59. rollback 전략과 DB migration 결합 문서화 (MEDIUM-06) ✅ 2026-08-16
-
-브랜치: `docs/rollback-migration-strategy`
-
-> **문제**: rollback은 이전 이미지 + `skip_migrate=true`인데, destructive migration
-> (컬럼 삭제·enum 변경)이 배포된 경우 이전 코드로 돌아가도 깨질 수 있다.
-> forward-fix(신규 migration으로 되돌림) 원칙과 expand/contract 가이드를 문서화한다.
-
-- [x] `docs/guides/DEPLOYMENT.md` — 이미지 롤백 vs 스키마 롤백 구분, forward-fix 절차, expand/contract 3단계 규칙
-
-### N60. 올리브영 링크 정리 — 데모 1개만 직링크 유지 ✅ 2026-08-16
-
-브랜치: `chore/oliveyoung-homepage-links`
-
-> **문제**: 제품 구매 링크(`purchaseUrl`)가 goodsNo 직링크/검색 URL 혼재 — 직링크는
-> 검증 전이라 깨질 수 있다. 데모에서 하나만 실제 상품으로 연결하고 나머지는
-> 올리브영 홈페이지 링크로 통일한다.
-
-- [x] `backend/prisma/seed-data.ts` — prod-2만 직링크 유지, 나머지 32개 `OLIVE_YOUNG_HOMEPAGE`로 통일
-- [x] typecheck·lint·unit tests 638 passed (seed-migration e2e는 CI에서 검증)
-
-### N61. DB 기반 E2E 검증 환경 정상화 (HIGH-02) ✅ 2026-08-16
-
-브랜치: `chore/db-e2e-verification`
-
-> **문제**: 로컬에 PostgreSQL이 없어 E2E가 DB 연결 오류(P1001/PrismaClientKnownRequestError)로
-> 다수 실패한다 — 코드 버그가 아니라 환경 문제. CI는 postgres service 컨테이너로
-> migrate deploy → seed → E2E까지 실행하므로 CI 통과로 검증을 대체한다.
-
-- [x] `docs/guides/SETUP.md`에 로컬 E2E 절차 문서화 (compose → migrate deploy → seed → test:e2e)
-- [x] CI(postgres service) E2E 통과로 최종 검증 (CI 복구 후 rerun으로 확인)
-
-### N62. 케어/제품 화면 — FALLBACK에 시드 카탈로그 제품 즉시 노출 ✅ 2026-08-16 (PR #221)
-
-브랜치: `fix/care-fallback-catalog`
-
-> **문제**: 제품 탭 카테고리 상세가 AI(OpenAI) 생성 결과만 보여줘서, 첫 진입 시 FALLBACK의
-> products가 비어 "이 카테고리엔 추천할 제품이 없어요"가 뜬다. AI job(~30초)이 끝나야
-> 제품이 보이고, AI가 그 카테고리에 제품을 만들지 않으면 계속 비어 있다. 추천(오늘의 추천)은
-> 이미 "규칙 기반 즉시 + AI 교체" 패턴인데 케어만 빈 화면이었다.
-
-- [x] care FALLBACK에 `ProductCatalogService` 주입 — 시드 카탈로그(33개, 검증된 purchaseUrl)를 제품명 키워드로 케어 카테고리(선크림/클렌저/토너/에센스/로션/크림...)에 매핑해 즉시 반환
-- [x] 구매 링크 없는 제품은 제외(가짜 링크 금지 유지), 카탈로그 로딩 실패 시 기존처럼 루틴만 반환
-- [x] 단위 테스트 추가 (카테고리 매핑·링크 없는 제품 제외) — typecheck/lint/15 tests 통과, API 실측 33개 즉시 응답
-
-### N63. 케어 LIVE 결과 Redis SWR 캐시 + 프론트 "갱신 중" 스피너 제거 ✅ 2026-08-16 (PR #222)
-
-브랜치: `feat/care-redis-cache-silent-swap`
-
-> **문제**: 제품 탭이 "카탈로그 제품 즉시 → ~30초 후 AI 교체" 구조인데, 교체 순간 화면 상단에
-> "갱신 중" 스피너가 돌아 거슬린다. 또 care LIVE 결과가 Redis에 캐시되지 않아 같은 날 재방문도
-> job을 다시 돌렸다. 목표: 처음엔 Redis/카탈로그 제품을 즉시 보여주고, AI가 끝나면 조용히 교체.
-
-- [x] `care.service.ts` generateLive 완료 시 `care:plan:{type}:{careKey}` Redis SWR 캐시 적재(기존 fastPath.writeCache 재사용) — 같은 날 재방문은 job 없이 CACHED 즉시 응답
-- [x] `app/products/[category].tsx` — "갱신 중" 스피너/로우 제거, LIVE 완료 시 제품 목록이 조용히 교체 (useAsyncJob watch 패턴 유지, 카테고리 비어 있을 때만 "찾고 있어요" 유지)
-- [x] 검증 — 백엔드 typecheck/lint/care 15 tests, 프론트 typecheck/lint/181 tests 통과
+**소셜 키 운영 반영 (완료)**: 카카오는 커스텀 스킴 리다이렉트 거부로 보류. 구글 Android
+클라이언트 ID 발급(패키지 `com.todayskin.app` + SHA-1) 후 `GOOGLE_CLIENT_ID` 시크릿 생성
+(웹+Android 쉼표 목록, `todayskin/prod/GOOGLE_CLIENT_ID`) — backend task definition에
+시크릿 추가 (PR #235) → 재배포 예정. APK 2차(정상 env) 빌드 성공, 최종(Android ID 포함) 빌드 대기.
 
 
-### N64. 문서 최신화 — 2026-08-16 데모 준비 웨이브 반영 ✅ 2026-08-16 (PR #224)
+### N36. 워커 ECS 서비스 분리 배포 (R13 후속) — 보류 (2026-08-17 데모 결정)
 
-브랜치: `docs/sync-2026-08-16-wave`
-
-> **문제**: N55~N63/F84~F89 머지 후 태스크 보드 완료 표시·PR 번호·웨이브 요약과
-> Gemini→OpenAI 전환 이후 남은 스테일 참조(`gemini` 모듈, `MOCK_GEMINI`)가 문서에 남아 있다.
-
-- [x] BACKEND_TASKS.md — N62/N63 ✅ + PR 번호, 목표 모듈 목록(gemini→openai·care), 2026-08-16 데모 준비 웨이브 노트
-- [x] FRONTEND_TASKS.md — F84~F89 완료 표시 + PR 번호(#217~#223), 2026-08-16 웨이브 노트
-- [x] ARCHITECTURE.md·backend/README.md — 모듈 목록/맵 gemini→openai + care 신설 반영
-- [x] SETUP.md·docker-compose.yml — MOCK_GEMINI → MOCK_OPENAI 정리 (compose YAML 유효성 검증 통과)
-
-
-### N16. AWS 운영 리소스 프로비저닝·첫 배포 ✅ 2026-08-16
-
-브랜치: `chore/aws-production-bootstrap`
-
-**2026-08-16 실배포 완료** — ECS Fargate(backend + inference) · RDS PG16 · ElastiCache(Valkey, `noeviction`) ·
-S3 · Secrets Manager 13종 · CloudWatch 로그 4종 · ALB · GitHub OIDC CD 파이프라인이 모두 가동 중이다.
-접속: `http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com` (`/health`·`/health/ready` 200).
-배포 중 발견·수정한 사항은 `docs/guides/DEPLOYMENT_CHECKLIST.md` §6(실배포 교훈)에 기록했다.
-
-- [x] ECR, ECS cluster/service, RDS, Redis, S3, CloudWatch 생성
-- [x] GitHub OIDC role과 최소 권한 task/execution role 구성
-- [x] Secrets Manager 13종 + production environment 승인자 설정
-- [x] migration task → backend/inference rollout → health smoke test 실행
-- [x] **이전 commit SHA rollback과 장애 알림 절차 실검증** — 롤백 절차 문서화(N59) 완료, 알림은 N50으로 이월
-- [x] Cloud Map 서비스 디스커버리 적용 (`inference.todayskin.local`) — 배포 후 수동 IP 갱신 제거
-- [x] ALB 타깃 그룹 `deregistration_delay=30s` (N35 — stopTimeout 120s보다 작게)
-
-완료 기준: 저장소의 배포 workflow가 실제 AWS 운영 계정에 승인·migration·health·rollback을 포함해 한 번 이상 성공한다. ✅
-
-### BE-2026-08-12. OCTOMO 운영 키 등록 ✅ 2026-08-16
-
-- [x] `MockOtpProvider.recipientNumber` → `'1666-3538'` (개발 화면 정상화)
-- [x] provider 선택을 `OCTOMO_API_KEY` 유무 기준으로 변경 (로컬 실제 검증 가능)
-- [x] **운영 등록 완료 (2026-08-16)**: `OCTOMO_API_KEY` 시크릿(`todayskin/prod/OCTOMO_API_KEY`) 입력,
-      `OCTOMO_RECIPIENT_NUMBER=1666-3538`·`OCTOMO_ENDPOINT`는 task definition `environment`에 명시.
-      `/health/ready`에서 `octomo: up` 확인
-
-### N35. ALB deregistration delay를 graceful shutdown보다 짧게 (R4 후속) ✅ 2026-08-16
-
-선행: N16 · 코드 변경 없음 (인프라 설정)
-
-R4에서 SIGTERM 처리를 넣어 종료 시 진행 중인 요청을 기다린다(`stopTimeout` 120초). 그런데 ALB가
-타깃을 먼저 빼지 않으면 배포 중 새 요청이 죽는 컨테이너로 계속 들어간다. 드레인이 먼저 끝나야 한다.
-
-- [x] 타깃 그룹 `deregistration_delay.timeout_seconds`를 `stopTimeout`(120s)보다 **작게** 설정한다 — **N16 실배포에서 적용** (`deregistration_delay=30s`)
-- [ ] 배포를 한 번 돌려 롤링 교체 중 5xx가 발생하지 않는지 ALB 메트릭으로 확인한다 (운영 배포 1회 후 확인)
-
-완료 기준: 롤링 배포 1회에서 `HTTPCode_ELB_5XX_Count` 증가가 없다.
-
-### N36. 워커 ECS 서비스 분리 배포 (R13 후속)
+> **2026-08-17 보류**: 해커톤 데모 기간(1주일) 저트래픽에서는 `JOB_ROLE=both` 단일
+> 서비스로 충분하다. 분리하면 잡 처리 공백 구간이 생길 수 있어 데모 직전에 운영
+> 리스크만 키운다. 장기 운영 전환 시 재등록.
 
 선행: N16 · 코드 변경 없음 (인프라 설정 + 변수)
 
@@ -270,7 +81,10 @@ R13에서 BullMQ 워커를 API 프로세스에서 떼어냈다. 프로세스 역
 
 완료 기준: API task가 `JOB_ROLE=api`로 돌면서도 잡이 워커에서 정상 처리된다.
 
-### N37. 데이터 보존 스윕 활성화 (R11 후속)
+### N37. 데이터 보존 스윕 활성화 (R11 후속) — 보류 (2026-08-17 데모 결정)
+
+> **2026-08-17 보류**: 데이터 영구 삭제는 되돌릴 수 없는 작업이다. 1주일치 데모
+> 데이터엔 실익이 없고, 실수 시 데모 데이터가 손실된다. 장기 운영 전환 시 재등록.
 
 선행: N16, 마이그레이션 배포 완료 · 코드 변경 없음 (환경변수 + 운영 절차)
 
@@ -298,7 +112,10 @@ R11에서 append-only 테이블에 보존 정책을 넣었다. 기본값이 `off
 
 완료 기준: 알람을 인위적으로 트리거해 수신을 확인하고, 런북이 문서에 있다.
 
-### N51. JWT 서명키 보관 개선 (Fable5 리뷰 S-3)
+### N51. JWT 서명키 보관 개선 (Fable5 리뷰 S-3) — 보류 (2026-08-17 데모 결정)
+
+> **2026-08-17 보류**: 보안 개선이지만 데모 1주일 기간엔 실익이 낮고, 서명키 이전은
+> 운영 장애 위험이 있다. 장기 운영 전환 시 재등록.
 
 선행: N16 (Secrets Manager 가동 후)
 
@@ -331,7 +148,7 @@ R6 1단계로 전역 락을 풀고 슬롯 수를 `INFERENCE_CONCURRENCY`(기본 
 
 > N52(API `/v1` 버저닝)는 2026-08-13 해커톤 결정(스토어 배포 없음)으로 **제외**했다.
 > 실서비스 전환이 결정되면 첫 심사 제출 전에 재등록한다 — 근거는
-> [`Fable5_ProjectReview.md`](../reviews/Fable5_ProjectReview.md) 30장.
+> [`ProjectReview_2026-08-13.md`](../reviews/ProjectReview_2026-08-13.md) 30장.
 
 ## 완료 (Done)
 
@@ -346,6 +163,11 @@ R6 1단계로 전역 락을 풀고 슬롯 수를 `INFERENCE_CONCURRENCY`(기본 
 | 개발 스토리지 `memory://` → http 정규화 | ✅ | [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md) |
 | 프론트 범위 완료 기록 (N15/N18/N19) | ✅ | [`FRONTEND_TASKS.md`](FRONTEND_TASKS.md) |
 | 리팩토링 R1~R35 (묶음 B1~B6) | ✅ | [`REFACTORING_BACKLOG.md`](REFACTORING_BACKLOG.md) |
+| 배포 준비 N54 | ✅ | [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md) |
+| 배포 감사 후속 N55~N61 | ✅ | [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md) |
+| 케어 즉시 노출·Redis SWR N62~N63 | ✅ | [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md) |
+| 문서 동기화 N64 | ✅ | [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md) |
+| AWS 실배포 N16 (+ BE-2026-08-12·N35) | ✅ | [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md) |
 
 > `main` 기준 **API freeze** (N24~N34 완료, main `42897d5` / PR #59~#66). EAS·구독 결제는 보류.
 
@@ -355,7 +177,8 @@ R1~R35를 묶음 B1~B6으로 나눠 전부 반영했다(2026-08-12, PR [#130](ht
 문제 진단·해법·하지 않기로 한 것의 근거는 [`REFACTORING_BACKLOG.md`](REFACTORING_BACKLOG.md)에 남겼다.
 같은 판단을 다시 하게 되면 그 문서를 먼저 읽는다.
 
-백엔드에 남긴 후속은 위 N35·N36·N37(Open)과 N38·R9 일부(보류)다. 그 밖에 코드 변경은 없다.
+백엔드에 남긴 후속은 위 N36·N37·N51(데모 기간 보류)과 N50(보류)·N38·R9 일부(조건 보류)다.
+그 밖에 코드 변경은 없다.
 
 ## 완료 정의
 
