@@ -106,6 +106,7 @@ Google 검증을 다중 client id 허용으로 확장(`jwt-verify` `audiences` �
 - [x] 얼굴 사진 (무료 라이선스 한국 남성 초상화) S3 업로드 — `diagnoses/1/demo-dx-*/front-demo.jpg` × 8
 - [x] RDS 재시드 (amd64 이미지, exit 0) — 8/10~8/17 진단 8건 + 저장 동의 추가 (PR #248)
 - [x] production 실측 — 로그인 → history 8건 → **이미지 presigned URL 8일 전부 200** → landmarks·부위 6개·날씨 노출
+- [x] 데모 계정 로그인 정보 확정: **010-0000-0000 / OTP 코드 123456** (allowlist — 데모 기간 2026-08-20까지)
 
 
 
