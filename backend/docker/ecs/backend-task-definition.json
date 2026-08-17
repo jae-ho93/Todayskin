@@ -33,7 +33,8 @@
         { "name": "JOB_DISPATCHER", "value": "auto" },
         { "name": "LOG_LEVEL", "value": "info" },
         { "name": "OCTOMO_ENDPOINT", "value": "https://api.octoverse.kr/octomo/v1/public/message/exists" },
-        { "name": "OCTOMO_RECIPIENT_NUMBER", "value": "1666-3538" }
+        { "name": "OCTOMO_RECIPIENT_NUMBER", "value": "1666-3538" },
+        { "name": "OTP_ALLOWLIST_PHONES", "value": "01000000000" }
       ],
       "secrets": [
         {

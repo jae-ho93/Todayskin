@@ -95,7 +95,7 @@ Google 검증을 다중 client id 허용으로 확장(`jwt-verify` `audiences` �
 - [x] `octomo-otp.provider.ts` — `OTP_ALLOWLIST_PHONES` 읽기 + verifySent allowlist bypass (마스킹 로그)
 - [x] `octomo-otp.provider.spec.ts` — allowlist bypass·비등록 번호 게이트웨이 유지 테스트 2건 추가 (총 10건)
 - [x] 백엔드 typecheck·lint·provider 테스트 통과
-- [ ] 배포 ECS에 `OTP_ALLOWLIST_PHONES=01000000000` 추가 후 재배포
+- [x] `backend/docker/ecs/backend-task-definition.json` — `OTP_ALLOWLIST_PHONES=01000000000` 추가 (배포 워크플로 템플릿 — PR #242에서 반영)
 - [ ] 테스트 계정 데이터 시드 (사용자·캘린더·진단·추천 + 얼굴 사진)
 
 
