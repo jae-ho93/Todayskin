@@ -102,7 +102,9 @@ Google 검증을 다중 client id 허용으로 확장(`jwt-verify` `audiences` �
 - [x] `tsx`를 dependencies로 이동 (ECS one-off seed task용 — prod 이미지에 포함)
 - [x] 배포 후 ECS one-off task로 RDS에 시드 실행 (exit 0, 진단 7건 적재 확인)
 - [x] production 실측 — OTP 123456 → 로그인 → history 7건 반환
-- [ ] 진단 이미지 연결 (사용자가 사진 제공 시 S3 업로드 + DiagnosisImage) — 대기
+- [x] `seed-demo.ts` 재작성 — **8/10~8/17 하루 하나씩 8건** + 진단 이미지(DiagnosisImage) 연결 + 날씨/부위 지표/추천, 멱등(추천·진단 정리 후 재생성)
+- [x] 얼굴 사진 (무료 라이선스 한국 남성 초상화) S3 업로드 — `diagnoses/1/demo-dx-*/front-demo.jpg` × 8
+- [ ] RDS 재시드 + production 실측 (로그인 → history 8건 → 이미지 presigned URL 200)
 
 
 
