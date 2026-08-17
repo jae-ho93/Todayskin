@@ -1242,6 +1242,20 @@ caption(500)은 3종 제한 내 가독성 우선으로 SemiBold 매핑.
 - [x] 검증 — typecheck/lint/181 tests 통과
 
 
+### F94. 랜딩 페이지 문서 반영 — https://todayskin.pages.dev/ ✅ 2026-08-17
+
+브랜치: `docs/landing-page-url`
+
+> **배경**: Cloudflare Pages에 랜딩 페이지(https://todayskin.pages.dev/)가 생성됐다.
+> README 최상단·실배포 완료 표·옵시디언 배포 체크리스트에 URL을 반영하고,
+> GitHub 저장소 description/homepage 설정은 owner(jae-ho93) admin 권한 필요로 안내.
+
+- [x] `README.md` — 랜딩 URL (최상단 + AWS 실배포 완료 표)
+- [x] 옵시디언 `배포-체크리스트.md` — 2026-08-17 최신화 배너에 랜딩/API/데모 계정 URL 추가
+- [x] 랜딩 페이지 200 확인 (`curl`)
+- [ ] GitHub description/homepage — 저장소 owner admin 권한으로 설정 필요 (본인)
+
+
 ### F67. 기록 삭제 UI (완료)
 
 브랜치: `feature/diagnosis-record-deletion` (백엔드 N43과 같은 PR)
