@@ -1293,6 +1293,16 @@ caption(500)은 3종 제한 내 가독성 우선으로 SemiBold 매핑.
 - [x] README 최상단 개편 — 로고 + 태그라인 + 스크린샷 스트립 2열
 - [x] README 수치 정정 — 시드 제품 33→**34개**, 백엔드 테스트 641→**645** (실측: 프론트 181 / 백엔드 645)
 
+### F98. README 스크린샷 정리 — 4장만 유지 ✅ 2026-08-17
+
+브랜치: `docs/readme-showcase-cleanup`
+
+> **배경**: 대문 스크린샷이 8장으로 많아 1·3·4·7번째(홈·분석·결과·기록)만 남김.
+
+- [x] README 스크린샷 스트립 8장→4장 (홈·분석·결과·기록, 180px 1열)
+- [x] `docs/screenshots/`에서 미사용 4장 삭제 (camera/environment/recommendation/login)
+- [x] likelion-submission md 5종 일괄 검증 — 이미지 경로 전부 유효, Gemini/삭제 경로 잔재 없음
+
 
 ### F67. 기록 삭제 UI (완료)
 
