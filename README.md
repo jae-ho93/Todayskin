@@ -99,66 +99,81 @@
 
 ### Frontend — Expo/React Native 앱
 
-| 영역&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| 사용 기술 |
-|---|---|
-| 런타임&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **Expo SDK 54** · **React Native 0.81** · **React 19** · **TypeScript** |
-| 라우팅 · UI&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **Expo Router 6** · React Navigation(네이티브 스택/탭) · **Reanimated 4** + Worklets · react-native-svg · Safe Area Context · Screens · Splash Screen · System UI · Status Bar |
-| 디바이스&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| expo-camera(촬영) · expo-image-picker(사진첩) · **expo-image-manipulator**(업로드 전 리사이즈) · expo-location(날씨 좌표) · expo-notifications(로컬 리마인더) · expo-network · expo-linking · expo-web-browser |
-| 인증 · 저장&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| expo-auth-session(소셜 OAuth) · expo-crypto(Apple nonce) · expo-apple-authentication · **expo-secure-store**(토큰, 웹 AsyncStorage 폴백) · AsyncStorage |
-| 아이콘 · 폰트&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| @expo/vector-icons · expo-font · **Pretendard**(브랜드 폰트) |
-| 웹&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| react-native-web · react-dom (Expo 웹 빌드 가능) |
-| 빌드 · 배포&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **EAS Build** (시연용 APK, `preview` 프로파일) |
+<table>
+  <thead><tr><th width="170">영역</th><th>사용 기술</th></tr></thead>
+  <tbody>
+    <tr><td width="170">런타임</td><td><b>Expo SDK 54</b> · <b>React Native 0.81</b> · <b>React 19</b> · <b>TypeScript</b></td></tr>
+    <tr><td width="170">라우팅 · UI</td><td><b>Expo Router 6</b> · React Navigation(네이티브 스택/탭) · <b>Reanimated 4</b> + Worklets · react-native-svg · Safe Area Context · Screens · Splash Screen · System UI · Status Bar</td></tr>
+    <tr><td width="170">디바이스</td><td>expo-camera(촬영) · expo-image-picker(사진첩) · <b>expo-image-manipulator</b>(업로드 전 리사이즈) · expo-location(날씨 좌표) · expo-notifications(로컬 리마인더) · expo-network · expo-linking · expo-web-browser</td></tr>
+    <tr><td width="170">인증 · 저장</td><td>expo-auth-session(소셜 OAuth) · expo-crypto(Apple nonce) · expo-apple-authentication · <b>expo-secure-store</b>(토큰, 웹 AsyncStorage 폴백) · AsyncStorage</td></tr>
+    <tr><td width="170">아이콘 · 폰트</td><td>@expo/vector-icons · expo-font · <b>Pretendard</b>(브랜드 폰트)</td></tr>
+    <tr><td width="170">웹</td><td>react-native-web · react-dom (Expo 웹 빌드 가능)</td></tr>
+    <tr><td width="170">빌드 · 배포</td><td><b>EAS Build</b> (시연용 APK, <code>preview</code> 프로파일)</td></tr>
+  </tbody>
+</table>
 
 경로: `app/` (화면 — Expo Router 파일 기반) · `src/` (API client · 컴포넌트 · 훅 · 타입 · 테마)
 
 ### Backend — NestJS Modular Monolith (BFF + 비즈니스 로직)
 
-| 영역&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| 사용 기술 |
-|---|---|
-| 서버&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **NestJS 11** · Express · Modular Monolith(auth·otp·diagnosis·recommendation·care·weather·pattern·consent·storage·jobs·idempotency…) |
-| 데이터&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **PostgreSQL 16** · **Prisma 7** (`@prisma/adapter-pg`) · `pg` |
-| 캐시 · 큐&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **Redis**(프로토콜) · **Valkey**(운영 ElastiCache, Redis 호환) — ioredis · **BullMQ** (+ `@nestjs/bullmq`) — Redis 없으면 Inline dispatcher 폴백 |
-| 인증&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **JWT** access/refresh(회전·재사용 탐지·해시 저장) · **Passport** · **OTP**(OCTOMO MO 문자 수신 검증) · 소셜(Kakao/Google/Apple) 토큰 검증 |
-| 검증 · 보안&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| class-validator · class-transformer · **Helmet** · **Throttler**(Redis 분산 rate limit, 민감 라우트 fail-closed) · Joi env 검증 |
-| AI 연동&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **OpenAI** — Chat Completions(strict json_schema, 추천/제품) · Responses API + `web_search`(케어 루틴/제품, 근거 검증) |
-| 실시간&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| REST · **SSE** (`GET /jobs/:id/events` — BullMQ job 상태 실시간) |
-| 저장소&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **AWS S3** (`@aws-sdk/client-s3` · presigner) — 동의 이미지 암호화 저장 |
-| 관측&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **Pino**(nestjs-pino, 구조화 JSON 로그) · correlationId · 민감정보 redact · Sentry(선택) |
-| API 문서&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **Swagger/OpenAPI** (@nestjs/swagger) — 계약 드리프트 CI 검사 + 프론트 타입 자동 생성 |
-| 좌표 변환&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| proj4 (위경도→기상청 격자) |
+<table>
+  <thead><tr><th width="170">영역</th><th>사용 기술</th></tr></thead>
+  <tbody>
+    <tr><td width="170">서버</td><td><b>NestJS 11</b> · Express · Modular Monolith(auth·otp·diagnosis·recommendation·care·weather·pattern·consent·storage·jobs·idempotency…)</td></tr>
+    <tr><td width="170">데이터</td><td><b>PostgreSQL 16</b> · <b>Prisma 7</b> (<code>@prisma/adapter-pg</code>) · <code>pg</code></td></tr>
+    <tr><td width="170">캐시 · 큐</td><td><b>Redis</b>(프로토콜) · <b>Valkey</b>(운영 ElastiCache, Redis 호환) — ioredis · <b>BullMQ</b> (+ <code>@nestjs/bullmq</code>) — Redis 없으면 Inline dispatcher 폴백</td></tr>
+    <tr><td width="170">인증</td><td><b>JWT</b> access/refresh(회전·재사용 탐지·해시 저장) · <b>Passport</b> · <b>OTP</b>(OCTOMO MO 문자 수신 검증) · 소셜(Kakao/Google/Apple) 토큰 검증</td></tr>
+    <tr><td width="170">검증 · 보안</td><td>class-validator · class-transformer · <b>Helmet</b> · <b>Throttler</b>(Redis 분산 rate limit, 민감 라우트 fail-closed) · Joi env 검증</td></tr>
+    <tr><td width="170">AI 연동</td><td><b>OpenAI</b> — Chat Completions(strict json_schema, 추천/제품) · Responses API + <code>web_search</code>(케어 루틴/제품, 근거 검증)</td></tr>
+    <tr><td width="170">실시간</td><td>REST · <b>SSE</b> (<code>GET /jobs/:id/events</code> — BullMQ job 상태 실시간)</td></tr>
+    <tr><td width="170">저장소</td><td><b>AWS S3</b> (<code>@aws-sdk/client-s3</code> · presigner) — 동의 이미지 암호화 저장</td></tr>
+    <tr><td width="170">관측</td><td><b>Pino</b>(nestjs-pino, 구조화 JSON 로그) · correlationId · 민감정보 redact · Sentry(선택)</td></tr>
+    <tr><td width="170">API 문서</td><td><b>Swagger/OpenAPI</b> (<code>@nestjs/swagger</code>) — 계약 드리프트 CI 검사 + 프론트 타입 자동 생성</td></tr>
+    <tr><td width="170">좌표 변환</td><td>proj4 (위경도→기상청 격자)</td></tr>
+  </tbody>
+</table>
 
 경로: `backend/src/` — 구조 지도는 [`backend/README.md`](backend/README.md)
 
 ### AI — FastAPI 독립 추론 서버
 
-| 영역&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| 사용 기술 |
-|---|---|
-| 서버&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **FastAPI** · Uvicorn · python-multipart (`backend/inference-service/`) |
-| 모델&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **PyTorch 2.9** · TorchVision — MobileNetV3(피부 점수) · **Ultralytics YOLO**(여드름 병변) · **MediaPipe**(랜드마크) |
-| 이미지&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| OpenCV(headless) · Pillow · NumPy |
-| 품질 게이트&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| 최소 해상도·휘도·Laplacian blur 검사 → 422 + 사유 코드 (N49) |
-| 경계&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| 점수·등급·랜드마크만 반환 · **DB/인증/비즈니스 로직 없음** |
+<table>
+  <thead><tr><th width="170">영역</th><th>사용 기술</th></tr></thead>
+  <tbody>
+    <tr><td width="170">서버</td><td><b>FastAPI</b> · Uvicorn · python-multipart (<code>backend/inference-service/</code>)</td></tr>
+    <tr><td width="170">모델</td><td><b>PyTorch 2.9</b> · TorchVision — MobileNetV3(피부 점수) · <b>Ultralytics YOLO</b>(여드름 병변) · <b>MediaPipe</b>(랜드마크)</td></tr>
+    <tr><td width="170">이미지</td><td>OpenCV(headless) · Pillow · NumPy</td></tr>
+    <tr><td width="170">품질 게이트</td><td>최소 해상도·휘도·Laplacian blur 검사 → 422 + 사유 코드 (N49)</td></tr>
+    <tr><td width="170">경계</td><td>점수·등급·랜드마크만 반환 · <b>DB/인증/비즈니스 로직 없음</b></td></tr>
+  </tbody>
+</table>
 
 NestJS가 호출하고 결과를 영속화합니다. 원칙: [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md)
 
 ### 테스트
 
-| 영역&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| 내용 |
-|---|---|
-| 프론트&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| Jest + React Native Testing Library · **181 tests** (typecheck + lint 포함) |
-| 백엔드&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| Jest (unit + e2e) · **645 tests** — 계약·보안·소유권·경계값 커버 |
-| CI&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| GitHub Actions — PR마다 typecheck·lint·test·E2E(PostgreSQL) · `npm audit`(high 이상 차단) · OpenAPI drift 검사 |
+<table>
+  <thead><tr><th width="170">영역</th><th>내용</th></tr></thead>
+  <tbody>
+    <tr><td width="170">프론트</td><td>Jest + React Native Testing Library · <b>181 tests</b> (typecheck + lint 포함)</td></tr>
+    <tr><td width="170">백엔드</td><td>Jest (unit + e2e) · <b>645 tests</b> — 계약·보안·소유권·경계값 커버</td></tr>
+    <tr><td width="170">CI</td><td>GitHub Actions — PR마다 typecheck·lint·test·E2E(PostgreSQL) · <code>npm audit</code>(high 이상 차단) · OpenAPI drift 검사</td></tr>
+  </tbody>
+</table>
 
 ### 인프라 — AWS 실배포 (2026-08-16)
 
-| 영역&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| 사용 기술 |
-|---|---|
-| 컴퓨팅&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **ECS Fargate** (NestJS + FastAPI 각각) · 비-root 실행 · graceful shutdown |
-| 네트워크&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **ALB** · VPC · Security Groups(내부망 inference) · **Cloud Map** 서비스 디스커버리(`inference.todayskin.local`) |
-| 데이터&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **RDS PostgreSQL 16** · **ElastiCache Valkey**(Redis 호환, `noeviction` 파라미터 그룹) · **S3** |
-| 시크릿 · 관측&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **Secrets Manager**(13종) · **CloudWatch** 로그 그룹 · 장애 런북 |
-| CI/CD&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **GitHub Actions OIDC** → ECR → 승인 게이트 → migrate → rollout · 롤백 절차 |
-| 가이드&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| [`docs/guides/DEPLOYMENT.md`](docs/guides/DEPLOYMENT.md) |
+<table>
+  <thead><tr><th width="170">영역</th><th>사용 기술</th></tr></thead>
+  <tbody>
+    <tr><td width="170">컴퓨팅</td><td><b>ECS Fargate</b> (NestJS + FastAPI 각각) · 비-root 실행 · graceful shutdown</td></tr>
+    <tr><td width="170">네트워크</td><td><b>ALB</b> · VPC · Security Groups(내부망 inference) · <b>Cloud Map</b> 서비스 디스커버리(<code>inference.todayskin.local</code>)</td></tr>
+    <tr><td width="170">데이터</td><td><b>RDS PostgreSQL 16</b> · <b>ElastiCache Valkey</b>(Redis 호환, <code>noeviction</code> 파라미터 그룹) · <b>S3</b></td></tr>
+    <tr><td width="170">시크릿 · 관측</td><td><b>Secrets Manager</b>(13종) · <b>CloudWatch</b> 로그 그룹 · 장애 런북</td></tr>
+    <tr><td width="170">CI/CD</td><td><b>GitHub Actions OIDC</b> → ECR → 승인 게이트 → migrate → rollout · 롤백 절차</td></tr>
+    <tr><td width="170">가이드</td><td><a href="docs/guides/DEPLOYMENT.md"><code>docs/guides/DEPLOYMENT.md</code></a></td></tr>
+  </tbody>
+</table>
 
 ---
 
