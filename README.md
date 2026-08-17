@@ -1,14 +1,37 @@
-# Todayskin
+<p align="center">
+  <img src="assets/logo.png" width="140" alt="Todayskin 로고">
+</p>
 
-날씨·대기질과 피부 이미지 분석을 결합해 피부 상태와 스킨케어 추천을 제공하는 모바일 애플리케이션.
+<h1 align="center">Todayskin — 오늘의 피부를 AI로 이해하다</h1>
 
-촬영한 얼굴과 그날의 UV·미세먼지·기온/습도를 함께 보고, **실제 화장품** 추천과 기록·패턴을 제공합니다.
-이 저장소는 **프론트 · 백엔드 · 프로젝트 매니저(PM)** 가 한곳에서 협업하는 모노레포이며,
-**AWS에 실제 배포되어 운영 중**입니다.
+<p align="center">
+  날씨·대기질과 피부 이미지 분석을 결합해 피부 상태와 스킨케어 추천을 제공하는 모바일 애플리케이션.
+  <br/>
+  촬영한 얼굴과 그날의 UV·미세먼지·기온/습도를 함께 보고, <b>실제 화장품</b> 추천과 기록·패턴을 제공합니다.
+</p>
+
+<p align="center">
+  <b>온보딩 · 홈 · 촬영 · 분석 · 결과 · 환경 · 추천 · 기록</b>
+</p>
+<p align="center">
+  <img src="docs/screenshots/home.png" width="168" alt="홈 — 오늘의 날씨와 피부 스코어">
+  <img src="docs/screenshots/camera.png" width="168" alt="촬영 — 정면 가이드">
+  <img src="docs/screenshots/analyzing.png" width="168" alt="AI 분석 중">
+  <img src="docs/screenshots/result.png" width="168" alt="측정 결과 — 부위별 점수">
+</p>
+<p align="center">
+  <img src="docs/screenshots/environment.png" width="168" alt="환경 연결 — 날씨·대기질">
+  <img src="docs/screenshots/recommendation.png" width="168" alt="추천 — 근거 등급 A/B/C">
+  <img src="docs/screenshots/history.png" width="168" alt="기록 — 캘린더·90일 추이">
+  <img src="docs/screenshots/login.png" width="168" alt="로그인 — OTP·Google">
+</p>
 
 > **랜딩 페이지** — [https://todayskin.pages.dev/](https://todayskin.pages.dev/)
 > **현재 운영 중** — `http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com` (`/health`·`/health/ready`)
 > **데모** — EAS 빌드 Android APK (설치 방법: [`docs/guides/SETUP.md`](docs/guides/SETUP.md) §4-1)
+
+이 저장소는 **프론트 · 백엔드 · 프로젝트 매니저(PM)** 가 한곳에서 협업하는 모노레포이며,
+**AWS에 실제 배포되어 운영 중**입니다.
 
 <p align="center"><b>Frontend</b></p>
 <p align="center">
@@ -56,9 +79,9 @@
 |---|---|
 | **실서비스 수준 운영** | AWS에 실제 배포·가동 중 — ECS Fargate + RDS + ElastiCache + S3 + Secrets Manager + OIDC CI/CD. 롤백 절차·장애 런북까지 문서화 |
 | **AI 추론 서버 분리** | FastAPI가 점수·등급·랜드마크만 반환, 비즈니스 로직은 NestJS 전담 — 확장 가능한 2-tier 아키텍처 |
-| **실제 화장품만 추천** | 허구 상품·목업 결과 금지. 시드 카탈로그 33개 실제품 + 검증된 구매 링크 + 근거 출처 레지스트리 |
+| **실제 화장품만 추천** | 허구 상품·목업 결과 금지. 시드 카탈로그 34개 실제품 + 검증된 구매 링크 + 근거 출처 레지스트리 |
 | **프라이버시 우선 설계** | 얼굴 이미지는 동의 시에만 암호화 저장, 미동의 시 추론 후 즉시 폐기. 감사 로그·동의 게이트 |
-| **테스트 문화** | 프론트 181 + 백엔드 641 테스트. 계약 드리프트·취약점(npm audit)·보안 경계값을 CI가 강제 |
+| **테스트 문화** | 프론트 181 + 백엔드 645 테스트. 계약 드리프트·취약점(npm audit)·보안 경계값을 CI가 강제 |
 | **UX 완성도** | SSE 실시간 job 상태, 캐시 즉시 응답 + AI 갱신, 품질 게이트(흐림/어두움 거부), 오프라인 대응 |
 
 ---
@@ -114,7 +137,7 @@ NestJS가 호출하고 결과를 영속화합니다. 원칙: [`docs/architecture
 | 영역 | 내용 |
 |---|---|
 | 프론트 | Jest + React Native Testing Library · **181 tests** (typecheck + lint 포함) |
-| 백엔드 | Jest (unit + e2e) · **641 tests** — 계약·보안·소유권·경계값 커버 |
+| 백엔드 | Jest (unit + e2e) · **645 tests** — 계약·보안·소유권·경계값 커버 |
 | CI | GitHub Actions — PR마다 typecheck·lint·test·E2E(PostgreSQL) · `npm audit`(high 이상 차단) · OpenAPI drift 검사 |
 
 ### 인프라 — AWS 실배포 (2026-08-16)
