@@ -1281,6 +1281,18 @@ caption(500)은 3종 제한 내 가독성 우선으로 SemiBold 매핑.
 - [x] `제출_선택사항.md`·`영상_대본.md` — 영상 참조 정리 (재촬영 기준, 촬영 자산 안내)
 - [x] 이미지 경로 유효성 확인 (README 4장 + 화면소개 10장 전부 OK)
 
+### F97. README 대문 — 로고 + 스크린샷 쇼케이스 ✅ 2026-08-17
+
+브랜치: `docs/readme-showcase`
+
+> **배경**: 심사자가 GitHub 저장소를 먼저 보므로, 대문(README)에 로고와 실제 앱 화면을 배치해
+> 준비도를 보여주기 위함. 화면 캡처는 likelion-submission의 storyboard/phones에서 복사.
+
+- [x] `assets/logo.png` 추가 (ir-deck logo-transparent 507×507 → 140px 중앙 배치)
+- [x] `docs/screenshots/` 추가 — 앱 화면 8장 (홈·촬영·분석·결과·환경·추천·기록·로그인)
+- [x] README 최상단 개편 — 로고 + 태그라인 + 스크린샷 스트립 2열
+- [x] README 수치 정정 — 시드 제품 33→**34개**, 백엔드 테스트 641→**645** (실측: 프론트 181 / 백엔드 645)
+
 
 ### F67. 기록 삭제 UI (완료)
 
