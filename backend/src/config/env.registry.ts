@@ -39,6 +39,11 @@ export interface EnvVarDefinition {
   mockFlag?: boolean;
   /** mock flag 만료일(ISO). owner+expiry 없으면 production merge 거부. */
   expiry?: string;
+  /**
+   * N66: 데모/이벤트 기간 한정으로 production에서도 truthy 허용.
+   * 이 날짜(ISO)가 지나면 기존 정책(production 금지)으로 자동 복귀한다.
+   */
+  allowProductionUntil?: string;
 }
 
 /** mock/feature flag 공통 규칙 — 'true'|'false' 문자열만 허용한다. */
@@ -335,6 +340,9 @@ export const ENV_REGISTRY: EnvVarDefinition[] = [
     secret: false,
     mockFlag: true,
     expiry: '2027-01-01',
+    // N66: 해커톤 데모(2026-08-19)까지 production에서 데모 계정 로그인 허용.
+    // 이후에는 production truthy 금지 정책으로 자동 복귀 — 데모 종료 후 제거할 필요 없다.
+    allowProductionUntil: '2026-08-20',
     // 쉼표 구분, 하이픈 제거. 예: 01012345678,01099999999
     schema: Joi.string().allow('').default(''),
   },
@@ -836,9 +844,14 @@ export function validateProductionEnv(
     if (new Date(def.expiry).getTime() < Date.now()) {
       errors.push(`${def.key}: mock flag expired (${def.expiry})`);
     }
-    // production에서 mock flag truthy 금지
+    // production에서 mock flag truthy 금지 — 단 N66 데모 기간(allowProductionUntil)은 예외.
     if (String(env.NODE_ENV) === 'production') {
-      errors.push(`${def.key}: mock flag must be false/empty in production`);
+      const until = def.allowProductionUntil
+        ? new Date(def.allowProductionUntil).getTime()
+        : 0;
+      if (until <= 0 || until < Date.now()) {
+        errors.push(`${def.key}: mock flag must be false/empty in production`);
+      }
     }
   }
 

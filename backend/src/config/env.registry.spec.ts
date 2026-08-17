@@ -27,6 +27,35 @@ describe('env.registry', () => {
     expect(errors.some((e) => e.includes('MOCK_OPENAI'))).toBe(true);
   });
 
+  // N66: 데모 기간 한정(allowProductionUntil) production 허용 — 데모 이후 자동 복귀.
+  it('allows OTP_ALLOWLIST_PHONES in production until allowProductionUntil (N66)', () => {
+    const def = ENV_REGISTRY.find((d) => d.key === 'OTP_ALLOWLIST_PHONES')!;
+    expect(def.allowProductionUntil).toBeTruthy();
+    expect(new Date(def.allowProductionUntil!).getTime()).toBeGreaterThan(Date.now());
+
+    const errors = validateProductionEnv({
+      NODE_ENV: 'production',
+      OTP_ALLOWLIST_PHONES: '01000000000',
+    });
+    expect(errors.some((e) => e.includes('OTP_ALLOWLIST_PHONES'))).toBe(false);
+  });
+
+  it('rejects OTP_ALLOWLIST_PHONES after allowProductionUntil passes (N66)', () => {
+    const def = ENV_REGISTRY.find((d) => d.key === 'OTP_ALLOWLIST_PHONES')!;
+    const orig = def.allowProductionUntil;
+    // 만료 시나리오: allowProductionUntil이 과거면 기존 production 금지 정책으로 복귀.
+    (def as { allowProductionUntil?: string }).allowProductionUntil = '2020-01-01';
+    try {
+      const expired = validateProductionEnv({
+        NODE_ENV: 'production',
+        OTP_ALLOWLIST_PHONES: '01000000000',
+      });
+      expect(expired.some((e) => e.includes('OTP_ALLOWLIST_PHONES'))).toBe(true);
+    } finally {
+      (def as { allowProductionUntil?: string }).allowProductionUntil = orig;
+    }
+  });
+
   it('rejects unknown keys when APP_ENV_KEYS declared', () => {
     const errors = validateProductionEnv({
       NODE_ENV: 'production',
