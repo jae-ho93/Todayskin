@@ -64,6 +64,24 @@ Google 검증을 다중 client id 허용으로 확장(`jwt-verify` `audiences` �
 시크릿 추가 (PR #235) → 재배포 예정. APK 2차(정상 env) 빌드 성공, 최종(Android ID 포함) 빌드 대기.
 
 
+### N65. OTP verify 503 — OCTOMO exists API 응답 필드 불일치 (APK 실기기 테스트 발견) ✅ 2026-08-17
+
+브랜치: `fix/otp-octomo-exists-field`
+
+> **증상**: APK 실기기에서 휴대폰 인증(회원가입·로그인)이 항상
+> "OTP 인증 서비스에 문제가 있어요. 잠시 후 다시 시도해주세요."로 실패.
+>
+> **원인 (실측 3단계)**: ① 배포 백엔드(`/otp/verify`)가 503 반환 재현
+> ② CloudWatch 로그: `OCTOMO 응답 형식 오류 (verified 누락)`
+> ③ OCTOMO exists API 직접 호출 결과 실제 응답은 `{"exists": boolean}` —
+> 코드는 `{ verified: boolean }`을 기대 → 필드명 불일치로 모든 검증이 503.
+
+- [x] `octomo-otp.provider.ts` — `data.verified` → `data.exists` (주석·로그 문구 동기화)
+- [x] `octomo-otp.provider.spec.ts` — mock 응답·테스트명 `exists`로 갱신 (8건)
+- [x] 백엔드 typecheck·lint·otp 테스트 통과
+- [ ] 배포 백엔드 재배포 시 반영 (ALB에 구버전 실행 중 — OTP 수정 포함 재배포 필요)
+
+
 ### N36. 워커 ECS 서비스 분리 배포 (R13 후속) — 보류 (2026-08-17 데모 결정)
 
 > **2026-08-17 보류**: 해커톤 데모 기간(1주일) 저트래픽에서는 `JOB_ROLE=both` 단일
@@ -168,6 +186,7 @@ R6 1단계로 전역 락을 풀고 슬롯 수를 `INFERENCE_CONCURRENCY`(기본 
 | 케어 즉시 노출·Redis SWR N62~N63 | ✅ | [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md) |
 | 문서 동기화 N64 | ✅ | [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md) |
 | AWS 실배포 N16 (+ BE-2026-08-12·N35) | ✅ | [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md) |
+| OTP OCTOMO exists 필드 수정 N65 | ✅ | [`BACKEND_ARCHIVE.md`](BACKEND_ARCHIVE.md) |
 
 > `main` 기준 **API freeze** (N24~N34 완료, main `42897d5` / PR #59~#66). EAS·구독 결제는 보류.
 

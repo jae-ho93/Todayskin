@@ -13,7 +13,7 @@ import { errorName } from '../../../common/errors/error-name.util';
  * - 엔드포인트: POST {OCTOMO_ENDPOINT} (기본 https://api.octoverse.kr/octomo/v1/public/message/exists)
  * - 인증: Authorization 헤더 `Octomo {OCTOMO_API_KEY}`
  * - 요청: JSON { mobileNum, text } — withinMinutes(기본 5분) 이내 수신 확인
- * - 응답: { verified: boolean } — 수신 확인 시 true
+ * - 응답: { exists: boolean } — 수신 확인 시 true (OCTOMO exists API 실측 2026-08-17)
  * - 수신 번호: OCTOMO_RECIPIENT_NUMBER (기본 1666-3538)
  *
  * 설정이 없으면 fail-closed(오류 throw)라 운영에서 mock이 조용히 동작하지 않는다.
@@ -81,18 +81,19 @@ export class OctomoOtpProvider implements OtpProvider {
         }
 
         const data = (await res.json().catch(() => null)) as {
-          verified?: unknown;
+          exists?: unknown;
           message?: unknown;
         } | null;
-        // verified=false는 오류가 아니라 "아직 수신 안 됨"이다 — false 반환.
-        if (typeof data?.verified === 'boolean') {
-          return data.verified;
+        // exists=false는 오류가 아니라 "아직 수신 안 됨"이다 — false 반환.
+        // N65: OCTOMO exists API의 실제 응답 필드는 exists다 (verified 아님 — 실측으로 확인).
+        if (typeof data?.exists === 'boolean') {
+          return data.exists;
         }
 
         // 예상하지 못한 응답 형태 — 서버 측 오류로 처리(가짜 성공 금지).
         const reason = typeof data?.message === 'string' ? maskSensitiveData(data.message) : '';
         this.logger.error(
-          `OCTOMO 응답 형식 오류 (verified 누락${reason ? `, message=${reason}` : ''})`,
+          `OCTOMO 응답 형식 오류 (exists 누락${reason ? `, message=${reason}` : ''})`,
         );
         throw new OtpGatewayError('OTP 인증 게이트웨이 응답이 올바르지 않습니다');
       } catch (e) {
