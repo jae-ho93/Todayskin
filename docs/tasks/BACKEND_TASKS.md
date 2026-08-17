@@ -98,7 +98,11 @@ Google 검증을 다중 client id 허용으로 확장(`jwt-verify` `audiences` �
 - [x] `backend/docker/ecs/backend-task-definition.json` — `OTP_ALLOWLIST_PHONES=01000000000` 추가 (배포 워크플로 템플릿 — PR #242에서 반영)
 - [x] `env.registry.ts` — `allowProductionUntil` 필드 추가 (OTP_ALLOWLIST_PHONES 데모 기간 한정 production 허용, 2026-08-20 이후 자동 복귀) + spec 2건
 - [x] 배포 검증 — production 부팅 실패(mock flag 금지) 원인 수정, 재배포 후 OTP 010-0000-0000 실측
-- [ ] 테스트 계정 데이터 시드 (사용자·캘린더·진단·추천 + 얼굴 사진)
+- [x] `prisma/seed-demo.ts` — 데모 계정 + 2주간 진단 7건·부위 지표·날씨·추천 시드 (로컬 실측: OTP 123456 → 로그인 → history 반영)
+- [x] `tsx`를 dependencies로 이동 (ECS one-off seed task용 — prod 이미지에 포함)
+- [ ] 배포 후 ECS one-off task로 RDS에 시드 실행
+- [ ] 진단 이미지 연결 (사용자가 사진 제공 시 S3 업로드 + DiagnosisImage)
+
 
 
 ### N36. 워커 ECS 서비스 분리 배포 (R13 후속) — 보류 (2026-08-17 데모 결정)
