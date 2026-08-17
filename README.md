@@ -1,18 +1,17 @@
 <p align="center">
-  <img src="assets/logo.png" width="140" alt="Todayskin 로고">
+  <img src="assets/logo.png" width="120" alt="Todayskin 로고">
 </p>
 
-<h1 align="center">Todayskin — 오늘의 피부를 AI로 이해하다</h1>
+<h1 align="center">Todayskin</h1>
+
+<p align="center"><b>오늘의 피부를 AI로 이해하다</b></p>
 
 <p align="center">
-  날씨·대기질과 피부 이미지 분석을 결합해 피부 상태와 스킨케어 추천을 제공하는 모바일 애플리케이션.
+  날씨·대기질과 AI 피부 진단을 결합해 오늘의 피부 상태를 확인하고, 실제 화장품 기반의 스킨케어를 추천합니다.
   <br/>
-  촬영한 얼굴과 그날의 UV·미세먼지·기온/습도를 함께 보고, <b>실제 화장품</b> 추천과 기록·패턴을 제공합니다.
+  촬영한 얼굴과 그날의 UV·미세먼지·기온/습도를 함께 분석해 <b>근거 있는 추천</b>과 기록·패턴을 제공합니다.
 </p>
 
-<p align="center">
-  <b>홈 · 분석 · 결과 · 기록</b>
-</p>
 <p align="center">
   <img src="docs/screenshots/home.png" width="180" alt="홈 — 오늘의 날씨와 피부 스코어">
   <img src="docs/screenshots/analyzing.png" width="180" alt="AI 분석 중">
@@ -20,14 +19,28 @@
   <img src="docs/screenshots/history.png" width="180" alt="기록 — 캘린더·90일 추이">
 </p>
 
+---
+
+## 🚀 지금 바로 사용해 보세요
+
+이 프로젝트는 **현재 AWS에 실제 배포되어 운영 중**입니다. 아래 링크로 바로 체험할 수 있습니다.
+
+| 항목 | 방법 |
+|---|---|
+| **Android 앱 설치** | [랜딩 페이지](https://todayskin.pages.dev/)에서 APK 다운로드 (아래 QR 스캔 가능) |
+| **심사용 테스트 계정** | 휴대폰 번호 `010-0000-0000` · OTP 인증번호 `123456` (데모 기간 8/26까지 유효, 진단 기록 8건 포함) |
+| **백엔드 상태 확인** | [서비스 health](http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com/health) · [readiness](http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com/health/ready) |
+
 <p align="center">
-  <a href="https://todayskin.pages.dev/"><img src="https://img.shields.io/badge/랜딩%20페이지-todayskin.pages.dev-F26430?style=for-the-badge&logo=cloudflare&logoColor=white" alt="랜딩 페이지"></a>
-  <a href="http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com/health"><img src="https://img.shields.io/badge/현재%20운영%20중-AWS%20ECS%20Fargate-2DA44E?style=for-the-badge&logo=amazonaws&logoColor=white" alt="현재 운영 중"></a>
-  <a href="docs/guides/SETUP.md"><img src="https://img.shields.io/badge/데모%20APK-Android-00A6FB?style=for-the-badge&logo=android&logoColor=white" alt="데모 APK"></a>
+  <a href="https://todayskin.pages.dev/"><img src="assets/qr-landing.png" width="140" alt="랜딩 페이지 QR — APK 다운로드"></a>
+  <br/>
+  <a href="https://todayskin.pages.dev/">https://todayskin.pages.dev/</a>
 </p>
 
+---
+
 이 저장소는 **프론트 · 백엔드 · 프로젝트 매니저(PM)** 가 한곳에서 협업하는 모노레포이며,
-**AWS에 실제 배포되어 운영 중**입니다.
+**AWS ECS Fargate(ap-northeast-2)에 실제 배포되어 운영 중**입니다.
 
 <p align="center"><b>Frontend</b></p>
 <p align="center">
@@ -86,66 +99,66 @@
 
 ### Frontend — Expo/React Native 앱
 
-| 영역 | 사용 기술 |
+| 영역&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| 사용 기술 |
 |---|---|
-| 런타임 | **Expo SDK 54** · **React Native 0.81** · **React 19** · **TypeScript** |
-| 라우팅 · UI | **Expo Router 6** · React Navigation(네이티브 스택/탭) · **Reanimated 4** + Worklets · react-native-svg · Safe Area Context · Screens · Splash Screen · System UI · Status Bar |
-| 디바이스 | expo-camera(촬영) · expo-image-picker(사진첩) · **expo-image-manipulator**(업로드 전 리사이즈) · expo-location(날씨 좌표) · expo-notifications(로컬 리마인더) · expo-network · expo-linking · expo-web-browser |
-| 인증 · 저장 | expo-auth-session(소셜 OAuth) · expo-crypto(Apple nonce) · expo-apple-authentication · **expo-secure-store**(토큰, 웹 AsyncStorage 폴백) · AsyncStorage |
-| 아이콘 · 폰트 | @expo/vector-icons · expo-font · **Pretendard**(브랜드 폰트) |
-| 웹 | react-native-web · react-dom (Expo 웹 빌드 가능) |
-| 빌드 · 배포 | **EAS Build** (시연용 APK, `preview` 프로파일) |
+| 런타임&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **Expo SDK 54** · **React Native 0.81** · **React 19** · **TypeScript** |
+| 라우팅 · UI&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **Expo Router 6** · React Navigation(네이티브 스택/탭) · **Reanimated 4** + Worklets · react-native-svg · Safe Area Context · Screens · Splash Screen · System UI · Status Bar |
+| 디바이스&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| expo-camera(촬영) · expo-image-picker(사진첩) · **expo-image-manipulator**(업로드 전 리사이즈) · expo-location(날씨 좌표) · expo-notifications(로컬 리마인더) · expo-network · expo-linking · expo-web-browser |
+| 인증 · 저장&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| expo-auth-session(소셜 OAuth) · expo-crypto(Apple nonce) · expo-apple-authentication · **expo-secure-store**(토큰, 웹 AsyncStorage 폴백) · AsyncStorage |
+| 아이콘 · 폰트&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| @expo/vector-icons · expo-font · **Pretendard**(브랜드 폰트) |
+| 웹&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| react-native-web · react-dom (Expo 웹 빌드 가능) |
+| 빌드 · 배포&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **EAS Build** (시연용 APK, `preview` 프로파일) |
 
 경로: `app/` (화면 — Expo Router 파일 기반) · `src/` (API client · 컴포넌트 · 훅 · 타입 · 테마)
 
 ### Backend — NestJS Modular Monolith (BFF + 비즈니스 로직)
 
-| 영역 | 사용 기술 |
+| 영역&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| 사용 기술 |
 |---|---|
-| 서버 | **NestJS 11** · Express · Modular Monolith(auth·otp·diagnosis·recommendation·care·weather·pattern·consent·storage·jobs·idempotency…) |
-| 데이터 | **PostgreSQL 16** · **Prisma 7** (`@prisma/adapter-pg`) · `pg` |
-| 캐시 · 큐 | **Redis**(프로토콜) · **Valkey**(운영 ElastiCache, Redis 호환) — ioredis · **BullMQ** (+ `@nestjs/bullmq`) — Redis 없으면 Inline dispatcher 폴백 |
-| 인증 | **JWT** access/refresh(회전·재사용 탐지·해시 저장) · **Passport** · **OTP**(OCTOMO MO 문자 수신 검증) · 소셜(Kakao/Google/Apple) 토큰 검증 |
-| 검증 · 보안 | class-validator · class-transformer · **Helmet** · **Throttler**(Redis 분산 rate limit, 민감 라우트 fail-closed) · Joi env 검증 |
-| AI 연동 | **OpenAI** — Chat Completions(strict json_schema, 추천/제품) · Responses API + `web_search`(케어 루틴/제품, 근거 검증) |
-| 실시간 | REST · **SSE** (`GET /jobs/:id/events` — BullMQ job 상태 실시간) |
-| 저장소 | **AWS S3** (`@aws-sdk/client-s3` · presigner) — 동의 이미지 암호화 저장 |
-| 관측 | **Pino**(nestjs-pino, 구조화 JSON 로그) · correlationId · 민감정보 redact · Sentry(선택) |
-| API 문서 | **Swagger/OpenAPI** (@nestjs/swagger) — 계약 드리프트 CI 검사 + 프론트 타입 자동 생성 |
-| 좌표 변환 | proj4 (위경도→기상청 격자) |
+| 서버&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **NestJS 11** · Express · Modular Monolith(auth·otp·diagnosis·recommendation·care·weather·pattern·consent·storage·jobs·idempotency…) |
+| 데이터&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **PostgreSQL 16** · **Prisma 7** (`@prisma/adapter-pg`) · `pg` |
+| 캐시 · 큐&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **Redis**(프로토콜) · **Valkey**(운영 ElastiCache, Redis 호환) — ioredis · **BullMQ** (+ `@nestjs/bullmq`) — Redis 없으면 Inline dispatcher 폴백 |
+| 인증&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **JWT** access/refresh(회전·재사용 탐지·해시 저장) · **Passport** · **OTP**(OCTOMO MO 문자 수신 검증) · 소셜(Kakao/Google/Apple) 토큰 검증 |
+| 검증 · 보안&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| class-validator · class-transformer · **Helmet** · **Throttler**(Redis 분산 rate limit, 민감 라우트 fail-closed) · Joi env 검증 |
+| AI 연동&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **OpenAI** — Chat Completions(strict json_schema, 추천/제품) · Responses API + `web_search`(케어 루틴/제품, 근거 검증) |
+| 실시간&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| REST · **SSE** (`GET /jobs/:id/events` — BullMQ job 상태 실시간) |
+| 저장소&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **AWS S3** (`@aws-sdk/client-s3` · presigner) — 동의 이미지 암호화 저장 |
+| 관측&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **Pino**(nestjs-pino, 구조화 JSON 로그) · correlationId · 민감정보 redact · Sentry(선택) |
+| API 문서&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **Swagger/OpenAPI** (@nestjs/swagger) — 계약 드리프트 CI 검사 + 프론트 타입 자동 생성 |
+| 좌표 변환&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| proj4 (위경도→기상청 격자) |
 
 경로: `backend/src/` — 구조 지도는 [`backend/README.md`](backend/README.md)
 
 ### AI — FastAPI 독립 추론 서버
 
-| 영역 | 사용 기술 |
+| 영역&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| 사용 기술 |
 |---|---|
-| 서버 | **FastAPI** · Uvicorn · python-multipart (`backend/inference-service/`) |
-| 모델 | **PyTorch 2.9** · TorchVision — MobileNetV3(피부 점수) · **Ultralytics YOLO**(여드름 병변) · **MediaPipe**(랜드마크) |
-| 이미지 | OpenCV(headless) · Pillow · NumPy |
-| 품질 게이트 | 최소 해상도·휘도·Laplacian blur 검사 → 422 + 사유 코드 (N49) |
-| 경계 | 점수·등급·랜드마크만 반환 · **DB/인증/비즈니스 로직 없음** |
+| 서버&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **FastAPI** · Uvicorn · python-multipart (`backend/inference-service/`) |
+| 모델&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **PyTorch 2.9** · TorchVision — MobileNetV3(피부 점수) · **Ultralytics YOLO**(여드름 병변) · **MediaPipe**(랜드마크) |
+| 이미지&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| OpenCV(headless) · Pillow · NumPy |
+| 품질 게이트&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| 최소 해상도·휘도·Laplacian blur 검사 → 422 + 사유 코드 (N49) |
+| 경계&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| 점수·등급·랜드마크만 반환 · **DB/인증/비즈니스 로직 없음** |
 
 NestJS가 호출하고 결과를 영속화합니다. 원칙: [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md)
 
 ### 테스트
 
-| 영역 | 내용 |
+| 영역&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| 내용 |
 |---|---|
-| 프론트 | Jest + React Native Testing Library · **181 tests** (typecheck + lint 포함) |
-| 백엔드 | Jest (unit + e2e) · **645 tests** — 계약·보안·소유권·경계값 커버 |
-| CI | GitHub Actions — PR마다 typecheck·lint·test·E2E(PostgreSQL) · `npm audit`(high 이상 차단) · OpenAPI drift 검사 |
+| 프론트&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| Jest + React Native Testing Library · **181 tests** (typecheck + lint 포함) |
+| 백엔드&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| Jest (unit + e2e) · **645 tests** — 계약·보안·소유권·경계값 커버 |
+| CI&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| GitHub Actions — PR마다 typecheck·lint·test·E2E(PostgreSQL) · `npm audit`(high 이상 차단) · OpenAPI drift 검사 |
 
 ### 인프라 — AWS 실배포 (2026-08-16)
 
-| 영역 | 사용 기술 |
+| 영역&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| 사용 기술 |
 |---|---|
-| 컴퓨팅 | **ECS Fargate** (NestJS + FastAPI 각각) · 비-root 실행 · graceful shutdown |
-| 네트워크 | **ALB** · VPC · Security Groups(내부망 inference) · **Cloud Map** 서비스 디스커버리(`inference.todayskin.local`) |
-| 데이터 | **RDS PostgreSQL 16** · **ElastiCache Valkey**(Redis 호환, `noeviction` 파라미터 그룹) · **S3** |
-| 시크릿 · 관측 | **Secrets Manager**(13종) · **CloudWatch** 로그 그룹 · 장애 런북 |
-| CI/CD | **GitHub Actions OIDC** → ECR → 승인 게이트 → migrate → rollout · 롤백 절차 |
-| 가이드 | [`docs/guides/DEPLOYMENT.md`](docs/guides/DEPLOYMENT.md) |
+| 컴퓨팅&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **ECS Fargate** (NestJS + FastAPI 각각) · 비-root 실행 · graceful shutdown |
+| 네트워크&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **ALB** · VPC · Security Groups(내부망 inference) · **Cloud Map** 서비스 디스커버리(`inference.todayskin.local`) |
+| 데이터&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **RDS PostgreSQL 16** · **ElastiCache Valkey**(Redis 호환, `noeviction` 파라미터 그룹) · **S3** |
+| 시크릿 · 관측&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **Secrets Manager**(13종) · **CloudWatch** 로그 그룹 · 장애 런북 |
+| CI/CD&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| **GitHub Actions OIDC** → ECR → 승인 게이트 → migrate → rollout · 롤백 절차 |
+| 가이드&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| [`docs/guides/DEPLOYMENT.md`](docs/guides/DEPLOYMENT.md) |
 
 ---
 
