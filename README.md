@@ -6,6 +6,7 @@
 이 저장소는 **프론트 · 백엔드 · 프로젝트 매니저(PM)** 가 한곳에서 협업하는 모노레포이며,
 **AWS에 실제 배포되어 운영 중**입니다.
 
+> **랜딩 페이지** — [https://todayskin.pages.dev/](https://todayskin.pages.dev/)
 > **현재 운영 중** — `http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com` (`/health`·`/health/ready`)
 > **데모** — EAS 빌드 Android APK (설치 방법: [`docs/guides/SETUP.md`](docs/guides/SETUP.md) §4-1)
 
@@ -169,7 +170,7 @@ flowchart TB
 | Fable5 리뷰 대응 — 보안·품질 게이트·기온/습도 (F72~F78 · N46~N49 · N53) | **완료** (2026-08-13) |
 | 배포 준비 웨이브 — 실험실 옵트인·주간 요약·측정 신뢰·상태 완성도·Pretendard·배포 스모크 (F79~F83 · N54) | **완료** (2026-08-13) |
 | LLM 프로바이더 전환(Gemini→OpenAI) · 케어 루틴/제품 카테고리 신설(`care` 모듈, 카테고리별 그리드 UI) | **완료** (2026-08-14) |
-| AWS 실배포 (N16, 2026-08-16) | **완료** — ECS Fargate(backend+inference)·RDS PG16·ElastiCache·S3·Secrets Manager·OIDC CD 가동 중. 접속: `http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com` |
+| AWS 실배포 (N16, 2026-08-16) | **완료** — ECS Fargate(backend+inference)·RDS PG16·ElastiCache·S3·Secrets Manager·OIDC CD 가동 중. 접속: `http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com`, 랜딩: https://todayskin.pages.dev/ |
 | 데모 준비 (2026-08-17) — 시연용 Android APK(EAS), 소셜 로그인 네이티브 대비(구글 다중 aud), 로그인/가입 OTP 훅 통일 | **완료** — APK 빌드·구글 웹/Android 클라이언트 ID 발급·백엔드 시크릿 반영. 카카오는 콘솔 리다이렉트 제약으로 보류(데모는 구글+OTP) |
 | EAS 스토어 제출 · 구독 결제 · Sentry | 보류 (해커톤 범위 밖 — 데모는 APK/Expo Go로 진행) |
 
