@@ -96,6 +96,20 @@ async function seed(): Promise<void> {
   }
   // S3 객체는 키가 고정이라 재업로드 불필요 (같은 키로 덮어씀).
 
+  // 2-1) 저장 동의 — 이미지 presigned URL 노출 조건 (N58: 동의 + 이미지 row + presign 성공).
+  //      없으면 canViewMedia=false → 이미지/랜드마크가 미노출되므로 데모에 반드시 필요.
+  await prisma.consentRecord.upsert({
+    where: { userId_purpose: { userId: user.id, purpose: 'diagnosis_image_storage' } },
+    update: { agreed: true, revokedAt: null, version: '1.0.0' },
+    create: {
+      userId: user.id,
+      purpose: 'diagnosis_image_storage',
+      agreed: true,
+      version: '1.0.0',
+      source: 'app',
+    },
+  });
+
   // 3) 8/10 ~ 8/17 하루 하나씩 진단 생성
   for (const d of DAYS) {
     const capturedAt = new Date(`${d.date}T09:30:00+09:00`);
