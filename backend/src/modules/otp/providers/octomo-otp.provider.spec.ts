@@ -46,6 +46,27 @@ describe('OctomoOtpProvider', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('N66 — allowlisted 번호는 fetch 없이 true 반환 (데모용 실문자 bypass)', async () => {
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const provider = makeProvider({ ...fullEnv, OTP_ALLOWLIST_PHONES: '01000000000, 010-1234-5678' });
+    await expect(provider.verifySent('01012345678', '123456')).resolves.toBe(true);
+    // 게이트웨이 호출 없이 코드 해시 일치만으로 통과해야 한다.
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('N66 — allowlist 밖 번호는 기존처럼 게이트웨이 검증을 탄다', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ exists: true }),
+    }) as unknown as typeof fetch;
+
+    const provider = makeProvider({ ...fullEnv, OTP_ALLOWLIST_PHONES: '01099999999' });
+    await expect(provider.verifySent('01012345678', text)).resolves.toBe(true);
+    expect(global.fetch as jest.Mock).toHaveBeenCalledTimes(1);
+  });
+
   it('exists=true 응답 시 true 반환 — Octomo Authorization 헤더와 JSON body로 호출', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
