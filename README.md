@@ -20,9 +20,11 @@
   <img src="docs/screenshots/history.png" width="180" alt="기록 — 캘린더·90일 추이">
 </p>
 
-> **랜딩 페이지** — [https://todayskin.pages.dev/](https://todayskin.pages.dev/)
-> **현재 운영 중** — `http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com` (`/health`·`/health/ready`)
-> **데모** — EAS 빌드 Android APK (설치 방법: [`docs/guides/SETUP.md`](docs/guides/SETUP.md) §4-1)
+<p align="center">
+  <a href="https://todayskin.pages.dev/"><img src="https://img.shields.io/badge/랜딩%20페이지-todayskin.pages.dev-F26430?style=for-the-badge&logo=cloudflare&logoColor=white" alt="랜딩 페이지"></a>
+  <a href="http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com/health"><img src="https://img.shields.io/badge/현재%20운영%20중-AWS%20ECS%20Fargate-2DA44E?style=for-the-badge&logo=amazonaws&logoColor=white" alt="현재 운영 중"></a>
+  <a href="docs/guides/SETUP.md"><img src="https://img.shields.io/badge/데모%20APK-Android-00A6FB?style=for-the-badge&logo=android&logoColor=white" alt="데모 APK"></a>
+</p>
 
 이 저장소는 **프론트 · 백엔드 · 프로젝트 매니저(PM)** 가 한곳에서 협업하는 모노레포이며,
 **AWS에 실제 배포되어 운영 중**입니다.

@@ -1303,6 +1303,17 @@ caption(500)은 3종 제한 내 가독성 우선으로 SemiBold 매핑.
 - [x] `docs/screenshots/`에서 미사용 4장 삭제 (camera/environment/recommendation/login)
 - [x] likelion-submission md 5종 일괄 검증 — 이미지 경로 전부 유효, Gemini/삭제 경로 잔재 없음
 
+### F99. README 뱃지 강조 + CONTRIBUTING 브랜치 규칙 정리 ✅ 2026-08-17
+
+브랜치: `docs/readme-badges-contributing`
+
+> **배경**: README의 랜딩/운영 중 안내가 blockquote(회색)로 안 보여 컬러 뱃지로 교체.
+> CONTRIBUTING은 "머지 후 브랜치 삭제 금지" 규칙 제거 (머지된 브랜치 정리 정책으로 전환).
+
+- [x] README — 랜딩(주황)·운영 중(초록)·데모 APK(파랑) shields 뱃지 3종 (클릭 가능, 한글 인코딩 200 확인)
+- [x] CONTRIBUTING — `merge 후 브랜치 삭제 금지` 규칙 제거, PR·리뷰 문구 정리
+- [x] 머지된 브랜치 전체 정리 (로컬 + 원격)
+
 
 ### F67. 기록 삭제 UI (완료)
 
