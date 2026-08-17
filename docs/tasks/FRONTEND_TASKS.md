@@ -1215,6 +1215,19 @@ caption(500)은 3종 제한 내 가독성 우선으로 SemiBold 매핑.
 - [ ] APK 재빌드 후 실기기 검증 (EAS 로그인 필요)
 
 
+### F91. 소셜 로그인 Google 전용으로 정리 — "현재 Google 로그인만 지원합니다" ✅ 2026-08-17
+
+브랜치: `fix/social-google-only`
+
+> **배경**: 데모 시점에 동작하는 소셜 로그인은 Google뿐이다 (카카오: 커스텀
+> 스킴 리다이렉트 거부로 보류, Apple: iOS 전용·클라이언트 미발급).
+> 버튼이 떠 있으면 눌러도 실패하므로 화면에서 제외하고 안내 문구를 추가한다.
+
+- [x] `SocialLoginButtons.tsx` — 카카오/Apple 코드 제거, Google 버튼만 렌더
+- [x] "현재 Google 로그인만 지원합니다" 캡션 추가 (compact/풀폭 공통)
+- [x] 검증 — typecheck/lint/181 tests 통과
+
+
 ### F67. 기록 삭제 UI (완료)
 
 브랜치: `feature/diagnosis-record-deletion` (백엔드 N43과 같은 PR)
