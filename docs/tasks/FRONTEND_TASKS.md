@@ -1255,6 +1255,19 @@ caption(500)은 3종 제한 내 가독성 우선으로 SemiBold 매핑.
 - [x] 랜딩 페이지 200 확인 (`curl`)
 - [ ] GitHub description/homepage — 저장소 owner admin 권한으로 설정 필요 (본인)
 
+### F95. 멋사대학 해커톤 제출 자료 정리 ✅ 2026-08-17
+
+브랜치: `docs/submission-material`
+
+> **배경**: likelion.community 제출 폼(IR Deck·시연 영상·프로덕트 URL·테스트 계정·레포·카테고리/기술 스택) 제출 준비.
+> 팀원 초안이 실제 구현과 달라(3장 촬영·Gemini·알리고 SMS) 코드 검증으로 바로잡고 제출 본문을 작성.
+
+- [x] 팀원 초안 대조 — **정면 1장 촬영**(3장 아님), **OpenAI LLM**(Gemini→OpenAI 전환 완료), **OCTOMO** 실문자 인증(알리고 아님) 확인
+- [x] `Dev/likelion-submission/제출_본문.md` 작성 — 서비스 소개 및 문제 정의 / 핵심 기능 및 해결 방식 / 시장성 및 실행 전략 (각 500자+, 실제 구현 기준)
+- [x] `제출_선택사항.md` 갱신 — 테스트 계정 `010-0000-0000`/OTP `123456`, 랜딩 URL, 기술 스택(OpenAI), 체크리스트
+- [x] likelion-submission 정리 — 스토리보드 html·ir-deck만 유지, 재생성 가능 산출물(.venv/node_modules/audio/narration/captures) 삭제
+- [x] 시연 영상은 admin 제작 예정 — `영상_대본.md`를 제작 기준으로 안내
+
 
 ### F67. 기록 삭제 UI (완료)
 
