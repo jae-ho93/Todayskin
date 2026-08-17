@@ -89,6 +89,12 @@
             "usesCleartextTraffic": true
           }
         }
+      ],
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.ios-pending:/oauth2redirect"
+        }
       ]
     ],
     "extra": {
