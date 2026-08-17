@@ -1188,6 +1188,33 @@ caption(500)은 3종 제한 내 가독성 우선으로 SemiBold 매핑.
 - [x] 검증 — typecheck/lint/181 tests 통과, 다른 상단 고정 요소 없음 확인
 
 
+### F90. Google 로그인 — 네이티브 SDK 전환 (APK 실기기 테스트 발견) ✅ 2026-08-17
+
+브랜치: `fix/google-signin-native-sdk`
+
+> **문제**: APK 실기기에서 Google 로그인이 항상 `400 invalid_request`로 실패.
+>
+> **원인 (실측)**: ① expo-auth-session v7 Google provider가 네이티브에서
+> `{applicationId}:/oauthredirect`(= `com.todayskin.app:/oauthredirect`) redirect를 보낸다.
+> ② Google은 2024년부터 **Android OAuth 클라이언트의 커스텀 URI 스킴 redirect를 전면 금지**
+> (공식 문서 "Custom URI schemes are no longer supported on Android and Chrome apps") —
+> `weatherskin://oauth`는 콘솔 등록 자체가 불가(웹 클라: http(s)만), reverse scheme
+> `com.googleusercontent.apps.X:/oauth2redirect`도 요청 시 거부됨(직접 호출로 재현).
+> ③ expo-auth-session v7.0.11은 auth proxy(useProxy)도 제거됨 → **현재 라이브러리로는
+> Android Google 로그인 불가능**.
+>
+> **해결**: Google 공식 네이티브 SDK(`@react-native-google-signin`)로 전환 — SDK가
+> 패키지명+SHA-1 서명으로 앱을 검증하므로 커스텀 스킴 redirect 불필요.
+> 콘솔의 Android 클라이언트(`com.todayskin.app` + SHA-1)를 그대로 사용.
+
+- [x] `@react-native-google-signin/google-signin@16.1.4` 설치 (expo SDK 54 호환)
+- [x] `SocialLoginButtons.tsx` — `Google.useAuthRequest` 제거, `GoogleSignin.configure+signIn()`으로 교체 (id_token → 기존 `/auth/social` 흐름 그대로)
+- [x] `app.json` — 플러그인 등록 + `iosUrlScheme` 옵션 (Firebase 경로 회피, iOS 클라이언트 발급 후 실제 scheme으로 교체)
+- [x] 검증 — typecheck/lint/181 tests 통과, `expo prebuild` Android 성공(manifest 확인)
+- [ ] **사용자 필수**: Google 콘솔 Android 클라이언트의 SHA-1 = APK 서명 키(현재는 EAS 자동 키) 일치 확인
+- [ ] APK 재빌드 후 실기기 검증 (EAS 로그인 필요)
+
+
 ### F67. 기록 삭제 UI (완료)
 
 브랜치: `feature/diagnosis-record-deletion` (백엔드 N43과 같은 PR)

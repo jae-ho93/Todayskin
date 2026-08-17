@@ -1,7 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as AuthSession from 'expo-auth-session';
-import * as Google from 'expo-auth-session/providers/google';
+import {
+  GoogleSignin,
+  isErrorWithCode,
+  statusCodes,
+} from '@react-native-google-signin/google-signin';
 import * as Crypto from 'expo-crypto';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect } from 'react';
@@ -53,16 +57,6 @@ export function SocialLoginButtons({ busyProvider, onToken, onError, compact = f
     },
     kakaoDiscovery,
   );
-  const [, googleResponse, promptGoogle] = Google.useAuthRequest(
-    {
-      iosClientId: googleIosClientId ?? 'not-configured',
-      androidClientId: googleAndroidClientId ?? 'not-configured',
-      webClientId: googleWebClientId ?? 'not-configured',
-      scopes: ['openid', 'profile', 'email'],
-    },
-    { scheme: 'weatherskin', path: 'oauth' },
-  );
-
   useEffect(() => {
     if (!kakaoResponse) return;
     if (kakaoResponse.type === 'cancel' || kakaoResponse.type === 'dismiss') {
@@ -86,26 +80,52 @@ export function SocialLoginButtons({ busyProvider, onToken, onError, compact = f
       .catch(() => onError('카카오 인증 토큰을 확인하지 못했습니다.'));
   }, [kakaoClientId, kakaoRequest, kakaoResponse, onError, onToken]);
 
-  useEffect(() => {
-    if (!googleResponse) return;
-    if (googleResponse.type === 'cancel' || googleResponse.type === 'dismiss') {
-      onError('구글 로그인이 취소되었습니다.');
-      return;
-    }
-    if (googleResponse.type !== 'success') {
-      if (googleResponse.type === 'error') onError('구글 인증에 실패했습니다. 다시 시도해주세요.');
-      return;
-    }
-    const idToken = googleResponse.params.id_token ?? googleResponse.authentication?.idToken;
-    if (!idToken) {
-      onError('구글 인증 토큰을 확인하지 못했습니다.');
-      return;
-    }
-    void onToken('google', idToken);
-  }, [googleResponse, onError, onToken]);
-
   const showNotConfigured = (provider: string) =>
     onError(`${provider} 로그인 설정이 아직 연결되지 않았습니다. 앱 관리자에게 문의해주세요.`);
+
+  /**
+   * N66: Google Android 커스텀 스킴 redirect 금지 정책(2024~)으로 expo-auth-session의
+   * 구글 provider는 더 이상 Android에서 동작하지 않는다. 공식 네이티브 SDK
+   * (@react-native-google-signin)로 전환 — SDK가 패키지명+SHA-1 서명으로 앱을
+   * 검증하므로 커스텀 스킴 redirect가 필요 없다 (콘솔의 Android 클라이언트 그대로 사용).
+   */
+  const handleGoogle = async () => {
+    try {
+      GoogleSignin.configure({
+        // v16: androidClientId는 configure에 없다 — Android는 콘솔 클라이언트
+        // (패키지+SHA-1)를 Play 서비스가 직접 검증한다. webClientId는 서버가
+        // id_token의 aud를 검증할 때 쓴다 (백엔드 GOOGLE_CLIENT_ID 목록에 포함).
+        webClientId: googleWebClientId ?? undefined,
+        iosClientId: googleIosClientId ?? undefined,
+        offlineAccess: false,
+      });
+      await GoogleSignin.hasPlayServices();
+      const response = await GoogleSignin.signIn();
+      if (response.type !== 'success') {
+        onError('구글 로그인이 취소되었습니다.');
+        return;
+      }
+      const idToken = response.data.idToken;
+      if (!idToken) {
+        onError('구글 인증 토큰을 확인하지 못했습니다.');
+        return;
+      }
+      await onToken('google', idToken);
+    } catch (error) {
+      if (isErrorWithCode(error)) {
+        if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+          onError('구글 로그인이 취소되었습니다.');
+          return;
+        }
+        if (error.code === statusCodes.IN_PROGRESS) return; // 이미 진행 중 — 무시
+        if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+          onError('Google Play 서비스를 사용할 수 없어요.');
+          return;
+        }
+      }
+      onError('구글 인증에 실패했습니다. 다시 시도해주세요.');
+    }
+  };
 
   const handleApple = async () => {
     if (Platform.OS !== 'ios' || !(await AppleAuthentication.isAvailableAsync())) {
@@ -141,7 +161,7 @@ export function SocialLoginButtons({ busyProvider, onToken, onError, compact = f
         <View style={styles.divider}><View style={styles.line} /><Text style={styles.or}>소셜 계정으로 계속</Text><View style={styles.line} /></View>
         <View style={styles.iconRow}>
           <SocialIcon label="카카오로 계속하기" background="#FEE500" color="#191919" icon="chatbubble" loading={busyProvider === 'kakao'} disabled={disabled} onPress={() => kakaoClientId ? promptKakao() : showNotConfigured('카카오')} />
-          <SocialIcon label="Google로 계속하기" background={colors.surface} color={colors.textPrimary} icon="logo-google" outlined loading={busyProvider === 'google'} disabled={disabled} onPress={() => googleConfigured ? promptGoogle() : showNotConfigured('Google')} />
+          <SocialIcon label="Google로 계속하기" background={colors.surface} color={colors.textPrimary} icon="logo-google" outlined loading={busyProvider === 'google'} disabled={disabled} onPress={() => googleConfigured ? void handleGoogle() : showNotConfigured('Google')} />
           <SocialIcon label="Apple로 계속하기" background="#000000" color="#FFFFFF" icon="logo-apple" loading={busyProvider === 'apple'} disabled={disabled} onPress={handleApple} />
         </View>
       </View>
@@ -152,7 +172,7 @@ export function SocialLoginButtons({ busyProvider, onToken, onError, compact = f
     <View style={styles.container}>
       <View style={styles.divider}><View style={styles.line} /><Text style={styles.or}>소셜 계정으로 계속</Text><View style={styles.line} /></View>
       <SocialButton label="카카오로 계속하기" background="#FEE500" color="#191919" icon="chatbubble" loading={busyProvider === 'kakao'} disabled={disabled} onPress={() => kakaoClientId ? promptKakao() : showNotConfigured('카카오')} />
-      <SocialButton label="Google로 계속하기" background={colors.surface} color={colors.textPrimary} icon="logo-google" loading={busyProvider === 'google'} disabled={disabled} onPress={() => googleConfigured ? promptGoogle() : showNotConfigured('Google')} />
+      <SocialButton label="Google로 계속하기" background={colors.surface} color={colors.textPrimary} icon="logo-google" loading={busyProvider === 'google'} disabled={disabled} onPress={() => googleConfigured ? void handleGoogle() : showNotConfigured('Google')} />
       <SocialButton label="Apple로 계속하기" background="#000000" color="#FFFFFF" icon="logo-apple" loading={busyProvider === 'apple'} disabled={disabled} onPress={handleApple} />
     </View>
   );
