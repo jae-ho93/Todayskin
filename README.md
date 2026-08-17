@@ -11,19 +11,13 @@
 </p>
 
 <p align="center">
-  <b>온보딩 · 홈 · 촬영 · 분석 · 결과 · 환경 · 추천 · 기록</b>
+  <b>홈 · 분석 · 결과 · 기록</b>
 </p>
 <p align="center">
-  <img src="docs/screenshots/home.png" width="168" alt="홈 — 오늘의 날씨와 피부 스코어">
-  <img src="docs/screenshots/camera.png" width="168" alt="촬영 — 정면 가이드">
-  <img src="docs/screenshots/analyzing.png" width="168" alt="AI 분석 중">
-  <img src="docs/screenshots/result.png" width="168" alt="측정 결과 — 부위별 점수">
-</p>
-<p align="center">
-  <img src="docs/screenshots/environment.png" width="168" alt="환경 연결 — 날씨·대기질">
-  <img src="docs/screenshots/recommendation.png" width="168" alt="추천 — 근거 등급 A/B/C">
-  <img src="docs/screenshots/history.png" width="168" alt="기록 — 캘린더·90일 추이">
-  <img src="docs/screenshots/login.png" width="168" alt="로그인 — OTP·Google">
+  <img src="docs/screenshots/home.png" width="180" alt="홈 — 오늘의 날씨와 피부 스코어">
+  <img src="docs/screenshots/analyzing.png" width="180" alt="AI 분석 중">
+  <img src="docs/screenshots/result.png" width="180" alt="측정 결과 — 부위별 점수">
+  <img src="docs/screenshots/history.png" width="180" alt="기록 — 캘린더·90일 추이">
 </p>
 
 > **랜딩 페이지** — [https://todayskin.pages.dev/](https://todayskin.pages.dev/)
