@@ -104,7 +104,8 @@ Google 검증을 다중 client id 허용으로 확장(`jwt-verify` `audiences` �
 - [x] production 실측 — OTP 123456 → 로그인 → history 7건 반환
 - [x] `seed-demo.ts` 재작성 — **8/10~8/17 하루 하나씩 8건** + 진단 이미지(DiagnosisImage) 연결 + 날씨/부위 지표/추천, 멱등(추천·진단 정리 후 재생성)
 - [x] 얼굴 사진 (무료 라이선스 한국 남성 초상화) S3 업로드 — `diagnoses/1/demo-dx-*/front-demo.jpg` × 8
-- [ ] RDS 재시드 + production 실측 (로그인 → history 8건 → 이미지 presigned URL 200)
+- [x] RDS 재시드 (amd64 이미지, exit 0) — 8/10~8/17 진단 8건 + 저장 동의 추가 (PR #248)
+- [x] production 실측 — 로그인 → history 8건 → **이미지 presigned URL 8일 전부 200** → landmarks·부위 6개·날씨 노출
 
 
 
