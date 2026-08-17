@@ -82,6 +82,23 @@ Google 검증을 다중 client id 허용으로 확장(`jwt-verify` `audiences` �
 - [ ] 배포 백엔드 재배포 시 반영 (ALB에 구버전 실행 중 — OTP 수정 포함 재배포 필요)
 
 
+### N66. 데모 테스트 계정 — OCTOMO allowlist bypass (010-0000-0000 고정 OTP 123456) ✅ 2026-08-17
+
+브랜치: `feat/otp-allowlist-demo-account`
+
+> **목적**: 해커톤 데모용 테스트 계정. 배포 환경(OctomoOtpProvider)은 실문자 검증이라
+> 가짜 번호(010-0000-0000)로는 문자 수신이 없어 로그인이 불가능했다.
+> allowlist에 등록된 번호는 고정 코드 `123456` 발급(OtpService 기존 정책) + 검증 시
+> 게이트웨이 호출 없이 통과(OctomoOtpProvider에 동일 allowlist 정책 추가)로 해결.
+> 운영 정책(N22 fail-closed)과 상충하므로 데모 기간 후 `OTP_ALLOWLIST_PHONES` 제거 예정.
+
+- [x] `octomo-otp.provider.ts` — `OTP_ALLOWLIST_PHONES` 읽기 + verifySent allowlist bypass (마스킹 로그)
+- [x] `octomo-otp.provider.spec.ts` — allowlist bypass·비등록 번호 게이트웨이 유지 테스트 2건 추가 (총 10건)
+- [x] 백엔드 typecheck·lint·provider 테스트 통과
+- [ ] 배포 ECS에 `OTP_ALLOWLIST_PHONES=01000000000` 추가 후 재배포
+- [ ] 테스트 계정 데이터 시드 (사용자·캘린더·진단·추천 + 얼굴 사진)
+
+
 ### N36. 워커 ECS 서비스 분리 배포 (R13 후속) — 보류 (2026-08-17 데모 결정)
 
 > **2026-08-17 보류**: 해커톤 데모 기간(1주일) 저트래픽에서는 `JOB_ROLE=both` 단일

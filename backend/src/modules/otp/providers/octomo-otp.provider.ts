@@ -31,6 +31,12 @@ export class OctomoOtpProvider implements OtpProvider {
   private readonly timeoutMs: number;
   /** 총 시도 횟수(네트워크 오류 한정 재시도 포함). 기본 2회 = 1회 재시도. */
   private readonly maxAttempts: number;
+  /**
+   * 데모/테스트용 고정 OTP 허용 번호 (쉼표 구분).
+   * allowlisted 번호는 실문자 수신 없이 코드 일치만으로 검증 통과한다.
+   * 운영 정책상 기본 비워두며, 데모 당일에만 주입하고 이후 제거한다 (N22와 함께).
+   */
+  private readonly allowlisted: Set<string>;
 
   constructor(private readonly config: ConfigService) {
     this.apiKey = this.config.get<string>('OCTOMO_API_KEY');
@@ -46,9 +52,28 @@ export class OctomoOtpProvider implements OtpProvider {
       Math.min(Number(this.config.get<number>('OCTOMO_MAX_RETRIES', 1)), 2),
     );
     this.maxAttempts = retries + 1;
+
+    // N66: 데모용 allowlist — OtpService/MockOtpProvider와 동일한 환경변수·정규화 규칙.
+    const rawAllow = this.config.get<string>('OTP_ALLOWLIST_PHONES') ?? '';
+    this.allowlisted = new Set(
+      rawAllow
+        .split(',')
+        .map((p) => p.trim().replace(/-/g, ''))
+        .filter((p) => p.length > 0),
+    );
   }
 
   async verifySent(phoneNumber: string, text: string): Promise<boolean> {
+    // N66: 데모용 allowlist bypass — 실문자 수신 없이 코드 일치만으로 통과.
+    // OtpService가 allowlisted 번호에 고정 코드(123456)를 발급하므로,
+    // 해시 비교를 통과했다는 것 자체가 검증 완료를 의미한다.
+    if (this.allowlisted.has(phoneNumber)) {
+      this.logger.log(
+        `[OTP] allowlisted phone bypass 게이트웨이 검증 (phone=${this.maskPhone(phoneNumber)})`,
+      );
+      return true;
+    }
+
     // 1. 설정 검증 — 누락 시 fail-closed.
     if (!this.apiKey || !this.endpoint) {
       this.logger.error('OCTOMO 게이트웨이 설정이 누락되었습니다 (OCTOMO_API_KEY)');
@@ -113,6 +138,11 @@ export class OctomoOtpProvider implements OtpProvider {
     throw new OtpGatewayError(
       `OTP 인증 게이트웨이 연결에 실패했습니다: ${errorName(lastError)}`,
     );
+  }
+  /** 로그에 전화번호를 마스킹해 남긴다 (중간 4자리 제거). */
+  private maskPhone(phoneNumber: string): string {
+    if (phoneNumber.length < 7) return '***';
+    return `${phoneNumber.slice(0, 3)}****${phoneNumber.slice(-4)}`;
   }
 }
 
