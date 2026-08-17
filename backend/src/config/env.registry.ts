@@ -340,9 +340,9 @@ export const ENV_REGISTRY: EnvVarDefinition[] = [
     secret: false,
     mockFlag: true,
     expiry: '2027-01-01',
-    // N66: 해커톤 데모(2026-08-19)까지 production에서 데모 계정 로그인 허용.
+    // N66: 해커톤 데모(2026-08-19, 연장 시 8/26)까지 production에서 데모 계정 로그인 허용.
     // 이후에는 production truthy 금지 정책으로 자동 복귀 — 데모 종료 후 제거할 필요 없다.
-    allowProductionUntil: '2026-08-20',
+    allowProductionUntil: '2026-08-26',
     // 쉼표 구분, 하이픈 제거. 예: 01012345678,01099999999
     schema: Joi.string().allow('').default(''),
   },
