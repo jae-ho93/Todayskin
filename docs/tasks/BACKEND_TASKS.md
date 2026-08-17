@@ -96,6 +96,8 @@ Google 검증을 다중 client id 허용으로 확장(`jwt-verify` `audiences` �
 - [x] `octomo-otp.provider.spec.ts` — allowlist bypass·비등록 번호 게이트웨이 유지 테스트 2건 추가 (총 10건)
 - [x] 백엔드 typecheck·lint·provider 테스트 통과
 - [x] `backend/docker/ecs/backend-task-definition.json` — `OTP_ALLOWLIST_PHONES=01000000000` 추가 (배포 워크플로 템플릿 — PR #242에서 반영)
+- [x] `env.registry.ts` — `allowProductionUntil` 필드 추가 (OTP_ALLOWLIST_PHONES 데모 기간 한정 production 허용, 2026-08-20 이후 자동 복귀) + spec 2건
+- [x] 배포 검증 — production 부팅 실패(mock flag 금지) 원인 수정, 재배포 후 OTP 010-0000-0000 실측
 - [ ] 테스트 계정 데이터 시드 (사용자·캘린더·진단·추천 + 얼굴 사진)
 
 
