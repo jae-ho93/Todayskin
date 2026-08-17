@@ -11,18 +11,18 @@ import type { SocialProvider } from '../types';
 /**
  * 소셜 로그인 버튼.
  *
- * F91: 데모 시점에 동작하는 소셜 로그인은 Google뿐이다 — 카카오(커스텀 스킴
- * 리다이렉트 거부로 보류)와 Apple(iOS 전용·클라이언트 미발급)은 화면에서
- * 제외하고 "현재 Google 로그인만 지원합니다"를 안내한다.
+ * F93: 데모에서 동작하는 소셜 로그인은 Google뿐이지만, 화면 구성을 위해
+ * Google을 첫 번째로 두고 카카오/Apple 버튼을 복원한다. 카카오(커스텀 스킴
+ * 리다이렉트 거부로 보류)와 Apple(iOS 전용·클라이언트 미발급)은 아직
+ * 동작하지 않으므로 누르면 "준비 중" 안내를 표시한다.
  *
- * N66/F90: Google은 공식 네이티브 SDK(@react-native-google-signin)를 쓴다.
+ * F90/N66: Google은 공식 네이티브 SDK(@react-native-google-signin)를 쓴다.
  * Android 커스텀 스킴 redirect 금지 정책(2024~)으로 expo-auth-session의
  * 구글 provider는 더 이상 동작하지 않으며, SDK가 패키지명+SHA-1 서명으로
  * 앱을 검증하므로 커스텀 스킴 redirect가 필요 없다.
  */
 type Props = {
   busyProvider: SocialProvider | null;
-  /** N46: apple은 리플레이 방지 nonce를 extra로 함께 넘겼다 (현재 미사용). */
   onToken: (
     provider: SocialProvider,
     token: string,
@@ -84,6 +84,9 @@ export function SocialLoginButtons({ busyProvider, onToken, onError, compact = f
     }
   };
 
+  // F93: 카카오/Apple은 아직 미지원 — 버튼은 노출하되 준비 중 안내만 한다.
+  const showNotReady = (provider: string) => onError(`${provider} 로그인은 준비 중입니다.`);
+
   const disabled = busyProvider !== null;
   const googlePress = () =>
     googleConfigured ? void handleGoogle() : onError('Google 로그인 설정이 아직 연결되지 않았습니다. 앱 관리자에게 문의해주세요.');
@@ -94,9 +97,15 @@ export function SocialLoginButtons({ busyProvider, onToken, onError, compact = f
       {compact ? (
         <View style={styles.iconRow}>
           <SocialIcon label="Google로 계속하기" background={colors.surface} color={colors.textPrimary} icon="logo-google" outlined loading={busyProvider === 'google'} disabled={disabled} onPress={googlePress} />
+          <SocialIcon label="카카오로 계속하기" background="#FEE500" color="#191919" icon="chatbubble" loading={false} disabled={disabled} onPress={() => showNotReady('카카오')} />
+          <SocialIcon label="Apple로 계속하기" background="#000000" color="#FFFFFF" icon="logo-apple" loading={false} disabled={disabled} onPress={() => showNotReady('Apple')} />
         </View>
       ) : (
-        <SocialButton label="Google로 계속하기" background={colors.surface} color={colors.textPrimary} icon="logo-google" loading={busyProvider === 'google'} disabled={disabled} onPress={googlePress} />
+        <>
+          <SocialButton label="Google로 계속하기" background={colors.surface} color={colors.textPrimary} icon="logo-google" loading={busyProvider === 'google'} disabled={disabled} onPress={googlePress} />
+          <SocialButton label="카카오로 계속하기" background="#FEE500" color="#191919" icon="chatbubble" loading={false} disabled={disabled} onPress={() => showNotReady('카카오')} />
+          <SocialButton label="Apple로 계속하기" background="#000000" color="#FFFFFF" icon="logo-apple" loading={false} disabled={disabled} onPress={() => showNotReady('Apple')} />
+        </>
       )}
       <Text style={styles.notice}>현재 Google 로그인만 지원합니다</Text>
     </View>
