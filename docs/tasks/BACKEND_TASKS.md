@@ -100,8 +100,9 @@ Google 검증을 다중 client id 허용으로 확장(`jwt-verify` `audiences` �
 - [x] 배포 검증 — production 부팅 실패(mock flag 금지) 원인 수정, 재배포 후 OTP 010-0000-0000 실측
 - [x] `prisma/seed-demo.ts` — 데모 계정 + 2주간 진단 7건·부위 지표·날씨·추천 시드 (로컬 실측: OTP 123456 → 로그인 → history 반영)
 - [x] `tsx`를 dependencies로 이동 (ECS one-off seed task용 — prod 이미지에 포함)
-- [ ] 배포 후 ECS one-off task로 RDS에 시드 실행
-- [ ] 진단 이미지 연결 (사용자가 사진 제공 시 S3 업로드 + DiagnosisImage)
+- [x] 배포 후 ECS one-off task로 RDS에 시드 실행 (exit 0, 진단 7건 적재 확인)
+- [x] production 실측 — OTP 123456 → 로그인 → history 7건 반환
+- [ ] 진단 이미지 연결 (사용자가 사진 제공 시 S3 업로드 + DiagnosisImage) — 대기
 
 
 
