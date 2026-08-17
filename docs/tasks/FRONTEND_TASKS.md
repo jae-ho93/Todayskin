@@ -1228,6 +1228,20 @@ caption(500)은 3종 제한 내 가독성 우선으로 SemiBold 매핑.
 - [x] 검증 — typecheck/lint/181 tests 통과
 
 
+### F93. 소셜 버튼 — Google 첫 번째 + 카카오/Apple 버튼 복원 (준비 중 안내) ✅ 2026-08-17
+
+브랜치: `fix/social-buttons-google-first`
+
+> **배경**: 데모 화면에서 소셜 로그인이 Google 하나뿐이면 이질적이다.
+> Google을 첫 번째로 두고, 카카오/Apple 버튼을 복원하되 아직 동작하지
+> 않으므로 누르면 "준비 중" 안내를 표시한다 (카카오: 커스텀 스킴 리다이렉트
+> 거부, Apple: iOS 전용·클라이언트 미발급 — 데모 Android에서 동작 불가).
+
+- [x] `SocialLoginButtons.tsx` — Google 버튼을 첫 번째로, 카카오/Apple 버튼 복원
+- [x] 카카오/Apple 버튼은 `busyProvider` 처리 없이 "준비 중" 안내 토스트
+- [x] 검증 — typecheck/lint/181 tests 통과
+
+
 ### F67. 기록 삭제 UI (완료)
 
 브랜치: `feature/diagnosis-record-deletion` (백엔드 N43과 같은 PR)
