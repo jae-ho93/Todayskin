@@ -46,10 +46,10 @@ describe('OctomoOtpProvider', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('verified=true 응답 시 true 반환 — Octomo Authorization 헤더와 JSON body로 호출', async () => {
+  it('exists=true 응답 시 true 반환 — Octomo Authorization 헤더와 JSON body로 호출', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ verified: true }),
+      json: async () => ({ exists: true }),
     }) as unknown as typeof fetch;
 
     const provider = makeProvider(fullEnv);
@@ -65,17 +65,17 @@ describe('OctomoOtpProvider', () => {
     expect(JSON.parse(String(init.body))).toEqual({ mobileNum: phone, text });
   });
 
-  it('verified=false 응답 시 false 반환 — 오류가 아닌 "아직 수신 안 됨"', async () => {
+  it('exists=false 응답 시 false 반환 — 오류가 아닌 "아직 수신 안 됨"', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ verified: false }),
+      json: async () => ({ exists: false }),
     }) as unknown as typeof fetch;
 
     const provider = makeProvider(fullEnv);
     await expect(provider.verifySent(phone, text)).resolves.toBe(false);
   });
 
-  it('verified 필드가 없는 응답 시 OtpGatewayError — 가짜 성공 금지', async () => {
+  it('exists 필드가 없는 응답 시 OtpGatewayError — 가짜 성공 금지', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ message: 'unexpected' }),
