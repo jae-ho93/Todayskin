@@ -87,6 +87,12 @@
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.0"
   },
+  "overrides": {
+    "@nestjs/swagger": {
+      "js-yaml": "5.2.3"
+    },
+    "deepmerge-ts": "8.0.1"
+  },
   "jest": {
     "moduleFileExtensions": [
       "js",
@@ -154,10 +160,5 @@
     "esbuild@0.28.1": true,
     "msgpackr-extract@3.0.4": true,
     "prisma@7.9.1": true
-  },
-  "overrides": {
-    "@nestjs/swagger": {
-      "js-yaml": "5.2.3"
-    }
   }
 }
