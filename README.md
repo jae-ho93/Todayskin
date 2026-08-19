@@ -53,7 +53,7 @@
   <a href="https://nestjs.com/"><img src="https://img.shields.io/badge/NestJS-11-E0234E?style=for-the-badge&logo=nestjs&logoColor=white" alt="NestJS 11"></a>
   <a href="https://www.prisma.io/"><img src="https://img.shields.io/badge/Prisma-7-2D3748?style=for-the-badge&logo=prisma&logoColor=white" alt="Prisma 7"></a>
   <a href="https://www.postgresql.org/"><img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL"></a>
-  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-MobileNetV3-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI inference"></a>
+  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-EfficientNet--B0-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI inference"></a>
 </p>
 <p align="center">
   <a href="https://redis.io/"><img src="https://img.shields.io/badge/Redis-cache-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis"></a>
@@ -141,7 +141,7 @@
   <thead><tr><th width="170">영역</th><th>사용 기술</th></tr></thead>
   <tbody>
     <tr><td width="170">서버</td><td><b>FastAPI</b> · Uvicorn · python-multipart (<code>backend/inference-service/</code>)</td></tr>
-    <tr><td width="170">모델</td><td><b>PyTorch 2.9</b> · TorchVision — MobileNetV3(피부 점수) · <b>Ultralytics YOLO</b>(여드름 병변) · <b>MediaPipe</b>(랜드마크)</td></tr>
+    <tr><td width="170">모델</td><td><b>PyTorch 2.9</b> · TorchVision — <b>EfficientNet-B0</b>(피부 부위별 점수) · MobileNetV3(피부질환 5클래스 분류) · <b>Ultralytics YOLO</b>(여드름 병변) · <b>MediaPipe</b>(랜드마크)</td></tr>
     <tr><td width="170">이미지</td><td>OpenCV(headless) · Pillow · NumPy</td></tr>
     <tr><td width="170">품질 게이트</td><td>최소 해상도·휘도·Laplacian blur 검사 → 422 + 사유 코드 (N49)</td></tr>
     <tr><td width="170">경계</td><td>점수·등급·랜드마크만 반환 · <b>DB/인증/비즈니스 로직 없음</b></td></tr>
@@ -191,7 +191,7 @@ flowchart TB
     S3[("S3 — 동의 이미지")]
   end
   subgraph AI["Inference — FastAPI (내부망)"]
-    INF["MobileNetV3 + YOLO<br/>+ MediaPipe"]
+    INF["EfficientNet-B0 + MobileNetV3<br/>+ YOLO + MediaPipe"]
   end
   OPENAI["OpenAI<br/>추천 · 케어 루틴/제품 + web_search"]
   APP -->|REST + JWT + SSE| API
