@@ -150,6 +150,8 @@
 
 NestJS가 호출하고 결과를 영속화합니다. 원칙: [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md)
 
+모델 학습(백본 비교실험·데이터 파이프라인)은 별도 저장소에서 관리합니다 → [**TodayskinAI**](https://github.com/jae-ho93/TodayskinAI)
+
 ### 테스트
 
 <table>
