@@ -21,26 +21,25 @@
 
 ---
 
-## 🚀 지금 바로 사용해 보세요
+## 프로젝트 상태
 
-이 프로젝트는 **현재 AWS에 실제 배포되어 운영 중**입니다. 아래 링크로 바로 체험할 수 있습니다.
+> **포트폴리오 아카이브**
+>
+> 데모 운영을 종료했습니다. AWS 운영 인프라, Cloudflare Pages 랜딩, EAS 배포 빌드와
+> 운영 데이터는 모두 삭제했으며 공개 서비스·API·APK는 제공하지 않습니다.
 
-| 항목 | 방법 |
+코드·설계·테스트·배포 기록은 팀 포트폴리오와 재현 자료로 보존합니다.
+
+| 확인 항목 | 문서 |
 |---|---|
-| **Android 앱 설치** | [랜딩 페이지](https://todayskin.pages.dev/)에서 APK 다운로드 (아래 QR 스캔 가능) |
-| **심사용 테스트 계정** | 휴대폰 번호 `010-0000-0000` · OTP 인증번호 `123456` (데모 기간 8/26까지 유효, 진단 기록 8건 포함) |
-| **백엔드 상태 확인** | [서비스 health](http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com/health) · [readiness](http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com/health/ready) |
-
-<p align="center">
-  <a href="https://todayskin.pages.dev/"><img src="assets/qr-landing.png" width="140" alt="랜딩 페이지 QR — APK 다운로드"></a>
-  <br/>
-  <a href="https://todayskin.pages.dev/">https://todayskin.pages.dev/</a>
-</p>
+| **로컬 실행** | [로컬 셋업 가이드](docs/guides/SETUP.md) |
+| **배포 아키텍처** | [배포 전략 — 역사 문서](docs/guides/DEPLOYMENT.md) |
+| **데모 화면** | [스크린샷](docs/screenshots/) |
 
 ---
 
-이 저장소는 **프론트 · 백엔드 · 프로젝트 매니저(PM)** 가 한곳에서 협업하는 모노레포이며,
-**AWS ECS Fargate(ap-northeast-2)에 실제 배포되어 운영 중**입니다.
+이 저장소는 **프론트 · 백엔드 · 프로젝트 매니저(PM)** 가 한곳에서 협업한 모노레포입니다.
+데모 기간에는 **AWS ECS Fargate(ap-northeast-2)에 실제 배포해 운영**했습니다.
 
 <p align="center"><b>Frontend</b></p>
 <p align="center">
@@ -86,7 +85,7 @@
 
 | | 내용 |
 |---|---|
-| **실서비스 수준 운영** | AWS에 실제 배포·가동 중 — ECS Fargate + RDS + ElastiCache + S3 + Secrets Manager + OIDC CI/CD. 롤백 절차·장애 런북까지 문서화 |
+| **실서비스 수준 운영 경험** | ECS Fargate + RDS + ElastiCache + S3 + Secrets Manager + OIDC CI/CD로 실제 배포·운영. 롤백 절차·장애 런북까지 문서화한 뒤 데모 종료 시 리소스와 데이터를 정리 |
 | **AI 추론 서버 분리** | FastAPI가 점수·등급·랜드마크만 반환, 비즈니스 로직은 NestJS 전담 — 확장 가능한 2-tier 아키텍처 |
 | **실제 화장품만 추천** | 허구 상품·목업 결과 금지. 시드 카탈로그 34개 실제품 + 검증된 구매 링크 + 근거 출처 레지스트리 |
 | **프라이버시 우선 설계** | 얼굴 이미지는 동의 시에만 암호화 저장, 미동의 시 추론 후 즉시 폐기. 감사 로그·동의 게이트 |
@@ -108,7 +107,7 @@
     <tr><td width="170">인증 · 저장</td><td>expo-auth-session(소셜 OAuth) · expo-crypto(Apple nonce) · expo-apple-authentication · <b>expo-secure-store</b>(토큰, 웹 AsyncStorage 폴백) · AsyncStorage</td></tr>
     <tr><td width="170">아이콘 · 폰트</td><td>@expo/vector-icons · expo-font · <b>Pretendard</b>(브랜드 폰트)</td></tr>
     <tr><td width="170">웹</td><td>react-native-web · react-dom (Expo 웹 빌드 가능)</td></tr>
-    <tr><td width="170">빌드 · 배포</td><td><b>EAS Build</b> (시연용 APK, <code>preview</code> 프로파일)</td></tr>
+    <tr><td width="170">빌드 · 배포</td><td><b>EAS Build</b> (데모 당시 시연용 APK, <code>preview</code> 프로파일 — 배포 종료)</td></tr>
   </tbody>
 </table>
 
@@ -161,7 +160,7 @@ NestJS가 호출하고 결과를 영속화합니다. 원칙: [`docs/architecture
   </tbody>
 </table>
 
-### 인프라 — AWS 실배포 (2026-08-16)
+### 인프라 — AWS 실배포 아키텍처 (데모 운영 당시, 2026-08-16)
 
 <table>
   <thead><tr><th width="170">영역</th><th>사용 기술</th></tr></thead>
@@ -217,8 +216,8 @@ flowchart TB
 | Fable5 리뷰 대응 — 보안·품질 게이트·기온/습도 (F72~F78 · N46~N49 · N53) | **완료** (2026-08-13) |
 | 배포 준비 웨이브 — 실험실 옵트인·주간 요약·측정 신뢰·상태 완성도·Pretendard·배포 스모크 (F79~F83 · N54) | **완료** (2026-08-13) |
 | LLM 프로바이더 전환(Gemini→OpenAI) · 케어 루틴/제품 카테고리 신설(`care` 모듈, 카테고리별 그리드 UI) | **완료** (2026-08-14) |
-| AWS 실배포 (N16, 2026-08-16) | **완료** — ECS Fargate(backend+inference)·RDS PG16·ElastiCache·S3·Secrets Manager·OIDC CD 가동 중. 접속: `http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com`, 랜딩: https://todayskin.pages.dev/ |
-| 데모 준비 (2026-08-17) — 시연용 Android APK(EAS), 소셜 로그인 네이티브 대비(구글 다중 aud), 로그인/가입 OTP 훅 통일 | **완료** — APK 빌드·구글 웹/Android 클라이언트 ID 발급·백엔드 시크릿 반영. 카카오는 콘솔 리다이렉트 제약으로 보류(데모는 구글+OTP) |
+| AWS 실배포 (N16, 2026-08-16) | **완료 후 운영 종료** — ECS Fargate(backend+inference)·RDS PG16·ElastiCache·S3·Secrets Manager·OIDC CD를 검증했고, 데모 종료 후 운영 리소스와 데이터를 삭제 |
+| 데모 준비 (2026-08-17) — 시연용 Android APK(EAS), 소셜 로그인 네이티브 대비(구글 다중 aud), 로그인/가입 OTP 훅 통일 | **완료 후 배포 종료** — APK 빌드·구글 웹/Android 클라이언트 ID 발급·백엔드 시크릿 반영. 카카오는 콘솔 리다이렉트 제약으로 보류했으며 EAS 배포 빌드는 데모 종료 후 삭제 |
 | EAS 스토어 제출 · 구독 결제 · Sentry | 보류 (해커톤 범위 밖 — 데모는 APK/Expo Go로 진행) |
 
 ---
