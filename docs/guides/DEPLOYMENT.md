@@ -1,4 +1,10 @@
 # 배포 전략 (T14 / N5)
+> **운영 종료 · 역사 문서**
+>
+> 데모 종료 후 AWS 운영 인프라와 데이터는 삭제했고, `.github/workflows/deploy-ecs.yml`은
+> 비활성화했으며 GitHub의 AWS 배포 secret·variables도 제거했다. 아래 내용은 실제 배포에서
+> 검증한 아키텍처와 재구성 절차를 보존한 기록이다. 다시 배포하려면 새 리소스·자격 증명·설정을
+> 준비해야 하며, 현재 실행 중인 운영 환경을 위한 런북이 아니다.
 
 ## 개요
 
@@ -58,7 +64,7 @@ docker compose --profile backend up -d --build
 8. `npm test` + `npm run test:e2e`
 9. `npm run lint`
 
-### 운영 CD — `.github/workflows/deploy-ecs.yml` (N5)
+### 운영 CD — `.github/workflows/deploy-ecs.yml` (비활성화, 역사적 구성)
 
 트리거는 **CI 워크플로의 완료**다(R31). 이전에는 `main` push에 직접 걸려 CI와
 배포가 병렬로 시작했고, 테스트가 깨진 커밋도 승인만 있으면 배포됐다.
@@ -79,7 +85,7 @@ docker compose --profile backend up -d --build
 CI가 실패하면 배포 워크플로 자체가 시작되지 않는다. 실패한 커밋을 강제로 배포해야
 하면 `workflow_dispatch`로 `image_tag`를 지정해 수동 실행한다.
 
-## 운영 배포 (ECS Fargate)
+## 운영 배포 아키텍처 (ECS Fargate, 역사적 구성)
 
 ### 확정 아키텍처
 
@@ -518,7 +524,7 @@ docker build --platform linux/amd64 \
 - ~~실제 SMS OTP 게이트웨이 연결~~ → OCTOMO MO 인증 적용 완료 (feature/otp-octomo-mo, 2026-08)
 - ~~S3 객체 삭제 실패 재처리와 orphan reconciliation~~ → N10 완료 (ARCHIVE)
 - ~~실제 AWS 계정에 ECR/ECS/RDS/Secrets/OIDC role 프로비저닝~~ → **완료 (2026-08-16 실배포)** —
-  `http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com`에서 서비스 중
+  데모 종료 후 운영 리소스와 데이터 삭제
 
 남은 운영 보류 항목(N36·N37·N51·N50)은 [`docs/tasks/BACKEND_TASKS.md`](../tasks/BACKEND_TASKS.md)에
 데모 기간 보류 사유와 함께 명시돼 있다.

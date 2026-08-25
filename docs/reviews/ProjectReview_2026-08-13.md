@@ -7,7 +7,7 @@
 **Target:** Todayskin  
 **Date:** 2026-08-13 (목) 06:15 KST  
 **Purpose:** 출시 준비를 위한 전체 프로젝트 검토 및 개선 방향 수립  
-**Status:** Reviewed — 리뷰 후속 코드 태스크(N46~N49·N53, F72~F78) 전부 반영 완료 → [아카이브](BACKEND_ARCHIVE.md)
+**Status:** Reviewed — 리뷰 후속 코드 태스크(N46~N49·N53, F72~F78) 전부 반영 완료 → [아카이브](../tasks/BACKEND_ARCHIVE.md)
 
 ---
 

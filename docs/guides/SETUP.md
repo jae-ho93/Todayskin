@@ -200,7 +200,10 @@ MOCK_INFERENCE=false
 
 ---
 
-## 4-1. 시연용 Android APK 빌드 (EAS — 무료 티어)
+## 4-1. 시연용 Android APK 빌드 (역사적 데모 절차)
+
+> 데모용 EAS 빌드는 모두 삭제했으며 현재 다운로드 가능한 APK는 없다. 새 빌드를 만들려면
+> 먼저 새 백엔드 주소와 자격 증명을 구성해야 한다.
 
 해커톤 데모처럼 **다른 사람 폰에 설치**하려면 Expo Go 대신 APK 파일을 만들어 공유한다.
 스토어 제출이 아니라서 EAS 무료 티어(월 15회 빌드)로 충분하다. iOS는 Apple 개발자
@@ -217,8 +220,8 @@ npx eas build:download --platform android
 
 > ⚠️ **빌드 환경변수는 `.env`가 아니라 `eas.json`의 `preview.env`에 있다.**
 > EAS 클라우드 빌드는 `.gitignore` 때문에 `.env`를 업로드하지 않는다(공식 문서).
-> `EXPO_PUBLIC_API_BASE_URL`(운영 백엔드) 등 빌드 타임 값은 `eas.json` preview
-> 프로파일의 `env`에 커밋돼 있어 그대로 빌드하면 된다. 값이 바뀌면 `eas.json`을 고친다.
+> `EXPO_PUBLIC_API_BASE_URL` 등 빌드 타임 값은 `eas.json` preview 프로파일에서
+> 설정한다. 기존 데모 백엔드는 삭제됐으므로 새 환경에 맞는 값을 먼저 입력해야 한다.
 
 - 설치하는 폰에서 "출처를 알 수 없는 앱 허용"을 켜야 한다.
 - `app.json`에 이미 반영됨: `android.package=com.todayskin.app` · cleartext HTTP 허용
@@ -229,7 +232,7 @@ npx eas build:download --platform android
   (`weatherskin://oauth`)을 콘솔이 리다이렉트 URI로 거부해 보류(PR #232).
   OTP 문자 로그인은 소셜 키 없이 동작한다.
 
-### 4-2. 데모 당일 체크리스트
+### 4-2. 데모 당일 체크리스트 (역사 기록)
 
 1. **데모 계정 미리 생성 (필수)** — 운영은 실제 문자 인증(MO, 1666-3538로 코드 발송)이라
    데모 현장에서 가입하면 SMS가 본인 부담·시간이 걸린다. **시연 폰 번호로 미리 가입해**
@@ -239,8 +242,8 @@ npx eas build:download --platform android
 3. **시연 폰 설치** — APK 전송 → "출처를 알 수 없는 앱 허용" → 설치 → 열기.
 4. **실기기 스모크 (데모 전날)** — OTP 로그인 → 촬영 측정 → 기록 → 제품 탭 → 구글 로그인
    (Android ID 인증). 카메라·위치 권한 허용 확인.
-5. **백엔드 상태 확인** — `curl http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com/health/ready`
-   응답의 dependencies가 전부 `up`인지 (database·inference·octomo·redis).
+5. **백엔드 상태 확인** — 새로 구성한 백엔드의 `/health/ready`를 호출해 응답의
+   dependencies가 전부 `up`인지 확인 (database·inference·octomo·redis).
 6. (선택) **맥북 큰 화면 시연** — Android Studio 에뮬레이터에 같은 APK 설치.
    촬영 측정은 실제 폰이 안전.
 7. (선택) **iPhone 체험용** — Expo Go QR (개발 PC `npm start`). 설치가 아닌 체험용.
@@ -311,7 +314,7 @@ cd backend && npm test && npm run lint
 
 ## 참고 문서
 
-- 전체 문서 지도: [docs/README.md](README.md)
+- 전체 문서 지도: [docs/README.md](../README.md)
 - 백엔드 구조·원칙: [docs/architecture/ARCHITECTURE.md](../architecture/ARCHITECTURE.md)
-- 실제 배포(운영): [docs/guides/DEPLOYMENT.md](DEPLOYMENT.md)
+- 배포 아키텍처(역사 문서): [docs/guides/DEPLOYMENT.md](DEPLOYMENT.md)
 - 협업 규칙: [CONTRIBUTING.md](../../CONTRIBUTING.md)

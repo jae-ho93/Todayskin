@@ -1017,8 +1017,8 @@ N61(DB E2E 검증)**. 각 Task는 브랜치 하나 = PR 하나로 진행한다.
 브랜치: `chore/aws-production-bootstrap`
 
 **2026-08-16 실배포 완료** — ECS Fargate(backend + inference) · RDS PG16 · ElastiCache(Valkey, `noeviction`) ·
-S3 · Secrets Manager 13종 · CloudWatch 로그 4종 · ALB · GitHub OIDC CD 파이프라인이 모두 가동 중이다.
-접속: `http://todayskin-alb-121101407.ap-northeast-2.elb.amazonaws.com` (`/health`·`/health/ready` 200).
+S3 · Secrets Manager 13종 · CloudWatch 로그 4종 · ALB · GitHub OIDC CD 파이프라인을 실제 운영했다.
+당시 ALB의 `/health`·`/health/ready` 200을 검증했으며, 데모 종료 후 엔드포인트와 리소스를 삭제했다.
 배포 중 발견·수정한 사항은 `docs/guides/DEPLOYMENT_CHECKLIST.md` §6(실배포 교훈)에 기록했다.
 
 - [x] ECR, ECS cluster/service, RDS, Redis, S3, CloudWatch 생성
