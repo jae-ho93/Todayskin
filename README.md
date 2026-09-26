@@ -8,9 +8,10 @@
 
 <p align="center">
   날씨·대기질과 AI 피부 진단을 결합해 오늘의 피부 상태를 확인하고, 실제 화장품 기반의 스킨케어를 추천합니다.
-  시연영상 : https://youtube.com/shorts/-s-N_QUJgm0?si=hzW3eDK98h4ok7j6
+  
   <br/>
   촬영한 얼굴과 그날의 UV·미세먼지·기온/습도를 함께 분석해 <b>근거 있는 추천</b>과 기록·패턴을 제공합니다.
+  시연영상 : https://youtube.com/shorts/-s-N_QUJgm0?si=hzW3eDK98h4ok7j6
 </p>
 
 <p align="center">
